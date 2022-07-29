@@ -3,10 +3,11 @@
 ; NumLock AlwaysOn && ScrollLock Always Off
 ; Double tap Caps lock to activate/deactivate Caps lock
 
-; Wi+F --> Run FireFox
+; Win+F --> Run FireFox
 ; Win+Shift+E --> Open Downloads (My Screenshots) folder
 ; Win+Shift+A --> Open Notification center
 ; Win+Del --> Empty Recycle Bin
+; Win+C Run Calculator
 ; Alt+Shift+T --> Active window Always on Top
 ; Alt+Ctr+E --> Enable/Disable file extension
 ; Alt+Ctr+H --> Enable/Disable hidden files
@@ -154,13 +155,16 @@ SetNumlockState, AlwaysOn ;{ <-- NumLock AlwaysOn & ScrollLock Always Off
 ; #LAlt::^#Right ; switch to next desktop with Windows key + Left Alt key -> Original is Win + Ctr + Right
 ; #LCtrl::^#Left ; switch to next desktop with Windows key + Left CTRL key -> Original is Win + Ctr + Left
 
-; Window+F Run FireFox
+; Win+F Run FireFox
 #f::Run Firefox ;{ <-- Open FireFox
+
+; Win+C Run Calculator
+#c::Run calc.exe ;{ <-- Open calculaor
 
 ; Win+Shift+E Open Downloads (My Screenshots) folder
 #+e::Run "C:\Users\Mohit\Pictures\Screenshots" ;{ <-- Open Screenshots Folder
 
-; Window+Shift+T Active window Always on Top
+; Win+Shift+T Active window Always on Top
 !+T:: Winset, Alwaysontop, , A ;{ <-- This Winodw Always on Top
 
 ; Win+Del Empty Recycle Bin
