@@ -9,7 +9,7 @@
 ; Win+Del --> Empty Recycle Bin
 ; Alt+Shift+T --> Active window Always on Top
 ; Alt+Ctr+E --> Enable/Disable file extension
-; Alt+Ctr+F4 --> Enable/Disable hidden files
+; Alt+Ctr+H --> Enable/Disable hidden files
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
