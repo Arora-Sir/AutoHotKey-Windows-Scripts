@@ -100,10 +100,11 @@ Loop, 10	; Try To Remove Over Time Because Icons May Lag During Bootup
 
 ; HOTKEYS
 ;{-----------------------------------------------
-;
-; Win+ScrollLock Suspend AutoHotkey
-#ScrollLock::Suspend ;{ <-- + Fn = Suspend All Scripts
-~#^!ScrollLock::ExitApp ;{ <-- + Fn = To Terminate All Scripts
+; 
+;Win+ScrollLock Suspend AutoHotkey
+#ScrollLock::Suspend ;{ +Fn <-- Suspend All Scripts
+~#^!ScrollLock::ExitApp ;{ +Fn <-- Terminate All Scripts
+~#^!r::Reload ;{ +Fn <-- Reload All Scripts
 ;}
 
 ; SUBROUTINES

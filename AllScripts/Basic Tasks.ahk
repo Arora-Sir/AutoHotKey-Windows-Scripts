@@ -148,7 +148,7 @@ DoubleTapCapsLock()
 
 ; Set Lock keys permanently
 SetNumlockState, AlwaysOn ;{ <-- NumLock AlwaysOn & ScrollLock Always Off
-SetScrollLockState, AlwaysOff
+; SetScrollLockState, AlwaysOff ;Commented this to use scrollLock for scripts suspend & terminate
 ; SetCapsLockState, AlwaysOff
 
 ; #LAlt::^#Right ; switch to next desktop with Windows key + Left Alt key -> Original is Win + Ctr + Right
