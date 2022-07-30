@@ -216,6 +216,7 @@ SetNumlockState, AlwaysOn ;{ <-- NumLock AlwaysOn & ScrollLock Always Off
 ; #LAlt::^#Right ; switch to next desktop with Windows key + Left Alt key -> Original is Win + Ctr + Right
 ; #LCtrl::^#Left ; switch to next desktop with Windows key + Left CTRL key -> Original is Win r+ Ctr + Left
 
+
 ; Hide/Unhide Taskbar
 ~LButton::DoubleClick(hide := !hide) ;{ <-- Double Click Functions
 !LButton::MoveBG() ;{ <-- Move BG Apps
@@ -225,7 +226,7 @@ SetNumlockState, AlwaysOn ;{ <-- NumLock AlwaysOn & ScrollLock Always Off
 #f::Run Firefox ;{ <-- Open FireFox
 
 ; Ctr+G Run Calculator
-^G::ClipboardSearch() ;{ <-- Search the clipboard when chrome is open
+^G::ClipboardSearch() ;{ <-- Search the selected/clipboard text when chrome is open
 
 ; Win+C Run Calculator
 #c::Run calc.exe ;{ <-- Open calculaor
