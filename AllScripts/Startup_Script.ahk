@@ -1,3 +1,10 @@
+; ^ for Ctrl, ! for Alt, # for Win, + for Shift
+
+; Win+Fn+ScrollLock  --> Suspend AutoHotkey
+; Win+Fn+Alt+Ctr+ScrollLock --> Terminate All AHK Scripts
+; Win+Ctr+Alt+R --> Reload All Scripts
+; Win+Ctr+Alt+W --> Run Window Spy Script
+
 ; AHK Startup
 ; Fanatic Guru
 ; 2018 11 21
@@ -28,7 +35,7 @@ Files := [	; Additional Startup Files and Folders Can Be Added Between the ( Con
 "D:\Software\Programming\AutoHotKey\AllScripts\Brightness.ahk"
 "D:\Software\Programming\AutoHotKey\AllScripts\Close Programs.ahk"
 "D:\Software\Programming\AutoHotKey\AllScripts\Basic Tasks.ahk"
-"D:\Software\Programming\AutoHotKey\AllScripts\Personal_Keywords.ahk"
+"D:\Software\Codes\Back Code\Personal_Keywords.ahk"
 "D:\Software\Programming\AutoHotKey\AllScripts\HotkeyHelp.ahk"
 )]
 ;}
@@ -103,8 +110,9 @@ Loop, 10	; Try To Remove Over Time Because Icons May Lag During Bootup
 ; 
 ;Win+ScrollLock Suspend AutoHotkey
 #ScrollLock::Suspend ;{ +Fn <-- Suspend All Scripts
-~#^!ScrollLock::ExitApp ;{ +Fn <-- Terminate All Scripts
-~#^!r::Reload ;{ +Fn <-- Reload All Scripts
+#^!ScrollLock::ExitApp ;{ +Fn <-- Terminate All Scripts
+#^!R::Reload ;{ <-- Reload All Scripts
+#^!W::Run "C:\Program Files\AutoHotkey\WindowSpy.ahk" ;{ <-- Run Window Spy Script
 ;}
 
 ; SUBROUTINES
