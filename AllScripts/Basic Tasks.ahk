@@ -1,4 +1,5 @@
 ; ^ for Ctrl, ! for Alt, # for Win, + for Shift
+; ~ prefix to prevent blocking native (original) functionality of that key
 
 ; NumLock AlwaysOn && ScrollLock Always Off
 ; Double tap Caps lock to activate/deactivate Caps lock
@@ -157,6 +158,56 @@ ClearNotificaitons()
     return
 }
 
+ClipboardSearch()
+{	
+	if WinActive("ahk_exe chrome.exe")
+        {
+		send, ^c
+		Sleep, 100
+		Run, https://www.google.com/search?q=%clipboard%
+        }
+    return 
+}
+   
+DoubleClick(action)
+{
+    If (A_PriorHotKey = A_ThisHotKey and A_TimeSincePriorHotkey < 500)
+    {
+        WinGetClass, Class, A
+
+        ; Show/Hide Taskbar on Tripple click on taskbar
+        If (Class = Shell_TrayWnd) ; or ( Class = "Progman" )
+        {
+            static ABM_SETSTATE := 0xA, ABS_AUTOHIDE := 0x1, ABS_ALWAYSONTOP := 0x2
+            VarSetCapacity(APPBARDATA, size := 2*A_PtrSize + 2*4 + 16 + A_PtrSize, 0)
+            NumPut(size, APPBARDATA), NumPut(WinExist("ahk_class Shell_TrayWnd"), APPBARDATA, A_PtrSize)
+            NumPut(action ? ABS_AUTOHIDE : ABS_ALWAYSONTOP, APPBARDATA, size - A_PtrSize)
+            DllCall("Shell32\SHAppBarMessage", UInt, ABM_SETSTATE, Ptr, &APPBARDATA)
+            Return
+        }
+    }
+    return
+}
+
+MoveBG(){
+    MouseGetPos,oldmx,oldmy,mwin,mctrl
+    Loop
+    {
+        GetKeyState,lbutton,LButton,P
+        GetKeyState,alt,Alt,P
+        If (lbutton="U" Or alt="U")
+            Break
+        MouseGetPos,mx,my
+        WinGetPos,wx,wy,ww,wh,ahk_id %mwin%
+        wx:=wx+mx-oldmx
+        wy:=wy+my-oldmy
+        WinMove,ahk_id %mwin%,,%wx%,%wy%
+        oldmx:=mx
+        oldmy:=my
+    }
+    return
+}
+
 ; Set Lock keys permanently
 SetNumlockState, AlwaysOn ;{ <-- NumLock AlwaysOn & ScrollLock Always Off
 ; SetScrollLockState, AlwaysOff ;Commented this to use scrollLock for scripts suspend & terminate
@@ -165,8 +216,16 @@ SetNumlockState, AlwaysOn ;{ <-- NumLock AlwaysOn & ScrollLock Always Off
 ; #LAlt::^#Right ; switch to next desktop with Windows key + Left Alt key -> Original is Win + Ctr + Right
 ; #LCtrl::^#Left ; switch to next desktop with Windows key + Left CTRL key -> Original is Win r+ Ctr + Left
 
+; Hide/Unhide Taskbar
+~LButton::DoubleClick(hide := !hide) ;{ <-- Double Click Functions
+!LButton::MoveBG() ;{ <-- Move BG Apps
+; $F12::HideShowTaskbar(hide := !hide)
+
 ; Win+F Run FireFox
 #f::Run Firefox ;{ <-- Open FireFox
+
+; Ctr+G Run Calculator
+^G::ClipboardSearch() ;{ <-- Search the clipboard when chrome is open
 
 ; Win+C Run Calculator
 #c::Run calc.exe ;{ <-- Open calculaor

@@ -1,4 +1,5 @@
 ; ^ for Ctrl, ! for Alt, # for Win, + for Shift
+; ~ prefix to prevent blocking native (original) functionality of that key
 
 ; F1 & Shift+F1 --> Controls brightness
 ; Ctr+PgUp & Ctr+PgDn --> Extreme levels of brightness (beyond brightness level)

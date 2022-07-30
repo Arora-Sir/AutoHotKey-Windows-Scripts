@@ -2,6 +2,7 @@
 
 ; Alt+F4 --> Close currently active program
 ; Alt+Ctr+F4 --> Close All Programs
+; ~ prefix to prevent blocking native (original) functionality of that key
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
