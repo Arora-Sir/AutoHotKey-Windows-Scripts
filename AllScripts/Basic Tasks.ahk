@@ -27,6 +27,11 @@ SetNumlockState, AlwaysOn ; Set Lock keys permanently
 ; SetScrollLockState, AlwaysOff ;Commented this as scrollLock key is now being used to suspend & terminate AHK Scripts
 ; SetCapsLockState, AlwaysOff
 
+#If MouseIsOver("ahk_class Shell_TrayWnd")
+   WheelUp::Send {Volume_Up}
+   WheelDown::Send {Volume_Down}
+#If
+
 ; Text box created (UI) see in ToggleFileExt or HideFiles
 text(a,t:="",x:="",y:="") 
 {
@@ -43,6 +48,12 @@ text(a,t:="",x:="",y:="")
         Sleep, t*1000
         WinClose, Yipiee...
     }
+}
+
+MouseIsOver(WinTitle)
+{  
+    MouseGetPos,,, Win
+    Return WinExist(WinTitle . " ahk_id " . Win)
 }
 
 HideFiles()
@@ -133,7 +144,8 @@ RefreshExplorer()
     return
 }
 
-OpenActionCenter(){
+OpenActionCenter()
+{
     send {LWin down}{n down}
     send {LWin up}{n up}
     return
@@ -168,8 +180,8 @@ ClearNotificaitons()
 
 ClipboardSearch()
 {	
-	if WinActive("ahk_exe chrome.exe")
-        {
+	; if WinActive("ahk_exe chrome.exe")
+        ; {
             GoogleSearchEngine := "https://www.google.com/search?q="
             send, ^c
             Sleep, 100
@@ -187,7 +199,7 @@ ClipboardSearch()
                 ; MsgBox,4, Options, Testing, %url%, 3 ; For Debugging
                 Run, %CompleteURL%
             }
-        }
+        ; }
     return 
 }
    
@@ -211,7 +223,8 @@ DoubleClick(action)
     return
 }
 
-MoveBGApp(){
+MoveBGApp()
+{
     MouseGetPos,oldmx,oldmy,mwin,mctrl
     Loop
     {
