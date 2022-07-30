@@ -1,4 +1,5 @@
 ; ^ for Ctrl, ! for Alt, # for Win, + for Shift
+; ~ prefix to prevent blocking native (original) functionality of that key
 
 ; Win+Fn+ScrollLock  --> Suspend AutoHotkey
 ; Win+Fn+Alt+Ctr+ScrollLock --> Terminate All AHK Scripts
