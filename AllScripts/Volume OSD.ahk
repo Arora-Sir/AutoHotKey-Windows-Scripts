@@ -1,5 +1,5 @@
 ; ^ for Ctrl, ! for Alt, # for Win, + for Shift
-; Personal key bindings
+; ~ prefix to prevent blocking native (original) functionality of that key
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.

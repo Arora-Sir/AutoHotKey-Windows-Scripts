@@ -1,4 +1,5 @@
 ; ^ for Ctrl, ! for Alt, # for Win, + for Shift
+; ~ prefix to prevent blocking native (original) functionality of that key
 ; Personal key bindings
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
