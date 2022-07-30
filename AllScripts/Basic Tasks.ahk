@@ -143,9 +143,19 @@ DoubleTapCapsLock()
     ; 	SetCapsLockState off
     ; 	DoubleCapsHit := false
     ; }
-    Return
+    return
 }
 
+ClearNotificaitons()
+{
+    Send #n
+    Sleep, 1000
+    if WinActive("ahk_exe Shellexperiencehost.exe")
+        {
+            Send {Tab} {Space} {Esc}
+        }
+    return
+}
 
 ; Set Lock keys permanently
 SetNumlockState, AlwaysOn ;{ <-- NumLock AlwaysOn & ScrollLock Always Off
@@ -153,7 +163,7 @@ SetNumlockState, AlwaysOn ;{ <-- NumLock AlwaysOn & ScrollLock Always Off
 ; SetCapsLockState, AlwaysOff
 
 ; #LAlt::^#Right ; switch to next desktop with Windows key + Left Alt key -> Original is Win + Ctr + Right
-; #LCtrl::^#Left ; switch to next desktop with Windows key + Left CTRL key -> Original is Win + Ctr + Left
+; #LCtrl::^#Left ; switch to next desktop with Windows key + Left CTRL key -> Original is Win r+ Ctr + Left
 
 ; Win+F Run FireFox
 #f::Run Firefox ;{ <-- Open FireFox
@@ -172,6 +182,9 @@ SetNumlockState, AlwaysOn ;{ <-- NumLock AlwaysOn & ScrollLock Always Off
 
 ; Win+Shift+A Open Notification center
 #+A::OpenActionCenter() ;{ <-- Open Notification center
+
+; Win+Ctr+N Clear Notification center
+#^N::ClearNotificaitons() ;{ <-- Clear Notifications (Win 11)
 
 ; Alt+Ctr+E Enable/Disable file extension
 $!^E:: ToggleFileExt() ;{ <-- Show/Hide Extenstions
