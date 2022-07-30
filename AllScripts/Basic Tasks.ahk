@@ -169,9 +169,23 @@ ClipboardSearch()
 {	
 	if WinActive("ahk_exe chrome.exe")
         {
-		send, ^c
-		Sleep, 100
-		Run, https://www.google.com/search?q=%clipboard%
+            GoogleSearchEngine := "https://www.google.com/search?q="
+            send, ^c
+            Sleep, 100
+            LatestCopiedClipboard := Clipboard
+            securedAddress := "https://"
+            if(SubStr(LatestCopiedClipboard,1,8) = securedAddress)
+            {
+                Send, ^t    ; Open new tab
+                Send, ^v    ; Paste the URL
+                Send, {Enter}   ; Hit Enter
+            }
+            else
+            {
+                CompleteURL = %GoogleSearchEngine%%LatestCopiedClipboard%
+                ; MsgBox,4, Options, Testing, %url%, 3 ; For Debugging
+                Run, %CompleteURL%
+            }
         }
     return 
 }
