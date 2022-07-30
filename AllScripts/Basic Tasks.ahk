@@ -12,12 +12,19 @@
 ; Alt+Shift+T --> Active window Always on Top
 ; Alt+Ctr+E --> Enable/Disable file extension
 ; Alt+Ctr+H --> Enable/Disable hidden files
+; MouseLButton --> Double/Tripple Click Functions (Taskbar Show/Hide; )
+; Alt+Ctr+MouseLButton --> Move Background Apps
+; Ctr+G --> Search the selected/clipboard text when chrome is open
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
 #SingleInstance force ; Ensures that only the last executed instance of script is running
 DetectHiddenWindows, On
+
+SetNumlockState, AlwaysOn ; Set Lock keys permanently
+; SetScrollLockState, AlwaysOff ;Commented this as scrollLock key is now being used to suspend & terminate AHK Scripts
+; SetCapsLockState, AlwaysOff
 
 ; Text box created (UI) see in ToggleFileExt or HideFiles
 text(a,t:="",x:="",y:="") 
@@ -176,7 +183,7 @@ DoubleClick(action)
         WinGetClass, Class, A
 
         ; Show/Hide Taskbar on Tripple click on taskbar
-        If (Class = Shell_TrayWnd) ; or ( Class = "Progman" )
+        If Class = Shell_TrayWnd ; or ( Class = "Progman" )
         {
             static ABM_SETSTATE := 0xA, ABS_AUTOHIDE := 0x1, ABS_ALWAYSONTOP := 0x2
             VarSetCapacity(APPBARDATA, size := 2*A_PtrSize + 2*4 + 16 + A_PtrSize, 0)
@@ -189,7 +196,7 @@ DoubleClick(action)
     return
 }
 
-MoveBG(){
+MoveBGApp(){
     MouseGetPos,oldmx,oldmy,mwin,mctrl
     Loop
     {
@@ -208,19 +215,11 @@ MoveBG(){
     return
 }
 
-; Set Lock keys permanently
-SetNumlockState, AlwaysOn ;{ <-- NumLock AlwaysOn & ScrollLock Always Off
-; SetScrollLockState, AlwaysOff ;Commented this to use scrollLock for scripts suspend & terminate
-; SetCapsLockState, AlwaysOff
-
-; #LAlt::^#Right ; switch to next desktop with Windows key + Left Alt key -> Original is Win + Ctr + Right
-; #LCtrl::^#Left ; switch to next desktop with Windows key + Left CTRL key -> Original is Win r+ Ctr + Left
-
-
-; Hide/Unhide Taskbar
+; Alt+MouseLButton Show/Hide Taskbar; 
 ~LButton::DoubleClick(hide := !hide) ;{ <-- Double Click Functions
-!LButton::MoveBG() ;{ <-- Move BG Apps
-; $F12::HideShowTaskbar(hide := !hide)
+
+; Alt+MouseLButton Move background apps
+^!LButton::MoveBGApp() ;{ <-- Move BG Apps
 
 ; Win+F Run FireFox
 #f::Run Firefox ;{ <-- Open FireFox
@@ -263,3 +262,6 @@ $!^H:: HideFiles() ;{ <-- Show/Hide Hidden Files
 ; +NumpadSub:: Send {Volume_Down}
 ; break::Send {Volume_Mute}
 ; return
+
+; #LAlt::^#Right ; switch to next desktop with Windows key + Left Alt key -> Original is Win + Ctr + Right
+; #LCtrl::^#Left ; switch to next desktop with Windows key + Left CTRL key -> Original is Win r+ Ctr + Left
