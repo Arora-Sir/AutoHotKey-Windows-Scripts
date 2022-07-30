@@ -28,8 +28,10 @@ SetNumlockState, AlwaysOn ; Set Lock keys permanently
 ; SetCapsLockState, AlwaysOff
 
 #If MouseIsOver("ahk_class Shell_TrayWnd")
-   WheelUp::Send {Volume_Up}
-   WheelDown::Send {Volume_Down}
+;   WheelUp::SoundSet +1   ;Hide OSD
+;   WheelDown::SoundSet -1 ;Hide OSD
+    WheelUp::Send {Volume_Up}
+    WheelDown::Send {Volume_Down}
 #If
 
 ; Text box created (UI) see in ToggleFileExt or HideFiles
