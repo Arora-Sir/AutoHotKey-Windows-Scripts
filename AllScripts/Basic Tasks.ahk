@@ -5,10 +5,11 @@
 ; Double tap Caps lock to activate/deactivate Caps lock
 
 ; Win+F --> Run FireFox
+; Win+C --> Run Calculator
+; Win+M --> Minimize Active window
 ; Win+Shift+E --> Open Downloads (My Screenshots) folder
 ; Win+Shift+A --> Open Notification center
 ; Win+Del --> Empty Recycle Bin
-; Win+C Run Calculator
 ; Alt+Shift+T --> Active window Always on Top
 ; Alt+Ctr+E --> Enable/Disable file extension
 ; Alt+Ctr+H --> Enable/Disable hidden files
@@ -228,6 +229,9 @@ MoveBGApp(){
     }
     return
 }
+
+; Win+M Minimize window
+#M::WinMinimize, A ;{ <-- Minimize Active Window
 
 ; Alt+MouseLButton Show/Hide Taskbar; 
 ~LButton::DoubleClick(hide := !hide) ;{ <-- Double Click Functions
