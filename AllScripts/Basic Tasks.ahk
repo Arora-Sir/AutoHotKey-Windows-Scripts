@@ -3,6 +3,7 @@
 
 ; NumLock AlwaysOn && ScrollLock Always Off
 ; Double tap Caps lock to activate/deactivate Caps lock
+; Taskbar Mouse Scroll to Increase/Decrease volume
 
 ; Win+F --> Run FireFox
 ; Win+C --> Run Calculator
@@ -10,12 +11,12 @@
 ; Win+Shift+E --> Open Downloads (My Screenshots) folder
 ; Win+Shift+A --> Open Notification center
 ; Win+Del --> Empty Recycle Bin
+; Ctr+G --> Search the selected/clipboard text
 ; Alt+Shift+T --> Active window Always on Top
 ; Alt+Ctr+E --> Enable/Disable file extension
 ; Alt+Ctr+H --> Enable/Disable hidden files
 ; MouseLButton --> Double/Tripple Click Functions (Taskbar Show/Hide; )
 ; Alt+Ctr+MouseLButton --> Move Background Apps
-; Ctr+G --> Search the selected/clipboard text when chrome is open
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
