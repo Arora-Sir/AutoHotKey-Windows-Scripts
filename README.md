@@ -13,30 +13,38 @@
 
   |    Key    |               Usage               |
   | :-------: | :-------------------------------: |
+  |    F1     |     Set Current +5 Brightness     |
+  | Shift+F1  |     Set Current -5 Brightness     |
   | Ctrl+Pgdn | Push Brightness Extremes Down -10 |
   | Ctrl+Pgup |  Push Brightness Extremes Up +10  |
-  |    F1     |     Set Current +5 Brightness     |
-  | Shift+F1  |     et Current -5 Brightness      |
 
-- ### CLOSE PROGRAMS
+- ### FORCE CLOSE PROGRAMS
+
+  - For those programs which goes to system tray when we close them by pressing the close button
 
   |     Key      |             Usage             |
   | :----------: | :---------------------------: |
-  | $Alt+Ctrl+F4 |       CLose All Program       |
-  |   $Alt+F4    | CLose Currently Active Screen |
+  |  Alt+Ctrl+F4 |       CLose All Program       |
+  |    Alt+F4    | CLose Currently Active Screen |
 
 - ### BASIC TASKS
 
   |        Key        |               Usage               |
   | :---------------: | :-------------------------------: |
   |      Win+Del      |      Delete Recycle Bin Data      |
+    |      Win+C      |      Run Calculator     |
+        |      Win+M     |     Minimize Active window     |
   |       Win+F       |           Open FireFox            |
+  |       Ctrl+G      |          Search the selected/clipboard text      |
   |    Win+Shift+E    |      Open Screenshots Folder      |
   |    Alt+Ctrl+E     |       Show/Hide Extenstions       |
   |    Alt+Ctrl+H     |      Show/Hide Hidden Files       |
+| Alt+Ctr+MouseLButton  Move Background Apps |
   |    Alt+Shift+T    |     This Winodw Always on Top     |
   |    Win+Shift+A    |     Open Notification center      |
   | Capslock+Capslock | Double Tap To Activate/Deactivate |
+  | MouseLButton|Double/Tripple Click Functions (Taskbar Show/Hide; ) |
+  
 
 - ### HOTKEYHELP
 
@@ -62,6 +70,9 @@
   | :---------------------: | :----------------------: |
   |     Win+Scrolllock      |   Suspend All Scripts    |
   | Win+Ctrl+Alt+Scrolllock | To Terminate All Scripts |
+  | Win+Ctr+Alt+R | Reload All Scripts |
+  |Win+Ctr+Alt+W | Run Window Spy Script |
+
 
 <br />
   
