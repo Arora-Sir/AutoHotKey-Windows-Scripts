@@ -32,8 +32,8 @@
   |        Key        |               Usage               |
   | :---------------: | :-------------------------------: |
   |      Win+Del      |      Delete Recycle Bin Data      |
-    |      Win+C      |      Run Calculator     |
-        |      Win+M     |     Minimize Active window     |
+  |      Win+C      |      Run Calculator     |
+  |      Win+M     |     Minimize Active window     |
   |       Win+F       |           Open FireFox            |
   |       Ctrl+G      |          Search the selected/clipboard text      |
   |    Win+Shift+E    |      Open Screenshots Folder      |
