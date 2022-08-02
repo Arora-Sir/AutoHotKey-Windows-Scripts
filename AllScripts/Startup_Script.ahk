@@ -31,15 +31,33 @@ DetectHiddenWindows, On
 ; INITIALIZATION - VARIABLES
 ;{-----------------------------------------------
 ;
-Files := [	; Additional Startup Files and Folders Can Be Added Between the ( Continuations  ) Below
-(Join, 
-"D:\Software\Programming\AutoHotKey\AllScripts\Brightness.ahk"
-"D:\Software\Programming\AutoHotKey\AllScripts\Close Programs.ahk"
-"D:\Software\Programming\AutoHotKey\AllScripts\Basic Tasks.ahk"
-"D:\Software\Codes\Back Code\Personal_Keywords.ahk"
-"D:\Software\Programming\AutoHotKey\AllScripts\HotkeyHelp.ahk"
-)]
+
+; Additional Startup Files and Folders Can Be Added Here
+Script_1=%a_scriptdir%\Brightness.ahk
+Script_2=%a_scriptdir%\Close Programs.ahk
+Script_3=%a_scriptdir%\Basic Tasks.ahk
+Script_4=%a_scriptdir%\Personal Keywords.ahk
+Script_5=%a_scriptdir%\HotkeyHelp.ahk
+
+Files := []
+Files.Push(Script_1)
+Files.Push(Script_2)
+Files.Push(Script_3)
+Files.Push(Script_4)
+Files.Push(Script_5)
+
+; Loop, 1
+; {
+;     FilePath := "Script_" . %A_Index%
+;     MsgBox, FilePath
+; }
 ;}
+
+; Previously Used
+; Files := [
+; (Join, 
+; "Add Path to the AHK FILE"
+; )]
 
 
 ; AUTO-EXECUTE
