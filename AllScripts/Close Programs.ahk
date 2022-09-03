@@ -4,7 +4,7 @@
 ; Alt+F4 --> Close currently active program
 ; Alt+Ctr+F4 --> Close All Programs
 
-;Anydesk CiscoWebx Cortana Discord Filmora IDM Opera MicrosoftTeams Skype Stremio Telegram UnityHub uTorrent wps Zoom
+;Anydesk CiscoWebx Cortana Discord Filmora HotspotSheild IDM Opera MicrosoftTeams Skype Stremio Telegram UnityHub uTorrent wps Zoom
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
@@ -36,6 +36,7 @@ CLoseCurrentlyActiveScreen()
         Case "Wondershare Filmora X.exe": Run cmd.exe /c taskkill /F /IM WSHelper.exe ,,Hide
         Case "wps.exe": Run cmd.exe /c taskkill /F /IM wpscenter.exe & taskkill /F /IM wpscloudsvr.exe,,Hide
         Case "Zoom.exe": Run cmd.exe /c taskkill /F /IM zoom.exe ,,Hide
+ 	    Case "hsscp.exe": Run cmd.exe /c taskkill /F /IM hsscp.exe ,,Hide
         Default:
     }
     
