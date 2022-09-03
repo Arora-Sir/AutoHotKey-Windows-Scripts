@@ -8,9 +8,10 @@
 ; Win+F --> Run FireFox
 ; Win+C --> Run Calculator
 ; Win+M --> Minimize Active window
+; Win+Del --> Empty Recycle Bin
 ; Win+Shift+E --> Open Downloads (My Screenshots) folder
 ; Win+Shift+A --> Open Notification center
-; Win+Del --> Empty Recycle Bin
+; Win+Alt+N --> Clear Notification center
 ; Ctr+G --> Search the selected/clipboard text
 ; Alt+Shift+T --> Active window Always on Top
 ; Alt+Ctr+E --> Enable/Disable file extension
@@ -276,8 +277,8 @@ MoveBGApp()
 ; Win+Shift+A Open Notification center
 #+A::OpenActionCenter() ;{ <-- Open Notification center
 
-; Win+Ctr+N Clear Notification center
-#^N::ClearNotificaitons() ;{ <-- Clear Notifications (Win 11)
+; Win+Alt+N Clear Notification center
+#!N::ClearNotificaitons() ;{ <-- Clear Notifications (Win 11)
 
 ; Alt+Ctr+E Enable/Disable file extension
 $!^E:: ToggleFileExt() ;{ <-- Show/Hide Extenstions
