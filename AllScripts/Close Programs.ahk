@@ -22,7 +22,7 @@ CLoseCurrentlyActiveScreen()
     {
         Case "AnyDesk.exe": Run cmd.exe /c taskkill /F /IM AnyDesk.exe ,,Hide
         Case "CiscoCollabHost.exe": Run cmd.exe /c taskkill /F /IM Ciscowebexstart.exe & taskkill /F /IM CiscoCollabHost.exe & taskkill /F /IM webexmta.exe & taskkill /F /IM washost.exe & taskkill /F /IM atmgr.exe & taskkill /F /IM webex.exe ,,Hide
-        Case "ApplicationFrameHost.exe": Run cmd.exe /c taskkill /F /IM Cortana.exe ,,Hide
+        Case "ApplicationFrameHost.exe": Run cmd.exe /c taskkill /F /IM Cortana.exe ,,Hide ;Cortana
         Case "Discord.exe": Run cmd.exe /c taskkill /F /IM Discord.exe ,,Hide
         Case "IDMan.exe": Run cmd.exe /c taskkill /F /IM IDMan.exe ,,Hide
         Case "Opera.exe": Run cmd.exe /c taskkill /F /IM Opera.exe & taskkill /F /IM browser_assistant.exe,,Hide
@@ -36,7 +36,7 @@ CLoseCurrentlyActiveScreen()
         Case "Wondershare Filmora X.exe": Run cmd.exe /c taskkill /F /IM WSHelper.exe ,,Hide
         Case "wps.exe": Run cmd.exe /c taskkill /F /IM wpscenter.exe & taskkill /F /IM wpscloudsvr.exe,,Hide
         Case "Zoom.exe": Run cmd.exe /c taskkill /F /IM zoom.exe ,,Hide
- 	    Case "hsscp.exe": Run cmd.exe /c taskkill /F /IM hsscp.exe ,,Hide
+ 	    Case "hsscp.exe": Run cmd.exe /c taskkill /F /IM hsscp.exe ,,Hide ;HotSpot Sheild
         Default:
     }
     
@@ -69,5 +69,32 @@ CLoseAllPrograms()
     return
 }
 
+CLoseSpecificPrograms()
+{
+    if WinExist("ahk_exe IDMan.exe")
+    {
+        Run cmd.exe /c taskkill /F /IM IDMan.exe ,,Hide
+    }
+    if WinExist("ahk_exe stremio.exe")
+    {
+        Run cmd.exe /c taskkill /F /IM stremio.exe ,,Hide
+    }
+    if WinExist("ahk_exe uTorrent.exe")
+    {
+        Run cmd.exe /c taskkill /F /IM uTorrent.exe ,,Hide
+    }
+    if WinExist("ahk_exe wps.exe")
+    {
+        Run cmd.exe /c taskkill /F /IM wpscenter.exe & taskkill /F /IM wpscloudsvr.exe,,Hide
+    }
+    if WinExist("ahk_exe Teams.exe")
+    {
+        Run cmd.exe /c taskkill /F /IM Teams.exe ,,Hide
+    }
+    return
+}
+
+
 $!F4:: CLoseCurrentlyActiveScreen() ;{ <-- CLose Currently Active Screen
+$!+F4:: CLoseSpecificPrograms() ;{ <-- CLose Specific Programs
 $!^F4:: CLoseAllPrograms() ;{ <-- CLose All Program
