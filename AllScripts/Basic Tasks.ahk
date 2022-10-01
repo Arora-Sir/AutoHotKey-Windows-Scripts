@@ -13,6 +13,7 @@
 ; Win+Shift+A --> Open Notification center
 ; Win+Alt+N --> Clear Notification center
 ; Ctr+G --> Search the selected/clipboard text
+; Ctr+J+J --> To close downloads tab at bottom (In chrome)
 ; Alt+Shift+T --> Active window Always on Top
 ; Alt+Ctr+E --> Enable/Disable file extension
 ; Alt+Ctr+H --> Enable/Disable hidden files
@@ -171,6 +172,18 @@ DoubleTapCapsLock()
     return
 }
 
+DoubleTapCtrJInChrome()
+{
+    if WinActive("ahk_exe chrome.exe")
+    {
+        Send, ^j    ; Open downloads tab (Normal Functionality)
+        if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250){
+            Send, ^w   ; close the tab
+        }
+    }
+    return
+}
+
 ClearNotificaitons()
 {
     Send #n
@@ -247,6 +260,9 @@ MoveBGApp()
     return
 }
 
+; Alt+F11 Hide Window top bar
+!F11:: WinSet, Style, ^0xC00000, A ;{ <-- Hide Window top bar
+
 ; Win+M Minimize window
 #M::WinMinimize, A ;{ <-- Minimize Active Window
 
@@ -283,11 +299,14 @@ MoveBGApp()
 ; Alt+Ctr+E Enable/Disable file extension
 $!^E:: ToggleFileExt() ;{ <-- Show/Hide Extenstions
 
-; Alt+Ctr+E Enable/Disable hidden files
+; Alt+Ctr+H Enable/Disable hidden files
 $!^H:: HideFiles() ;{ <-- Show/Hide Hidden Files
 
 ; Double Tap caps lock to on and off
 *CapsLock::DoubleTapCapsLock() ;{ <-- Double Tap To Activate/Deactivate
+
+; Ctr+J+J in chrome to close downloads tab at bottom
+$^J::DoubleTapCtrJInChrome() ;{ <-- Close chrome downloads tab at bottom
 
 ;Turn Caps Lock into a Shift key
 ; Capslock::Shift
