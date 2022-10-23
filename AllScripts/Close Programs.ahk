@@ -2,6 +2,7 @@
 ; ~ prefix to prevent blocking native (original) functionality of that key
 
 ; Alt+F4 --> Close currently active program
+; Alt+Shift+F4 --> Close specific active program
 ; Alt+Ctr+F4 --> Close All Programs
 
 ;Anydesk CiscoWebx Cortana Discord Filmora HotspotSheild IDM Opera MicrosoftTeams Skype Stremio Telegram UnityHub uTorrent wps Zoom
@@ -83,9 +84,10 @@ CLoseSpecificPrograms()
     {
         Run cmd.exe /c taskkill /F /IM uTorrent.exe ,,Hide
     }
-    if WinExist("ahk_exe wps.exe")
+    if WinExist("ahk_exe wps.exe") or WinExist("ahk_exe wpscloudsvr.exe")
     {
-        Run cmd.exe /c taskkill /F /IM wpscenter.exe & taskkill /F /IM wpscloudsvr.exe,,Hide
+        Run cmd.exe /c taskkill /F /IM wpscenter.exe,,Hide
+        Run cmd.exe /c taskkill /F /IM wpscloudsvr.exe,,Hide
     }
     if WinExist("ahk_exe Teams.exe")
     {

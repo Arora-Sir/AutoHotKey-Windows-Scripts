@@ -11,9 +11,12 @@
 ; Win+Del --> Empty Recycle Bin
 ; Win+Shift+E --> Open Downloads (My Screenshots) folder
 ; Win+Shift+A --> Open Notification center
+; Win+Alt+C --> Run Alarm Clock
 ; Win+Alt+N --> Clear Notification center
 ; Ctr+G --> Search the selected/clipboard text
-; Ctr+J+J --> To close downloads tab at bottom (In chrome)
+; Ctr+Y --> Open Youtube (In chrome)
+; Ctr+T --> Open new Tab from anywhere (In chrome)
+; Ctr+J+J --> Close downloads bar at bottom (In chrome)
 ; Alt+Shift+T --> Active window Always on Top
 ; Alt+Ctr+E --> Enable/Disable file extension
 ; Alt+Ctr+H --> Enable/Disable hidden files
@@ -31,10 +34,10 @@ SetNumlockState, AlwaysOn ; Set Lock keys permanently
 ; SetCapsLockState, AlwaysOff
 
 #If MouseIsOver("ahk_class Shell_TrayWnd")
-;   WheelUp::SoundSet +1   ;Hide OSD
+    ;   WheelUp::SoundSet +1   ;Hide OSD
 ;   WheelDown::SoundSet -1 ;Hide OSD
-    WheelUp::Send {Volume_Up}
-    WheelDown::Send {Volume_Down}
+WheelUp::Send {Volume_Up}
+WheelDown::Send {Volume_Down}
 #If
 
 ; Text box created (UI) see in ToggleFileExt or HideFiles
@@ -56,7 +59,7 @@ text(a,t:="",x:="",y:="")
 }
 
 MouseIsOver(WinTitle)
-{  
+{ 
     MouseGetPos,,, Win
     Return WinExist(WinTitle . " ahk_id " . Win)
 }
@@ -172,13 +175,13 @@ DoubleTapCapsLock()
     return
 }
 
-DoubleTapCtrJInChrome()
+CloseChromeBottomDownloadsBar()
 {
     if WinActive("ahk_exe chrome.exe")
     {
-        Send, ^j    ; Open downloads tab (Normal Functionality)
+        Send, ^j ; Open downloads tab (Normal Functionality)
         if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250){
-            Send, ^w   ; close the tab
+            Send, ^w ; close the tab
         }
     }
     return
@@ -189,37 +192,37 @@ ClearNotificaitons()
     Send #n
     Sleep, 1000
     if WinActive("ahk_exe Shellexperiencehost.exe")
-        {
-            Send {Tab} {Space} {Esc}
-        }
+    {
+        Send {Tab} {Space} {Esc}
+    }
     return
 }
 
 ClipboardSearch()
 {	
-	; if WinActive("ahk_exe chrome.exe")
-        ; {
-            GoogleSearchEngine := "https://www.google.com/search?q="
-            send, ^c
-            Sleep, 100
-            LatestCopiedClipboard := Clipboard
-            securedAddress := "https://"
-            if(SubStr(LatestCopiedClipboard,1,8) = securedAddress)
-            {
-                Send, ^t    ; Open new tab
-                Send, ^v    ; Paste the URL
-                Send, {Enter}   ; Hit Enter
-            }
-            else
-            {
-                CompleteURL = %GoogleSearchEngine%%LatestCopiedClipboard%
-                ; MsgBox,4, Options, Testing, %url%, 3 ; For Debugging
-                Run, %CompleteURL%
-            }
-        ; }
+    ; if WinActive("ahk_exe chrome.exe")
+    ; {
+    GoogleSearchEngine := "https://www.google.com/search?q="
+    send, ^c
+    Sleep, 100
+    LatestCopiedClipboard := Clipboard
+    securedAddress := "https://"
+    if(SubStr(LatestCopiedClipboard,1,8) = securedAddress)
+    {
+        Send, ^t ; Open new tab
+        Send, ^v ; Paste the URL
+        Send, {Enter} ; Hit Enter
+    }
+    else
+    {
+        CompleteURL = %GoogleSearchEngine%%LatestCopiedClipboard%
+        ; MsgBox,4, Options, Testing, %url%, 3 ; For Debugging
+        Run, %CompleteURL%
+    }
+    ; }
     return 
 }
-   
+
 DoubleClick(action)
 {
     If (A_PriorHotKey = A_ThisHotKey and A_TimeSincePriorHotkey < 500)
@@ -260,6 +263,36 @@ MoveBGApp()
     return
 }
 
+OpenYoutube()
+{
+    ; if WinActive("ahk_exe chrome.exe")
+    ; {
+    YoutubeURL := "https://www.youtube.com/"
+    Run, %YoutubeURL%
+    ; }
+    return
+}
+
+OpenNewTab()
+{
+    if WinActive("ahk_exe chrome.exe")
+    {
+        Send ^t
+    }
+    else{
+        If WinExist ("ahk_exe chrome.exe")
+        {
+            WinActivate, ahk_exe chrome.exe
+            Send ^t
+        }
+        else{
+            Run, chrome.exe
+            Send ^t
+        }	
+    }
+    return
+}
+
 ; Alt+F11 Hide Window top bar
 !F11:: WinSet, Style, ^0xC00000, A ;{ <-- Hide Window top bar
 
@@ -281,11 +314,11 @@ MoveBGApp()
 ; Win+C Run Calculator
 #c::Run calc.exe ;{ <-- Open calculaor
 
+; Win+Alt+C Run AlarmClock
+#!c:: Run "shell:Appsfolder\Microsoft.WindowsAlarms_8wekyb3d8bbwe!App" ;{ <-- Open clock
+
 ; Win+Shift+E Open Downloads (My Screenshots) folder
 #+e::Run "C:\Users\Mohit\Pictures\Screenshots" ;{ <-- Open Screenshots Folder
-
-; Win+Shift+T Active window Always on Top
-!+T:: Winset, Alwaysontop, , A ;{ <-- This Winodw Always on Top
 
 ; Win+Del Empty Recycle Bin
 #Del::FileRecycleEmpty ;{ <-- Delete Recycle Bin Data
@@ -296,6 +329,9 @@ MoveBGApp()
 ; Win+Alt+N Clear Notification center
 #!N::ClearNotificaitons() ;{ <-- Clear Notifications (Win 11)
 
+; Alt+Shift+T Active window Always on Top
+!+T:: Winset, Alwaysontop, , A ;{ <-- This Winodw Always on Top
+
 ; Alt+Ctr+E Enable/Disable file extension
 $!^E:: ToggleFileExt() ;{ <-- Show/Hide Extenstions
 
@@ -305,8 +341,14 @@ $!^H:: HideFiles() ;{ <-- Show/Hide Hidden Files
 ; Double Tap caps lock to on and off
 *CapsLock::DoubleTapCapsLock() ;{ <-- Double Tap To Activate/Deactivate
 
-; Ctr+J+J in chrome to close downloads tab at bottom
-$^J::DoubleTapCtrJInChrome() ;{ <-- Close chrome downloads tab at bottom
+; Ctr+J+J in chrome to close downloads bar at bottom
+$^J::CloseChromeBottomDownloadsBar() ;{ <-- Close chrome downloads bar at bottom
+
+; Ctr+Y in chrome to open Youtube
+^Y::OpenYoutube() ;{ <-- Close chrome downloads tab at bottom
+
+; Ctr+T in chrome to open new Tab from anywhere
+$^T::OpenNewTab() ;{ <-- open chrome tab from anywhere
 
 ;Turn Caps Lock into a Shift key
 ; Capslock::Shift
