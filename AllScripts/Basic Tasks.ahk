@@ -9,19 +9,19 @@
 ; Win+C --> Run Calculator
 ; Win+M --> Minimize Active window
 ; Win+Del --> Empty Recycle Bin
-; Win+Shift+E --> Open Downloads (My Screenshots) folder
 ; Win+Shift+A --> Open Notification center
+; Win+Shift+E --> Open Downloads (My Screenshots) folder
 ; Win+Alt+C --> Run Alarm Clock
 ; Win+Alt+N --> Clear Notification center
-; Ctr+G --> Search the selected/clipboard text
-; Ctr+Y --> Open Youtube (In chrome)
-; Ctr+T --> Open new Tab from anywhere (In chrome)
-; Ctr+J+J --> Close downloads bar at bottom (In chrome)
 ; Alt+Shift+T --> Active window Always on Top
 ; Alt+Ctr+E --> Enable/Disable file extension
 ; Alt+Ctr+H --> Enable/Disable hidden files
-; MouseLButton --> Double/Tripple Click Functions (Taskbar Show/Hide; )
 ; Alt+Ctr+MouseLButton --> Move Background Apps
+; Ctr+G --> Search the selected/clipboard text
+; Ctr+T --> Open new Tab from anywhere (In chrome)
+; Ctr+J+J --> Close downloads bar at bottom (In chrome)
+; Ctr+Y+T --> Open Youtube (In chrome: 0.1 second between Y & T)
+; MouseLButton --> Double/Tripple Click Functions (Taskbar Show/Hide; )
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
@@ -265,31 +265,72 @@ MoveBGApp()
 
 OpenYoutube()
 {
-    ; if WinActive("ahk_exe chrome.exe")
-    ; {
-    YoutubeURL := "https://www.youtube.com/"
-    Run, %YoutubeURL%
-    ; }
+    ; For more tweak read this : https://www.autohotkey.com/boards/viewtopic.php?t=86160
+    KeyWait, t, DT0.1 ; wait a 0.1 second to see if t is pressed
+    ; Input, UserInput, T0.7 L4, {enter}.{esc}{tab}, t
+    ; if(ErrorLevel = "Timeout") ; y not pressed in time
+    if ErrorLevel ; t not pressed in time
+    {
+        Send, ^y ; send ^y by itself so it's still usable
+    }
+    else {
+        YoutubeURL := "https://www.youtube.com/"
+        Run, %YoutubeURL%
+    }
     return
+    ; if (UserInput = t){
+    ;     YoutubeURL := "https://www.youtube.com/"
+    ;     Run, %YoutubeURL%
+    ; }
 }
 
 OpenNewTab()
 {
     if WinActive("ahk_exe chrome.exe")
     {
-        Send ^t
+        if A_TimeSincePriorHotkey > 100
+        { 
+            Send ^t
+        }
     }
     else{
         If WinExist ("ahk_exe chrome.exe")
         {
-            WinActivate, ahk_exe chrome.exe
-            Send ^t
+            if A_TimeSincePriorHotkey > 100
+            { 
+                WinActivate, ahk_exe chrome.exe
+                Sleep, 250
+                Send ^t
+            }
         }
         else{
-            Run, chrome.exe
-            Send ^t
+            if A_TimeSincePriorHotkey > 100
+            { 
+                Run, chrome.exe
+                Sleep, 250
+                Send ^t
+            }
         }	
     }
+    return
+}
+
+OpenCalculator()
+{
+    If WinExist("Calculator")
+    {
+        WinActivate
+
+        ;To open another instance if need
+        If (A_PriorHotKey = A_ThisHotKey and A_TimeSincePriorHotkey < 500)
+        {
+            Run calc.exe
+        }
+    }
+    else{
+        Run calc.exe
+    }	
+
     return
 }
 
@@ -308,11 +349,11 @@ OpenNewTab()
 ; Win+F Run FireFox
 #f::Run Firefox ;{ <-- Open FireFox
 
-; Ctr+G Run Calculator
-^G::ClipboardSearch() ;{ <-- Search the selected/clipboard text when chrome is open
+; Ctr+G Select text to search in chrome
+^G::ClipboardSearch() ;{ <-- Search the selected/clipboard text
 
 ; Win+C Run Calculator
-#c::Run calc.exe ;{ <-- Open calculaor
+#c:: OpenCalculator() ;{ <-- Open calculaor
 
 ; Win+Alt+C Run AlarmClock
 #!c:: Run "shell:Appsfolder\Microsoft.WindowsAlarms_8wekyb3d8bbwe!App" ;{ <-- Open clock
@@ -344,11 +385,11 @@ $!^H:: HideFiles() ;{ <-- Show/Hide Hidden Files
 ; Ctr+J+J in chrome to close downloads bar at bottom
 $^J::CloseChromeBottomDownloadsBar() ;{ <-- Close chrome downloads bar at bottom
 
-; Ctr+Y in chrome to open Youtube
-^Y::OpenYoutube() ;{ <-- Close chrome downloads tab at bottom
+; Ctr+Y+T in chrome to open Youtube
+$^Y::OpenYoutube() ;{ <-- Open Youtube
 
 ; Ctr+T in chrome to open new Tab from anywhere
-$^T::OpenNewTab() ;{ <-- open chrome tab from anywhere
+~^T::OpenNewTab() ;{ <-- open chrome tab from anywhere
 
 ;Turn Caps Lock into a Shift key
 ; Capslock::Shift
