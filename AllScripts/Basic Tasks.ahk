@@ -266,7 +266,7 @@ MoveBGApp()
 OpenYoutube()
 {
     ; For more tweak read this : https://www.autohotkey.com/boards/viewtopic.php?t=86160
-    KeyWait, t, DT0.1 ; wait a 0.1 second to see if t is pressed
+    KeyWait, t, DT0.15 ; wait a 0.1 second to see if t is pressed
     ; Input, UserInput, T0.7 L4, {enter}.{esc}{tab}, t
     ; if(ErrorLevel = "Timeout") ; y not pressed in time
     if ErrorLevel ; t not pressed in time
@@ -286,31 +286,25 @@ OpenYoutube()
 
 OpenNewTab()
 {
-    if WinActive("ahk_exe chrome.exe")
+    ; If youtube is going to active then disable opening new tab and open YT instead
+    if (A_PriorHotkey != "~^Y")
     {
-        if A_TimeSincePriorHotkey > 100
-        { 
+        if WinActive("ahk_exe chrome.exe") 
+        {
+            ; MsgBox, [ Options, %A_PriorHotkey%, %ErrorLevel%, Timeout]
             Send ^t
         }
-    }
-    else{
-        If WinExist ("ahk_exe chrome.exe")
+        else If WinExist ("ahk_exe chrome.exe") && A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250
         {
-            if A_TimeSincePriorHotkey > 100
-            { 
-                WinActivate, ahk_exe chrome.exe
-                Sleep, 250
-                Send ^t
-            }
+            WinActivate, ahk_exe chrome.exe
+            Sleep, 250
+            Send ^t
         }
-        else{
-            if A_TimeSincePriorHotkey > 100
-            { 
-                Run, chrome.exe
-                Sleep, 250
-                Send ^t
-            }
-        }	
+        else if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250){
+            Run, chrome.exe
+            Sleep, 250
+            Send ^t
+        }
     }
     return
 }
@@ -386,10 +380,10 @@ $!^H:: HideFiles() ;{ <-- Show/Hide Hidden Files
 $^J::CloseChromeBottomDownloadsBar() ;{ <-- Close chrome downloads bar at bottom
 
 ; Ctr+Y+T in chrome to open Youtube
-$^Y::OpenYoutube() ;{ <-- Open Youtube
+~^Y::OpenYoutube() ;{ <-- Open Youtube
 
 ; Ctr+T in chrome to open new Tab from anywhere
-~^T::OpenNewTab() ;{ <-- open chrome tab from anywhere
+$^T::OpenNewTab() ;{ <-- open chrome tab from anywhere
 
 ;Turn Caps Lock into a Shift key
 ; Capslock::Shift
