@@ -73,6 +73,9 @@
     |---------- | --------------------------- |
     |  Alt+Ctrl+F4 |       CLose All Program       |
     |    Alt+F4    | CLose Currently Active Screen |
+    
+## License
+[MIT LICENSE](LICENSE)
 
 <br />
   
