@@ -13,9 +13,9 @@ SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
 #SingleInstance force ; Ensures that only the last executed instance of script is running
 DetectHiddenWindows, On
 
+;Ensures that programs also gets killed from the background processes
 CLoseCurrentlyActiveScreen()
 {
-
     WinGet, Active_ID, ID, A
     WinGet, Active_Process, ProcessName, ahk_id %Active_ID%
 
@@ -43,56 +43,80 @@ CLoseCurrentlyActiveScreen()
     
     send !{F4}
     return
-
-    ; Previously used like this!!
-    ; if WinActive("ahk_exe Zoom.exe")
-    ; {
-    ;     ;if WinExist("Zoom Meeting")
-    ;     ;	{
-    ;     ;	    return
-    ;     ;	}
-    ;     ;else
-    ;     ;	{
-    ;           Run cmd.exe /c taskkill /F /IM zoom.exe ,,Hide
-    ;     ;	}
-    ; }
 }
-
 CLoseAllPrograms()
 {
-    WinGet, id, list, , , Program Manager
-    Loop, %id%
-    {
-        StringTrimRight, this_id, id%a_index%, 0
-        WinGetTitle, this_title, ahk_id %this_id%
-        winclose,%this_title%
-    }
+    DetectHiddenWindows, on
+    CLoseSpecificPrograms()
+    DetectHiddenWindows, off
+    WinGet, mylist, list, , , ,Program Manager
+    str := ""
+    Loop % mylist {
+        hwnd := mylist%A_Index%
+        WinGetTitle, title, % "ahk_id " hwnd
+        if (title == "")
+        {
+            continue
+        }
+        msgbox % str
+        str .= "HWND: " hwnd ", Title: " title "`n"
+        WinClose % "ahk_id " hwnd
+        }
+        ; msgbox % str
     return
+
+    ; IfEqual, AppName, "AutoHotKey.exe"
+    ; Winget,AppName,ProcessName,ahk_id %this_id%
+    ; if AppName = "AutoHotkey.exe"
+    ; {
+    ;     MsgBox, [ Options, Title, Text, Timeout]
+    ;     Continue
+    ; }
+    ; else if AppName = "Zoom.exe"
+    ; {
+    ;     Run cmd.exe /c taskkill /F /IM zoom.exe ,,Hide
+    ;     Continue
+    ; }
 }
 
 CLoseSpecificPrograms()
 {
+    ; WinClose, ahk_exe stremio.exe
     if WinExist("ahk_exe IDMan.exe")
     {
         Run cmd.exe /c taskkill /F /IM IDMan.exe ,,Hide
     }
+
     if WinExist("ahk_exe stremio.exe")
     {
         Run cmd.exe /c taskkill /F /IM stremio.exe ,,Hide
     }
-    if WinExist("ahk_exe uTorrent.exe")
+
+    if WinExist("ahk_exe uTorrent.exe") or WinExist("ahk_exe utorrentie.exe") or WinExist("ahk_exe utorrent.exe")
     {
-        Run cmd.exe /c taskkill /F /IM uTorrent.exe ,,Hide
+        Run cmd.exe /c taskkill /F /IM uTorrent.exe & taskkill /F /IM utorrentie.exe & taskkill /F /IM utorrent.exe,,Hide
     }
+
     if WinExist("ahk_exe wps.exe") or WinExist("ahk_exe wpscloudsvr.exe")
     {
         Run cmd.exe /c taskkill /F /IM wpscenter.exe,,Hide
         Run cmd.exe /c taskkill /F /IM wpscloudsvr.exe,,Hide
     }
+
     if WinExist("ahk_exe Teams.exe")
     {
         Run cmd.exe /c taskkill /F /IM Teams.exe ,,Hide
     }
+
+    if WinExist("ahk_exe Zoom.exe")
+    {
+        Run cmd.exe /c taskkill /F /IM zoom.exe ,,Hide
+    }
+
+    ; if WinExist("ahk_class ZPPTMainFrmWndClassEx.exe")
+    ; {
+    ;     Run cmd.exe /c taskkill /F /IM zoom.exe ,,Hide
+    ; }
     return
 }
 
