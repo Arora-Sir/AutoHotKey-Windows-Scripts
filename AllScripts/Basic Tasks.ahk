@@ -14,11 +14,12 @@
 ; Win+Alt+C --> Run Alarm Clock
 ; Win+Alt+N --> Clear Notification center
 ; Alt+Shift+T --> Active window Always on Top
+; Alt+Ctr+D --> Sort Folder content by date
 ; Alt+Ctr+E --> Enable/Disable file extension
 ; Alt+Ctr+H --> Enable/Disable hidden files
 ; Alt+Ctr+MouseLButton --> Move Background Apps
 ; Ctr+G --> Search the selected/clipboard text
-; Ctr+T --> Open new Tab from anywhere (In chrome)
+; Ctr+T+T --> Open new Tab from anywhere (In chrome)
 ; Ctr+J+J --> Close downloads bar at bottom (In chrome)
 ; Ctr+Y+T --> Open Youtube (In chrome: 0.1 second between Y & T)
 ; MouseLButton --> Double/Tripple Click Functions (Taskbar Show/Hide; )
@@ -271,7 +272,8 @@ OpenYoutube()
     ; if(ErrorLevel = "Timeout") ; y not pressed in time
     if ErrorLevel ; t not pressed in time
     {
-        Send, ^y ; send ^y by itself so it's still usable
+        ;ignore as of now as it was intrupting normal functionality
+        ;Send, ^y ; send ^y by itself so it's still usable
     }
     else {
         YoutubeURL := "https://www.youtube.com/"
@@ -328,6 +330,53 @@ OpenCalculator()
     return
 }
 
+SortFolderByDate()
+{
+    ; if WinActive("ahk_class ExploreWClass"){
+    if WinActive("ahk_exe explorer.exe"){
+        WinGet, hWnd, ID, A
+        for oWin in ComObjCreate("Shell.Application").Windows
+        {
+            if (oWin.HWND = hWnd)
+            {
+                ; MsgBox, % oWin.Document.SortColumns ;show current sort columns
+                if(oWin.Document.SortColumns == "prop:-System.DateModified;")
+                {
+                    oWin.Document.SortColumns := "prop:+System.DateModified;" ;sort by date modified descending (newest first)             
+                }
+                else
+                {
+                    oWin.Document.SortColumns := "prop:-System.DateModified;" ;sort by date modified ascending (oldest first)
+                }
+            ;oWin.Document.SortColumns := "prop:+System.ItemNameDisplay;" ;sort by name ascending (A-Z)
+            ;oWin.Document.SortColumns := "prop:-System.ItemNameDisplay;" ;sort by name descending (A-Z)
+            break
+            }
+        }
+        oWin := ""
+    }
+    return
+}
+
+MuteMic() {
+	; local MM
+    ; SoundSet, +1, MASTER:1, MUTE, 2
+    ; SoundGet, MM, MASTER:1, MUTE, 2
+	; #Persistent
+	; ToolTip, % (MM == "On" ? "Microphone muted" : "Microphone online")
+	; SetTimer, RemoveMuteMicTooltip, 700
+	; return
+    
+	; nircmd.exe waitprocess firefox.exe speak text "Firefox was closed"
+
+    ; Run nircmd.exe mutesysvolume 2 microphone 
+    Return
+}
+; RemoveMuteMicTooltip:
+; 	SetTimer, RemoveMuteMicTooltip, Off
+; 	ToolTip
+; 	return
+    
 ; Alt+F11 Hide Window top bar
 !F11:: WinSet, Style, ^0xC00000, A ;{ <-- Hide Window top bar
 
@@ -348,6 +397,9 @@ OpenCalculator()
 
 ; Win+C Run Calculator
 #c:: OpenCalculator() ;{ <-- Open calculaor
+
+; Win+Ctr+Alt+C Mute/Unmute Microphone
+#^!M:: MuteMic() ;{ <-- Mute/Unmute Microphone
 
 ; Win+Alt+C Run AlarmClock
 #!c:: Run "shell:Appsfolder\Microsoft.WindowsAlarms_8wekyb3d8bbwe!App" ;{ <-- Open clock
@@ -370,6 +422,9 @@ OpenCalculator()
 ; Alt+Ctr+E Enable/Disable file extension
 $!^E:: ToggleFileExt() ;{ <-- Show/Hide Extenstions
 
+; Alt+Ctr+D Sort Folder content by date
+$!^D:: SortFolderByDate() ;{ <-- Sort Folder content by date
+
 ; Alt+Ctr+H Enable/Disable hidden files
 $!^H:: HideFiles() ;{ <-- Show/Hide Hidden Files
 
@@ -382,8 +437,8 @@ $^J::CloseChromeBottomDownloadsBar() ;{ <-- Close chrome downloads bar at bottom
 ; Ctr+Y+T in chrome to open Youtube
 ~^Y::OpenYoutube() ;{ <-- Open Youtube
 
-; Ctr+T in chrome to open new Tab from anywhere
-$^T::OpenNewTab() ;{ <-- open chrome tab from anywhere
+; Ctr+T+T in chrome to open new Tab from anywhere
+~^T::OpenNewTab() ;{ <-- open chrome tab from anywhere
 
 ;Turn Caps Lock into a Shift key
 ; Capslock::Shift
