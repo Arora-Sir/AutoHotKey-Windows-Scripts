@@ -146,7 +146,8 @@ RefreshExplorer()
     {
         id := id%A_Index%
         ControlGet, w_CtrID, Hwnd,, SHELLDLL_DefView1, ahk_id %id%
-        if w_CtrID != SendMessage, 0x111, 0x1A220,,, ahk_id %w_CtrID%
+        if w_CtrID !=
+            SendMessage, 0x111, 0x1A220,,, ahk_id %w_CtrID%
     }
     return
 }
