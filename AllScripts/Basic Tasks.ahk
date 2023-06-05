@@ -19,9 +19,9 @@
 ; Alt+Ctr+H --> Enable/Disable hidden files
 ; Alt+Ctr+MouseLButton --> Move Background Apps
 ; Ctr+G --> Search the selected/clipboard text
-; Ctr+T+T --> Open new Tab from anywhere (In chrome)
-; Ctr+J+J --> Close downloads bar at bottom (In chrome)
-; Ctr+Y+T --> Open Youtube (In chrome: 0.1 second between Y & T)
+; Ctr+T+T --> Open new Tab from anywhere (In browser)
+; Ctr+J+J --> Close downloads bar at bottom (In browser)
+; Ctr+Y+T --> Open Youtube (In browser: maximum 0.15s second gap between Y & T)
 ; MouseLButton --> Double/Tripple Click Functions (Taskbar Show/Hide; )
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
@@ -36,20 +36,20 @@ SetNumlockState, AlwaysOn ; Set Lock keys permanently
 
 #If MouseIsOver("ahk_class Shell_TrayWnd")
     ;   WheelUp::SoundSet +1   ;Hide OSD
-;   WheelDown::SoundSet -1 ;Hide OSD
-WheelUp::Send {Volume_Up}
-WheelDown::Send {Volume_Down}
+    ;   WheelDown::SoundSet -1 ;Hide OSD
+    WheelUp::Send {Volume_Up}
+    WheelDown::Send {Volume_Down}
 #If
 
 ; Text box created (UI) see in ToggleFileExt or HideFiles
-text(a,t:="",x:="",y:="") 
+text(a,t:="",x:="",y:="")
 {
     c:=d:=e:=0, strReplace(a,"`n",,b), g:=strSplit(a,"`n","`r")[1], strReplace(g," ",,h)
-    While !(f="" && a_index<>1) 
+    While !(f="" && a_index<>1)
     {
         f := subStr(g,a_index,1)
         (regExMatch(f, "[a-z]") ? c++ : f="@" ? e++ : d++)
-    } 
+    }
     SplashTextOn, % 150 + c*6.5 + d*12 + e*13 - h*8, % 30 + b*20, Yipiee..., % a
     If (x<>"" || y<>"")
         WinMove, Yipiee...,, x, y
@@ -60,13 +60,13 @@ text(a,t:="",x:="",y:="")
 }
 
 MouseIsOver(WinTitle)
-{ 
+{
     MouseGetPos,,, Win
     Return WinExist(WinTitle . " ahk_id " . Win)
 }
 
 HideFiles()
-{	
+{
     RegRead, ValorHidden, HKEY_CURRENT_USER, Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced, Hidden
     if ValorHidden = 2
     {
@@ -77,7 +77,7 @@ HideFiles()
         RegWrite, REG_DWORD, HKEY_CURRENT_USER, Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced, Hidden, 1
         RefreshExplorer()
 
-    } 
+    }
     else
     {
 
@@ -88,8 +88,8 @@ HideFiles()
         RefreshExplorer()
 
     }
-    return 
-}	
+    return
+}
 
 ToggleFileExt()
 {
@@ -120,7 +120,6 @@ ToggleFileExt()
         text("Hide Extentions",1)
         RegWrite, REG_DWORD, % RootKey, % SubKey, HideFileExt, 1
         RefreshExplorer()
-
         ;}
     }
     return
@@ -147,8 +146,7 @@ RefreshExplorer()
     {
         id := id%A_Index%
         ControlGet, w_CtrID, Hwnd,, SHELLDLL_DefView1, ahk_id %id%
-        if w_CtrID !=
-            SendMessage, 0x111, 0x1A220,,, ahk_id %w_CtrID%
+        if w_CtrID != SendMessage, 0x111, 0x1A220,,, ahk_id %w_CtrID%
     }
     return
 }
@@ -176,14 +174,19 @@ DoubleTapCapsLock()
     return
 }
 
-CloseChromeBottomDownloadsBar()
+CloseBrowserBottomDownloadsBar()
 {
-    if WinActive("ahk_exe chrome.exe")
+    if (WinActive("ahk_exe chrome.exe") || WinActive("ahk_exe brave.exe"))
     {
         Send, ^j ; Open downloads tab (Normal Functionality)
         if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250){
+            Sleep, 100
             Send, ^w ; close the tab
         }
+    }
+    else
+    {
+        Send, ^j ; Normal Functionality
     }
     return
 }
@@ -200,7 +203,7 @@ ClearNotificaitons()
 }
 
 ClipboardSearch()
-{	
+{
     ; if WinActive("ahk_exe chrome.exe")
     ; {
     GoogleSearchEngine := "https://www.google.com/search?q="
@@ -221,7 +224,7 @@ ClipboardSearch()
         Run, %CompleteURL%
     }
     ; }
-    return 
+    return
 }
 
 DoubleClick(action)
@@ -267,7 +270,24 @@ MoveBGApp()
 OpenYoutube()
 {
     ; For more tweak read this : https://www.autohotkey.com/boards/viewtopic.php?t=86160
-    KeyWait, t, DT0.15 ; wait a 0.1 second to see if t is pressed
+
+    if WinActive("ahk_exe chrome.exe") || WinActive("ahk_exe brave.exe")
+    {
+        openYT()
+        Sleep, 600
+        send {LCtrl down}{LShift down}{Tab down}
+        send {LCtrl up}{LShift up}{Tab up}
+        send {LCtrl down}{w down}
+        send {LCtrl up}{w up}
+    }
+    else{
+        openYT()
+    }
+}
+
+openYT()
+{
+    KeyWait, t, DT0.15 ; wait a 0.15 second to see if t is pressed
     ; Input, UserInput, T0.7 L4, {enter}.{esc}{tab}, t
     ; if(ErrorLevel = "Timeout") ; y not pressed in time
     if ErrorLevel ; t not pressed in time
@@ -291,19 +311,25 @@ OpenNewTab()
     ; If youtube is going to active then disable opening new tab and open YT instead
     if (A_PriorHotkey != "~^Y")
     {
-        if WinActive("ahk_exe chrome.exe") 
+        if (WinActive("ahk_exe chrome.exe") || WinActive("ahk_exe brave.exe"))
         {
             ; MsgBox, [ Options, %A_PriorHotkey%, %ErrorLevel%, Timeout]
             Send ^t
         }
-        else If WinExist ("ahk_exe chrome.exe") && A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250
+        else If (WinExist ("ahk_exe brave.exe")) && A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250
+        {
+            WinActivate, ahk_exe brave.exe
+            Sleep, 250
+            Send ^t
+        }
+        else If (WinExist ("ahk_exe chrome.exe")) && A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250
         {
             WinActivate, ahk_exe chrome.exe
             Sleep, 250
             Send ^t
         }
         else if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250){
-            Run, chrome.exe
+            Run, brave.exe
             Sleep, 250
             Send ^t
         }
@@ -325,7 +351,7 @@ OpenCalculator()
     }
     else{
         Run calc.exe
-    }	
+    }
 
     return
 }
@@ -342,15 +368,15 @@ SortFolderByDate()
                 ; MsgBox, % oWin.Document.SortColumns ;show current sort columns
                 if(oWin.Document.SortColumns == "prop:-System.DateModified;")
                 {
-                    oWin.Document.SortColumns := "prop:+System.DateModified;" ;sort by date modified descending (newest first)             
+                    oWin.Document.SortColumns := "prop:+System.DateModified;" ;sort by date modified descending (newest first)
                 }
                 else
                 {
                     oWin.Document.SortColumns := "prop:-System.DateModified;" ;sort by date modified ascending (oldest first)
                 }
-            ;oWin.Document.SortColumns := "prop:+System.ItemNameDisplay;" ;sort by name ascending (A-Z)
-            ;oWin.Document.SortColumns := "prop:-System.ItemNameDisplay;" ;sort by name descending (A-Z)
-            break
+                ;oWin.Document.SortColumns := "prop:+System.ItemNameDisplay;" ;sort by name ascending (A-Z)
+                ;oWin.Document.SortColumns := "prop:-System.ItemNameDisplay;" ;sort by name descending (A-Z)
+                break
             }
         }
         oWin := ""
@@ -359,31 +385,31 @@ SortFolderByDate()
 }
 
 MuteMic() {
-	; local MM
+    ; local MM
     ; SoundSet, +1, MASTER:1, MUTE, 2
     ; SoundGet, MM, MASTER:1, MUTE, 2
-	; #Persistent
-	; ToolTip, % (MM == "On" ? "Microphone muted" : "Microphone online")
-	; SetTimer, RemoveMuteMicTooltip, 700
-	; return
-    
-	; nircmd.exe waitprocess firefox.exe speak text "Firefox was closed"
+    ; #Persistent
+    ; ToolTip, % (MM == "On" ? "Microphone muted" : "Microphone online")
+    ; SetTimer, RemoveMuteMicTooltip, 700
+    ; return
 
-    ; Run nircmd.exe mutesysvolume 2 microphone 
+    ; nircmd.exe waitprocess firefox.exe speak text "Firefox was closed"
+
+    ; Run nircmd.exe mutesysvolume 2 microphone
     Return
 }
 ; RemoveMuteMicTooltip:
 ; 	SetTimer, RemoveMuteMicTooltip, Off
 ; 	ToolTip
 ; 	return
-    
+
 ; Alt+F11 Hide Window top bar
 !F11:: WinSet, Style, ^0xC00000, A ;{ <-- Hide Window top bar
 
 ; Win+M Minimize window
 #M::WinMinimize, A ;{ <-- Minimize Active Window
 
-; Alt+MouseLButton Show/Hide Taskbar; 
+; Alt+MouseLButton Show/Hide Taskbar;
 ~LButton::DoubleClick(hide := !hide) ;{ <-- Double Click Functions
 
 ; Alt+MouseLButton Move background apps
@@ -392,7 +418,7 @@ MuteMic() {
 ; Win+F Run FireFox
 #f::Run Firefox ;{ <-- Open FireFox
 
-; Ctr+G Select text to search in chrome
+; Ctr+G Select text to search in browser
 ^G::ClipboardSearch() ;{ <-- Search the selected/clipboard text
 
 ; Win+C Run Calculator
@@ -431,14 +457,16 @@ $!^H:: HideFiles() ;{ <-- Show/Hide Hidden Files
 ; Double Tap caps lock to on and off
 *CapsLock::DoubleTapCapsLock() ;{ <-- Double Tap To Activate/Deactivate
 
-; Ctr+J+J in chrome to close downloads bar at bottom
-$^J::CloseChromeBottomDownloadsBar() ;{ <-- Close chrome downloads bar at bottom
+; #IfWinActive ahk_class Shell_TrayWnd
+; Ctr+J+J in browser to close downloads bar at bottom
+$^J::CloseBrowserBottomDownloadsBar() ;{ <-- Close browser downloads bar at bottom
+; #IfWinActive
 
-; Ctr+Y+T in chrome to open Youtube
+; Ctr+Y+T in browser to open Youtube
 ~^Y::OpenYoutube() ;{ <-- Open Youtube
 
-; Ctr+T+T in chrome to open new Tab from anywhere
-~^T::OpenNewTab() ;{ <-- open chrome tab from anywhere
+; Ctr+T+T in browser to open new Tab from anywhere
+~^T::OpenNewTab() ;{ <-- open browser tab from anywhere
 
 ;Turn Caps Lock into a Shift key
 ; Capslock::Shift
