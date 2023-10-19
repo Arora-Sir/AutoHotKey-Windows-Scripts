@@ -205,25 +205,32 @@ ClearNotificaitons()
 
 ClipboardSearch()
 {
-    ; if WinActive("ahk_exe chrome.exe")
+    ; If (WinExist ("ahk_exe brave.exe"))
     ; {
-    GoogleSearchEngine := "https://www.google.com/search?q="
-    send, ^c
-    Sleep, 100
-    LatestCopiedClipboard := Clipboard
-    securedAddress := "https://"
-    if(SubStr(LatestCopiedClipboard,1,8) = securedAddress)
-    {
-        Send, ^t ; Open new tab
-        Send, ^v ; Paste the URL
-        Send, {Enter} ; Hit Enter
-    }
-    else
-    {
-        CompleteURL = %GoogleSearchEngine%%LatestCopiedClipboard%
-        ; MsgBox,4, Options, Testing, %url%, 3 ; For Debugging
-        Run, %CompleteURL%
-    }
+        Sleep, 100
+        GoogleSearchEngine := "https://www.google.com/search?q="
+        send, ^c
+        Sleep, 100
+
+        ; WinActivate, ahk_exe brave.exe
+        ; Sleep, 200
+
+        LatestCopiedClipboard := Clipboard
+        securedAddress := "https://"
+        UnsecuredAddress := "www."
+        if(SubStr(LatestCopiedClipboard,1,8) = securedAddress or SubStr(LatestCopiedClipboard,1,4) = UnsecuredAddress)
+        {
+            Send, ^t ; Open new tab
+            Sleep, 100
+            Send, ^v ; Paste the URL
+            Send, {Enter} ; Hit Enter
+        }
+        else
+        {
+            CompleteURL = %GoogleSearchEngine%%LatestCopiedClipboard%
+            ; MsgBox,4, Options, Testing, %url%, 3 ; For Debugging
+            Run, %CompleteURL%
+        }
     ; }
     return
 }
@@ -274,12 +281,14 @@ OpenYoutube()
 
     if WinActive("ahk_exe chrome.exe") || WinActive("ahk_exe brave.exe")
     {
-        openYT()
-        Sleep, 600
-        send {LCtrl down}{LShift down}{Tab down}
-        send {LCtrl up}{LShift up}{Tab up}
-        send {LCtrl down}{w down}
-        send {LCtrl up}{w up}
+        if(openYT())
+        {
+            Sleep, 600
+            send {LCtrl down}{LShift down}{Tab down}
+            send {LCtrl up}{LShift up}{Tab up}
+            send {LCtrl down}{w down}
+            send {LCtrl up}{w up}
+        }
     }
     else{
         openYT()
@@ -288,11 +297,12 @@ OpenYoutube()
 
 openYT()
 {
-    KeyWait, t, DT0.15 ; wait a 0.15 second to see if t is pressed
+    KeyWait, t, DT0.20 ; wait a 0.20 second to see if t is pressed
     ; Input, UserInput, T0.7 L4, {enter}.{esc}{tab}, t
     ; if(ErrorLevel = "Timeout") ; y not pressed in time
     if ErrorLevel ; t not pressed in time
     {
+        return false
         ;ignore as of now as it was intrupting normal functionality
         ;Send, ^y ; send ^y by itself so it's still usable
     }
@@ -300,7 +310,7 @@ openYT()
         YoutubeURL := "https://www.youtube.com/"
         Run, %YoutubeURL%
     }
-    return
+    return true
     ; if (UserInput = t){
     ;     YoutubeURL := "https://www.youtube.com/"
     ;     Run, %YoutubeURL%
@@ -377,13 +387,26 @@ SortFolderByDate()
                 }
                 ;oWin.Document.SortColumns := "prop:+System.ItemNameDisplay;" ;sort by name ascending (A-Z)
                 ;oWin.Document.SortColumns := "prop:-System.ItemNameDisplay;" ;sort by name descending (A-Z)
-                break
+                ; break
             }
         }
         oWin := ""
     }
     return
 }
+
+; F8::clickEnter() ;{ <-- Delete Recycle Bin Data
+
+; clickEnter(){
+;     while,1
+;         {
+
+;             Sleep, 100
+;             send {Click}
+;             Sleep, 100
+;             send {Enter}
+;         }
+; }
 
 MuteMic() {
     ; local MM
@@ -410,7 +433,7 @@ MuteMic() {
 ; Win+M Minimize window
 #M::WinMinimize, A ;{ <-- Minimize Active Window
 
-; Alt+MouseLButton Show/Hide Taskbar;
+; MouseLButton DoubleClick Show/Hide Taskbar;
 ~LButton::DoubleClick(hide := !hide) ;{ <-- Double Click Functions
 
 ; Alt+MouseLButton Move background apps
