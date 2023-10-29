@@ -8,6 +8,7 @@
 ; Win+F --> Run FireFox
 ; Win+C --> Run Calculator
 ; Win+M --> Minimize Active window
+; Win+F8 --> Bluetooth On/Off
 ; Win+Del --> Empty Recycle Bin
 ; Win+Shift+A --> Open Notification center
 ; Win+Shift+E --> Open Downloads (My Screenshots) folder
@@ -233,6 +234,29 @@ ClipboardSearch()
     return
 }
 
+BluetoothToggle()
+{
+    send {LWinDown}{a down}
+    ; Sleep, 800  
+    ; send {Down}{Right}{Enter}{Esc}
+
+    MaxTime = 5	; Max Seconds to wait
+	StartTime := A_TickCount
+	WinID = ahk_exe ShellExperienceHost.exe ahk_class Windows.UI.Core.CoreWindow
+	WinActivate %WinID%
+	WinWaitActive %WinID%,, %MaxTime% - ((%A_TickCount% - %StartTime%) / 1000)
+	If ErrorLevel
+	{	
+        MsgBox, WinWait timed out.
+	}
+    else
+    {
+        Sleep, 600   
+        send {Down}{Right}{Enter}{Esc}
+    }
+    ; send {Click 1650 690}
+}
+
 DoubleClick(action)
 {
     If (A_PriorHotKey = A_ThisHotKey and A_TimeSincePriorHotkey < 500)
@@ -430,6 +454,9 @@ MuteMic() {
 
 ; Win+M Minimize window
 #M::WinMinimize, A ;{ <-- Minimize Active Window
+
+; Win+F8 --> Bluetooth On/Off
+#F8::BluetoothToggle() ;{ <-- Bluetooth Toggle
 
 ; MouseLButton DoubleClick Show/Hide Taskbar;
 ~LButton::DoubleClick(hide := !hide) ;{ <-- Double Click Functions
