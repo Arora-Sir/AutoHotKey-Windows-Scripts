@@ -44,6 +44,7 @@ CLoseCurrentlyActiveScreen()
     send !{F4}
     return
 }
+
 CLoseAllPrograms()
 {
     DetectHiddenWindows, on
@@ -82,6 +83,13 @@ CLoseAllPrograms()
 CLoseSpecificPrograms()
 {
     ; WinClose, ahk_exe stremio.exe
+    if WinExist("ahk_exe WhatsApp.exe")
+    {
+        Run cmd.exe /c taskkill /F /IM WhatsApp.exe,,Hide
+        ; Run cmd.exe /c start WhatsApp.exe ,,Hide
+        return
+    }
+
     if WinExist("ahk_exe IDMan.exe")
     {
         Run cmd.exe /c taskkill /F /IM IDMan.exe ,,Hide
