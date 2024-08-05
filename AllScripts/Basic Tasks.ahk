@@ -13,7 +13,10 @@
 ; Win+Shift+A --> Open Notification center
 ; Win+Shift+E --> Open Downloads (My Screenshots) folder
 ; Win+Alt+C --> Run Alarm Clock
+; Win+Alt+Ctr+C --> Click Center of Screen
 ; Win+Alt+N --> Clear Notification center
+; Alt+X --> Open Today Calendar
+; Alt+D --> Open ChatGPT
 ; Alt+Shift+T --> Active window Always on Top
 ; Alt+Ctr+D --> Sort Folder content by date
 ; Alt+Ctr+E --> Enable/Disable file extension
@@ -23,7 +26,8 @@
 ; Ctr+T+T --> Open new Tab from anywhere (In browser)
 ; Ctr+J+J --> Close downloads bar at bottom (In browser)
 ; Ctr+Y+T --> Open Youtube (In browser: maximum 0.15s second gap between Y & T)
-; MouseLButton --> Double/Tripple Click Functions (Taskbar Show/Hide; )
+; Ctr+Shift+V --> Browser to go to previous tab when taking a screenshot
+; MouseLButton --> Double Click Functions (Taskbar Show/Hide; )
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
@@ -204,8 +208,8 @@ ClearNotificaitons()
 
 ClipboardSearch()
 {
-    ; If (WinExist ("ahk_exe brave.exe"))
-    ; {
+        ; If (WinExist ("ahk_exe brave.exe"))
+        ; {
         Sleep, 100
         GoogleSearchEngine := "https://www.google.com/search?q="
         send, ^c
@@ -234,28 +238,44 @@ ClipboardSearch()
     return
 }
 
-BluetoothToggle()
-{
-    send {LWinDown}{a down}
-    ; Sleep, 800  
+; BluetoothToggle()
+; {
+    ; Method 1
+    ; Run, ms-settings:bluetooth
+    ; ; Wait for the Bluetooth settings window to open
+    ; WinWait, Settings
+    ; WinActivate
+    ; Sleep, 2000
+    ; Send, {Tab}{Tab}{Tab}{Space}
+    ; ; Close the Bluetooth settings window
+    ; Send, !{F4}
+    ; send {LWinDown}{a down}
+    ; Sleep, 800
     ; send {Down}{Right}{Enter}{Esc}
 
-    MaxTime = 5	; Max Seconds to wait
-	StartTime := A_TickCount
-	WinID = ahk_exe ShellExperienceHost.exe ahk_class Windows.UI.Core.CoreWindow
-	WinActivate %WinID%
-	WinWaitActive %WinID%,, %MaxTime% - ((%A_TickCount% - %StartTime%) / 1000)
-	If ErrorLevel
-	{	
-        MsgBox, WinWait timed out.
-	}
-    else
-    {
-        Sleep, 600   
-        send {Down}{Right}{Enter}{Esc}
-    }
+    ; Method 2
+    ; MaxTime = 5	; Max Seconds to wait
+	; StartTime := A_TickCount
+	; WinID = ahk_exe ShellExperienceHost.exe ahk_class Windows.UI.Core.CoreWindow
+	; WinActivate %WinID%
+	; WinWaitActive %WinID%,, %MaxTime% - ((%A_TickCount% - %StartTime%) / 1000)
+	; If ErrorLevel
+	; {
+    ;     MsgBox, WinWait timed out.
+	; }
+    ;     else
+    ; {
+    ;     Sleep, 600
+    ;     send {Down}
+    ;     send {Down}
+    ;     Sleep, 1000
+    ;     send {Right}
+    ;     Sleep, 100
+    ;     send {Enter}{Esc}
+    ; }
     ; send {Click 1650 690}
-}
+    ; return
+; }
 
 DoubleClick(action)
 {
@@ -263,7 +283,7 @@ DoubleClick(action)
     {
         WinGetClass, Class, A
 
-        ; Show/Hide Taskbar on Tripple click on taskbar
+        ; Show/Hide Taskbar on Double click on taskbar
         If Class = Shell_TrayWnd ; or ( Class = "Progman" )
         {
             static ABM_SETSTATE := 0xA, ABS_AUTOHIDE := 0x1, ABS_ALWAYSONTOP := 0x2
@@ -389,6 +409,21 @@ OpenCalculator()
     return
 }
 
+RunPowerShellAsAdministrator()
+{
+    ; Run, powershell
+    Run, "C:\Program Files\PowerShell\7\pwsh.exe"   
+    WinWait, ahk_class CASCADIA_HOSTING_WINDOW_CLASS
+    Sleep, 1100
+    Send, ^+2 ;Open as Admin
+    ; Sleep, 1000
+    ; WinActivate, ahk_class CASCADIA_HOSTING_WINDOW_CLASS
+    ; Sleep, 100
+    ; Send, !{Tab} ;Previous Instance without admin rights
+    ; Sleep, 100
+    ; Send, !{F4}
+}
+
 SortFolderByDate()
 {
     ; if WinActive("ahk_class ExploreWClass"){
@@ -430,24 +465,190 @@ SortFolderByDate()
 ;         }
 ; }
 
-MuteMic() {
-    ; local MM
-    ; SoundSet, +1, MASTER:1, MUTE, 2
-    ; SoundGet, MM, MASTER:1, MUTE, 2
-    ; #Persistent
-    ; ToolTip, % (MM == "On" ? "Microphone muted" : "Microphone online")
-    ; SetTimer, RemoveMuteMicTooltip, 700
-    ; return
+; Already working through PowerToys!
+; MuteMic()
+; {
+; local MM
+; SoundSet, +1, MASTER:1, MUTE, 2
+; SoundGet, MM, MASTER:1, MUTE, 2
+; #Persistent
+; ToolTip, % (MM == "On" ? "Microphone muted" : "Microphone online")
+; SetTimer, RemoveMuteMicTooltip, 700
+; return
 
-    ; nircmd.exe waitprocess firefox.exe speak text "Firefox was closed"
+; nircmd.exe waitprocess firefox.exe speak text "Firefox was closed"
 
-    ; Run nircmd.exe mutesysvolume 2 microphone
-    Return
-}
+; Run nircmd.exe mutesysvolume 2 microphone
+;     Return
+; }
 ; RemoveMuteMicTooltip:
 ; 	SetTimer, RemoveMuteMicTooltip, Off
 ; 	ToolTip
 ; 	return
+
+; YugenAnime()
+; {
+;     send {Click 1020 451};
+;     Sleep, 300
+;     send, ^l
+;     ; Sleep, 100
+;     send, ^c
+;     Sleep, 600
+;     YugenAnimeEngine := "https://yugenanime.tv/"
+;     LatestCopiedClipboard := Clipboard
+;     yugenSubstring := SubStr(LatestCopiedClipboard,1,22)
+;     if( yugenSubstring != YugenAnimeEngine)
+;     {
+;         Send, ^w
+;         Sleep, 200
+;         Send, f
+;         Sleep, 100
+;         Send, Space
+;     }else{
+;         Send, {Esc down}
+;         Sleep, 200
+;         Send, {Esc down}
+;         Sleep, 200
+;         Send, f
+;         ; Sleep, 200
+;         ; Send, Space
+;     }
+; }
+
+OpenCalendar(){
+    if (WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe"))
+    {
+        Send !x
+    }
+    else If (WinExist ("ahk_exe brave.exe"))
+    {
+        WinActivate, ahk_exe brave.exe
+        ; Sleep, 250
+        Send !x
+    }
+    else If (WinExist ("ahk_exe chrome.exe"))
+    {
+        WinActivate, ahk_exe chrome.exe
+        ; Sleep, 100
+        Send !x
+    }
+}
+
+OpenChatGPT(){
+    if (WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe"))
+    {
+        Run, https://chatgpt.com/?model=gpt-4o
+    }
+    else If (WinExist ("ahk_exe brave.exe"))
+    {
+        ; WinActivate, ahk_exe brave.exe
+        Run, https://chatgpt.com/?model=gpt-4o
+
+    }
+    else If (WinExist ("ahk_exe chrome.exe"))
+    {
+        ; WinActivate, ahk_exe chrome.exe
+        Run, https://chatgpt.com/?model=gpt-4o
+    }
+}
+
+CopyToClipboard()
+{
+    Send, ^c
+    ClipWait, 1
+
+    ; Sleep, 500 
+    ; Send, ^c
+    
+    if ErrorLevel
+    {
+        ; MsgBox, Copying to clipboard failed.
+        return
+    }
+
+    WinGet, current_application, ProcessName, A
+    WinGetTitle, current_window_title, A
+
+    if (current_application = "ApplicationFrameHost.exe" && InStr(current_window_title, "OneNote"))
+    {
+        if DllCall("IsClipboardFormatAvailable", "uint", 1)
+        {
+            clipboard := clipboard  ; Convert to text-only, removing formatting.
+            ClipWait, 1
+            if ErrorLevel
+            {
+                ; MsgBox, Failed to process clipboard data.
+            }
+        }
+    }
+
+
+
+    return
+}
+
+RevertVideoIntruption() {
+    ; Hotkey, ^+v, Off
+    ; Send, ^+v
+    ; Hotkey, ^+v, On
+    if (WinActive("ahk_exe chrome.exe") || WinActive("ahk_exe brave.exe"))
+    {
+        ; static prevURL := ""
+        ; Get the URL of the active tab
+        ; ControlGetText, url, Edit1, ahk_class Chrome_WidgetWin_1
+        ; if InStr(url, "file:///")
+        ; {
+        ;     ; Close the local file tab
+        ;     Send, ^w
+        ;     Sleep, 500 ; Give some time for the tab to close
+        ; }
+        
+        Sleep, 1000
+        send {LCtrl down}{LShift down}{tab down}
+        send {LCtrl up}{LShift up}{tab up}
+        Sleep,400
+
+        ; ControlGetText, url, Edit1, ahk_class Chrome_WidgetWin_1
+        ; MsgBox, %url%
+
+        ; if InStr(url, "youtube.com")
+        ; {
+            Send, f
+        ; }
+    }
+    return
+    ; Sleep, 500
+    ; Send, ^l
+    ; ; Sleep, 10
+    ; Send, ^c
+    ; ClipWait, 1
+
+    ; ChromeExtension := "chrome-extension://"
+    ; LatestCopiedClipboard := Clipboard
+    ; ; MsgBox, %LatestCopiedClipboard%
+
+    ; chromeExtensionSubstring := SubStr(LatestCopiedClipboard, 1, 19)
+    ; if (ChromeExtension == chromeExtensionSubstring) {
+    ;     send {LCtrl down}{LShift down}{tab down}
+    ;     send {LCtrl up}{LShift up}{tab up}
+    ;     Sleep,400
+    ;     Send, f
+    ; }
+}
+
+; Ctr+Shift+V in browser to go to previous tab when taking a screenshot
+~^+v:: RevertVideoIntruption()
+
+; #IfWinActive, ahk_exe EXCEL.EXE  ; This directive targets Microsoft Excel
+; !f::  ; This is the hotkey Alt+F
+;     send {LAlt down}{LAlt up}
+;     send {h down}{h up}
+;     send {f down}{f up}
+;     send {p down}{p up}
+;     return
+; #IfWinActive  ; This closes the Excel-specific directive
+
+$^c::CopyToClipboard()
 
 ; Alt+F11 Hide Window top bar
 !F11:: WinSet, Style, ^0xC00000, A ;{ <-- Hide Window top bar
@@ -456,7 +657,7 @@ MuteMic() {
 #M::WinMinimize, A ;{ <-- Minimize Active Window
 
 ; Win+F8 --> Bluetooth On/Off
-#F8::BluetoothToggle() ;{ <-- Bluetooth Toggle
+; #F8::BluetoothToggle() ;{ <-- Bluetooth Toggle [Discard]
 
 ; MouseLButton DoubleClick Show/Hide Taskbar;
 ~LButton::DoubleClick(hide := !hide) ;{ <-- Double Click Functions
@@ -473,11 +674,18 @@ MuteMic() {
 ; Win+C Run Calculator
 #c:: OpenCalculator() ;{ <-- Open calculaor
 
-; Win+Ctr+Alt+C Mute/Unmute Microphone
-#^!M:: MuteMic() ;{ <-- Mute/Unmute Microphone
+; Win+Ctr+Alt+M Mute/Unmute Microphone
+; #^!M:: MuteMic() ;{ <-- Mute/Unmute Microphone
 
-; Win+Alt+C Run AlarmClock
+; Win+Alt+C Run Alarm Clock
 #!c:: Run "shell:Appsfolder\Microsoft.WindowsAlarms_8wekyb3d8bbwe!App" ;{ <-- Open clock
+
+; Win+Alt+C Open Powershell
+#!^c:: RunPowerShellAsAdministrator() ;Run "C:\Program Files\PowerShell\7\pwsh.exe" -WorkingDirectory ~ ;{ <-- Open Powershell
+
+;Todo: Use Case
+; Win+Alt+Ctr+C --> Click Center of Screen
+;#!^c:: YugenAnime()  ;{ <-- Click Center of Screen (YugenAnime Ad Bypass)
 
 ; Win+Shift+E Open Downloads (My Screenshots) folder
 #+e::Run "C:\Users\Mohit\Pictures\Screenshots" ;{ <-- Open Screenshots Folder
@@ -502,6 +710,12 @@ $!^D:: SortFolderByDate() ;{ <-- Sort Folder content by date
 
 ; Alt+Ctr+H Enable/Disable hidden files
 $!^H:: HideFiles() ;{ <-- Show/Hide Hidden Files
+
+; Alt+X --> Open Today Calendar
+$!X:: OpenCalendar() ;{ <-- Open Calender after Browser opening
+
+; Alt+D --> Open ChatGPT
+$!D:: OpenChatGPT() ;{ <-- Open ChatGPT
 
 ; Double Tap caps lock to on and off
 *CapsLock::DoubleTapCapsLock() ;{ <-- Double Tap To Activate/Deactivate
