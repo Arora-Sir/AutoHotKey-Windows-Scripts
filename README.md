@@ -1,46 +1,55 @@
-# How to Use AHK Scripts (for Window 10 & 11)
+# How to Use AHK Scripts (for Windows 10 & 11)
 
 - Install AutoHotKey
-- Add scripts directory in Startup_Scripts.ahk to run all scripts at once
+- Add the scripts directory to `Startup_Scripts.ahk` to run all scripts at once.
 
-# To create the exe from script
+## To Create the EXE from Script
 
-- Right click on .ahk file and compile it normally or if you want to compress it then select GUI mode
+- Right-click on the `.ahk` file and compile it normally. For compression, select the GUI mode.
 
-# Working Hotkeys
+## Working Hotkeys
 
 - ### BRIGHTNESS
 
   |    Key    |               Usage               |
-  | ------ | ------------------------------- |
+  |-----------|-----------------------------------|
   |    F1     |     Set Current +5 Brightness     |
   | Shift+F1  |     Set Current -5 Brightness     |
-  | Ctrl+Pgdn | Push Brightness Extremes Down -10 |
-  | Ctrl+Pgup |  Push Brightness Extremes Up +10  |
+  | Ctrl+PgDn | Push Brightness Extremes Down -10 |
+  | Ctrl+PgUp |  Push Brightness Extremes Up +10  |
 
 - ### BASIC TASKS
-
-  |        Key        |               Usage               |
-  | --------------- | ------------------------------- |
-  |      Win+Del      |      Delete Recycle Bin Data      |
-  |      Win+C      |      Run Calculator     |
-  |      Win+M     |     Minimize Active window     |
-  |       Win+F       |           Open FireFox            |
-  |       Ctrl+G      |          Search the selected/clipboard text      |
-  |    Win+Shift+E    |      Open Screenshots Folder      |
-  |    Alt+Ctrl+E     |       Show/Hide Extenstions       |
-  |    Alt+Ctrl+H     |      Show/Hide Hidden Files       |
-  | Alt+Ctr+MouseLButton  |           Move Background Apps |
-  |    Alt+Shift+T    |     This Winodw Always on Top     |
-  |    Win+Shift+A    |     Open Notification center      |
-  | Capslock+Capslock | Double Tap To Activate/Deactivate |
-  | MouseLButton      | Tripple Click Functions (Taskbar Show/Hide) |
   
+  |        Key        |               Usage               |
+  |-------------------|-----------------------------------|
+  |      Win+Del      |      Empty Recycle Bin            |
+  |      Win+C        |      Run Calculator               |
+  |      Win+M        |     Minimize Active Window        |
+  |      Win+F        |           Open FireFox            |
+  |      Win+F8       |      Bluetooth On/Off             |
+  |   Win+Shift+A     | Open Notification Center          |
+  |   Win+Shift+E     | Open Downloads (Screenshots) Folder |
+  |   Win+Alt+C       |      Run Alarm Clock              |
+  |   Win+Alt+N       |  Clear Notification Center        |
+  |       Alt+X       |     Open Today Calendar in [Checker Plus Extension](https://chromewebstore.google.com/detail/checker-plus-for-google-c/hkhggnncdpfibdhinjiegagmopldibha)           |
+  |       Alt+D       |        Open ChatGPT               |
+  |   Alt+Shift+T     | This Window Always on Top         |
+  |  Alt+Ctrl+D       |    Sort Folder Content by Date    |
+  |  Alt+Ctrl+E       |   Enable/Disable File Extension   |
+  |  Alt+Ctrl+H       |   Enable/Disable Hidden Files     |
+  | Alt+Ctrl+MouseLButton |     Move Background Apps      |
+  |      Ctrl+G       |   Search the Selected/Clipboard Text |
+  |      Ctrl+T+T     |    Open New Tab (In Browser)      |
+  |      Ctrl+J+J     | Close Downloads Bar (In Browser)  |
+  |      Ctrl+Y+T     |    Open YouTube (In Browser)      |
+  |  Ctrl+Shift+V     | Browser to Go to Previous Tab When Taking a Screenshot in [Awesome Screen Recorder](https://chromewebstore.google.com/detail/awesome-screen-recorder-s/nlipoenfbbikpbjkfpfillcgkoblgpmj) |
+  | Capslock+Capslock | Double Tap to Activate/Deactivate |
+  | MouseLButton      | Double Click Functions (Taskbar Show/Hide) |
 
 - ### HOTKEYHELP
 
   |       Key       |                  Usage                  |
-  | ------------- | ------------------------------------- |
+  |-----------------|-----------------------------------------|
   |     Win+F1      |              Display Help               |
   |     Ctrl+F      |           Find in Hotkey Help           |
   |   Win+Ctrl+F1   | Excluded Files, Hotkeys, and Hotstrings |
@@ -50,41 +59,50 @@
 - ### WINDOW STARTUP SCRIPT
 
   |           Key           |          Usage           |
-  | --------------------- | ---------------------- |
-  |     Win+Scrolllock      |   Suspend All Scripts    |
-  | Win+Ctrl+Alt+Scrolllock | To Terminate All Scripts |
-  | Win+Ctr+Alt+R           |      Reload All Scripts  |
-  |Win+Ctr+Alt+W            |    Run Window Spy Script |
-
+  |-------------------------|--------------------------|
+  |     Win+ScrollLock      |   Suspend All Scripts    |
+  | Win+Ctrl+Alt+ScrollLock | Terminate All Scripts    |
+  | Win+Ctrl+Alt+R          |      Reload All Scripts  |
+  | Win+Ctrl+Alt+W          |    Run Window Spy Script |
 
 - ### PERSONAL KEYWORDS
 
-  - It's a Key-Value pair. Type Key in text field and we'll get its corresponding Value instead.
-
-    |       Key       |        Usage         |
-    | ------------- | ------------------ |
-    | ValueOfPie | 3.141592653589793238 |
+  - It's a key-value pair. Type the key in the text field to get its corresponding value.
     
-- ### FORCE CLOSE PROGRAMS
+    |       Key       |        Usage         |
+    |------------|-----------------------------|
+    | ValueOfPie      | 3.141592653589793238 |
 
-  - For those programs which goes to system tray when we close them by pressing the close button
+- ### FORCE CLOSE PROGRAMS
+  - For programs that go to the system tray when closed by pressing the close button
   
     |     Key      |             Usage             |
-    |---------- | --------------------------- |
-    |  Alt+Ctrl+F4 |       CLose All Program       |
-    |    Alt+F4    | CLose Currently Active Screen |
-    
+    |--------------|-------------------------------|
+    | Alt+Ctrl+F4  |       Close All Programs      |
+    |    Alt+F4    | Close Currently Active Screen |
+
+## Get Installed Apps List and Run Apps
+Get Installed Apps names (Powershell): 
+  ```powershell
+  Get-StartApps | Sort-Object Name | Format-Table -Property Name, AppID
+  ```
+Open the app in AHK:
+  ```ahk
+  Run, shell:AppsFolder\SamsungNotes_8wekyb3d8bbwe!App
+  ```
+
 ## License
+
 [MIT LICENSE](LICENSE)
 
 <br />
-  
---------
-  
-  <h3>
-    <p align="center">
-       :exclamation::exclamation: Reload the script Startup_Scripts.ahk after any edit in ".ahk" file :smile: 
-    </p>
-  </h3>
-  
---------
+
+---
+
+<h3>
+  <p align="center">
+    :exclamation::exclamation: Reload the script `Startup_Scripts.ahk` after any edit in ".ahk" file :smile:
+  </p>
+</h3>
+
+---
