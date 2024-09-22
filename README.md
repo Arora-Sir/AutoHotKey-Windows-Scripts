@@ -82,14 +82,14 @@
     |    Alt+F4    | Close Currently Active Screen |
 
 ## Get Installed Apps List and Run Apps
-Get Installed Apps names (Powershell): 
-  ```powershell
-  Get-StartApps | Sort-Object Name | Format-Table -Property Name, AppID
-  ```
-Open the app in AHK:
-  ```ahk
-  Run, shell:AppsFolder\SamsungNotes_8wekyb3d8bbwe!App
-  ```
+  - Get Installed Apps names (Powershell): 
+    ```powershell
+    Get-StartApps | Sort-Object Name | Format-Table -Property Name, AppID
+    ```
+  - Open the app in AHK:
+    ```ahk
+    Run, shell:AppsFolder\SamsungNotes_8wekyb3d8bbwe!App
+    ```
 
 ## License
 
