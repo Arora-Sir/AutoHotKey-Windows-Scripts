@@ -17,17 +17,18 @@
 ; Win+Alt+N --> Clear Notification center
 ; Alt+X --> Open Today Calendar
 ; Alt+D --> Open ChatGPT
-; Alt+Shift+T --> Active window Always on Top
+; Alt+Shift+T --> Active window Always on Top (Disabled -> Using PowerToys)
 ; Alt+Ctr+D --> Sort Folder content by date
 ; Alt+Ctr+E --> Enable/Disable file extension
 ; Alt+Ctr+H --> Enable/Disable hidden files
 ; Alt+Ctr+MouseLButton --> Move Background Apps
 ; Ctr+G --> Search the selected/clipboard text
+; Ctr+C --> OneNote copy text instead of SS of some text
 ; Ctr+T+T --> Open new Tab from anywhere (In browser)
 ; Ctr+J+J --> Close downloads bar at bottom (In browser)
 ; Ctr+Y+T --> Open Youtube (In browser: maximum 0.15s second gap between Y & T)
 ; Ctr+Shift+V --> Browser to go to previous tab when taking a screenshot
-; MouseLButton --> Double Click Functions (Taskbar Show/Hide; )
+; MouseLButton --> Double Click Functions (Taskbar Show/Hide; ) -->> Doing this with WindHawk Now
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
@@ -537,18 +538,18 @@ OpenCalendar(){
 OpenChatGPT(){
     if (WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe"))
     {
-        Run, https://chatgpt.com/?model=gpt-4o
+        Run, https://chatgpt.com/?model=gpt-4
     }
     else If (WinExist ("ahk_exe brave.exe"))
     {
         ; WinActivate, ahk_exe brave.exe
-        Run, https://chatgpt.com/?model=gpt-4o
+        Run, https://chatgpt.com/?model=gpt-4
 
     }
     else If (WinExist ("ahk_exe chrome.exe"))
     {
         ; WinActivate, ahk_exe chrome.exe
-        Run, https://chatgpt.com/?model=gpt-4o
+        Run, https://chatgpt.com/?model=gpt-4
     }
 }
 
@@ -581,8 +582,6 @@ CopyToClipboard()
             }
         }
     }
-
-
 
     return
 }
@@ -637,7 +636,7 @@ RevertVideoIntruption() {
 }
 
 ; Ctr+Shift+V in browser to go to previous tab when taking a screenshot
-~^+v:: RevertVideoIntruption()
+~^+v:: RevertVideoIntruption() ;{ <-- Brave AwesomeSreenshot Intruption Stop
 
 ; #IfWinActive, ahk_exe EXCEL.EXE  ; This directive targets Microsoft Excel
 ; !f::  ; This is the hotkey Alt+F
@@ -648,7 +647,8 @@ RevertVideoIntruption() {
 ;     return
 ; #IfWinActive  ; This closes the Excel-specific directive
 
-$^c::CopyToClipboard()
+; Ctr+C OneNote copy text instead of SS of some text
+$^c::CopyToClipboard() ;{ <-- OneNote Copy Mechanism Handeling (instead of SS)
 
 ; Alt+F11 Hide Window top bar
 !F11:: WinSet, Style, ^0xC00000, A ;{ <-- Hide Window top bar
@@ -660,7 +660,7 @@ $^c::CopyToClipboard()
 ; #F8::BluetoothToggle() ;{ <-- Bluetooth Toggle [Discard]
 
 ; MouseLButton DoubleClick Show/Hide Taskbar;
-~LButton::DoubleClick(hide := !hide) ;{ <-- Double Click Functions
+~LButton::DoubleClick(hide := !hide) ;{ <-- Double Click Functions (WindHawk Now)
 
 ; Alt+MouseLButton Move background apps
 ^!LButton::MoveBGApp() ;{ <-- Move BG Apps
@@ -681,7 +681,8 @@ $^c::CopyToClipboard()
 #!c:: Run "shell:Appsfolder\Microsoft.WindowsAlarms_8wekyb3d8bbwe!App" ;{ <-- Open clock
 
 ; Win+Alt+C Open Powershell
-#!^c:: RunPowerShellAsAdministrator() ;Run "C:\Program Files\PowerShell\7\pwsh.exe" -WorkingDirectory ~ ;{ <-- Open Powershell
+#!^c:: RunPowerShellAsAdministrator() ;{ <-- Open Powershell
+;Run "C:\Program Files\PowerShell\7\pwsh.exe" -WorkingDirectory ~
 
 ;Todo: Use Case
 ; Win+Alt+Ctr+C --> Click Center of Screen
@@ -700,7 +701,10 @@ $^c::CopyToClipboard()
 #!N::ClearNotificaitons() ;{ <-- Clear Notifications (Win 11)
 
 ; Alt+Shift+T Active window Always on Top
-!+T:: Winset, Alwaysontop, , A ;{ <-- This Winodw Always on Top
+; !+T:: Winset, Alwaysontop, , A ;{ <-- This Winodw Always on Top
+
+; Alt+Ctr+J Testing Automation
+; $!^J:: TestingAutomation() ;{ <-- Testing Automation
 
 ; Alt+Ctr+E Enable/Disable file extension
 $!^E:: ToggleFileExt() ;{ <-- Show/Hide Extenstions
