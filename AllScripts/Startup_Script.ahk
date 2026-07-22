@@ -46,12 +46,16 @@ DetectHiddenWindows, On
 
 ; Additional Startup Files and Folders Can Be Added Here
 Script_1=%a_scriptdir%\Brightness.ahk
+
 Script_2=%a_scriptdir%\Close Programs.ahk
+
 Script_3=%a_scriptdir%\Basic Tasks.ahk
+
 if FileExist(A_ScriptDir "\Personal_Keywords.ahk")
 	Script_4=%a_scriptdir%\Personal_Keywords.ahk
 else
 	Script_4=%a_scriptdir%\Personal Keywords.ahk
+
 Script_5=%a_scriptdir%\HotkeyHelp.ahk
 
 Files := []
@@ -75,8 +79,16 @@ Files.Push(Script_5)
 ; )]
 
 ; Define Path to AutoHotkey.exe for v1 and v2
-RunPathV1 := A_AhkPath
-RunPathV2 := A_ProgramFiles "\AutoHotkey\v2\AutoHotkey.exe"
+if (A_IsCompiled)
+{
+	RunPathV1 := FileExist("C:\Program Files\AutoHotkey\AutoHotkeyU64.exe") ? "C:\Program Files\AutoHotkey\AutoHotkeyU64.exe" : (FileExist("C:\Program Files\AutoHotkey\AutoHotkey.exe") ? "C:\Program Files\AutoHotkey\AutoHotkey.exe" : A_AhkPath)
+}
+else
+{
+	RunPathV1 := A_AhkPath
+}
+
+RunPathV2 := FileExist("C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe") ? "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe" : "C:\Program Files\AutoHotkey\UX\AutoHotkeyUX.exe"
 ;}
 
 ; AUTO-EXECUTE
@@ -98,7 +110,7 @@ For index, File in Files
 		RunPath := RunPathV2
 	else
 		RunPath := RunPathV1
-	File := RegExReplace(File, "/noload|/v1|/v2")
+	File := Trim(RegExReplace(File, "/noload|/v1|/v2"))
 	RegExMatch(File,"^(\.*)\\",Match), R := StrLen(Match1) ; Look for relative pathing
 	if (R=1)
 		File := A_ScriptDir SubStr(File,R+1)

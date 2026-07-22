@@ -5,9 +5,9 @@
 
 ; Alt+F4 --> Close currently active program
 ; Alt+Shift+F4 --> Close specific active program
-; Alt+Ctr+F4 --> Close All Programs
+; Alt+Ctrl+F4 --> Close All Programs
 
-;Anydesk CiscoWebx Cortana Discord Filmora HotspotSheild IDM Opera MicrosoftTeams Skype Stremio Telegram UnityHub uTorrent wps Zoom
+; Anydesk CiscoWebx Cortana Discord Filmora HotspotSheild IDM Opera MicrosoftTeams Skype Stremio Telegram UnityHub uTorrent wps Zoom
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
@@ -15,7 +15,7 @@ SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
 #SingleInstance force ; Ensures that only the last executed instance of script is running
 DetectHiddenWindows, On
 
-;Ensures that programs also gets killed from the background processes
+; Ensures that programs also gets killed from the background processes
 CLoseCurrentlyActiveScreen()
 {
     WinGet, Active_ID, ID, A
@@ -61,11 +61,11 @@ CLoseAllPrograms()
         {
             continue
         }
-        msgbox % str
+        ; msgbox % str
         str .= "HWND: " hwnd ", Title: " title "`n"
         WinClose % "ahk_id " hwnd
-        }
-        ; msgbox % str
+    }
+    ; msgbox % str
     return
 
     ; IfEqual, AppName, "AutoHotKey.exe"
