@@ -11,6 +11,10 @@ SendMode Input ; Recommended for new scripts due to its superior speed and relia
 SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
 #SingleInstance force ; Ensures that only the last executed instance of script is running
 DetectHiddenWindows, On
+SetBatchLines, -1 ; Maximum execution speed for smooth performance
+#MaxThreadsBuffer On ; Ensures rapid key taps are buffered and never dropped
+#MaxThreadsPerHotkey 3
+#MaxHotkeysPerInterval 200
 
 class BrightnessSetter {
     ; qwerty12 - 27/05/17
@@ -33,8 +37,8 @@ class BrightnessSetter {
         }
     }
 
-    ;showOSD is set as False due to Window 11 new OSD call volume mute UI OSD instead 
-    SetBrightness(increment, jump := False, showOSD := False, autoDcOrAc := -1, ptrAnotherScheme := 0)
+    ;showOSD is enabled for Windows native OSD flyout display
+    SetBrightness(increment, jump := False, showOSD := True, autoDcOrAc := -1, ptrAnotherScheme := 0)
     {
         static PowerGetActiveScheme := DllCall("GetProcAddress", "Ptr", BrightnessSetter.hPowrprofMod, "AStr", "PowerGetActiveScheme", "Ptr")
         ,PowerSetActiveScheme := DllCall("GetProcAddress", "Ptr", BrightnessSetter.hPowrprofMod, "AStr", "PowerSetActiveScheme", "Ptr")
@@ -62,8 +66,16 @@ class BrightnessSetter {
                 AC := !!autoDcOrAc
             }
 
-            currBrightness := 0
-            if (jump || BrightnessSetter._GetCurrentBrightness(currSchemeGuid, AC, currBrightness)) {
+            now := A_TickCount
+            if (this._lastTime && (now - this._lastTime < 500) && this._cachedBrightness != "") {
+                currBrightness := this._cachedBrightness
+            } else {
+                currBrightness := 0
+                if (!BrightnessSetter._GetCurrentBrightness(currSchemeGuid, AC, currBrightness))
+                    currBrightness := 50
+            }
+
+            if (jump || currBrightness != "") {
                 maxBrightness := BrightnessSetter.GetMaxBrightness()
                 ,minBrightness := BrightnessSetter.GetMinBrightness()
 
@@ -75,7 +87,13 @@ class BrightnessSetter {
                     else
                         increment += currBrightness
 
-                    if (DllCall(AC ? PowerWriteACValueIndex : PowerWriteDCValueIndex, "Ptr", 0, "Ptr", currSchemeGuid, "Ptr", BrightnessSetter._GUID_VIDEO_SUBGROUP(), "Ptr", BrightnessSetter._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt", increment, "UInt") == 0) {
+                    this._cachedBrightness := increment
+                    this._lastTime := now
+
+                    resAC := DllCall(PowerWriteACValueIndex, "Ptr", 0, "Ptr", currSchemeGuid, "Ptr", BrightnessSetter._GUID_VIDEO_SUBGROUP(), "Ptr", BrightnessSetter._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt", increment, "UInt")
+                    resDC := DllCall(PowerWriteDCValueIndex, "Ptr", 0, "Ptr", currSchemeGuid, "Ptr", BrightnessSetter._GUID_VIDEO_SUBGROUP(), "Ptr", BrightnessSetter._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt", increment, "UInt")
+
+                    if (resAC == 0 || resDC == 0) {
                         ; PowerApplySettingChanges is undocumented and exists only in Windows 8+. Since both the Power control panel and the brightness slider use this, we'll do the same, but fallback to PowerSetActiveScheme if on Windows 7 or something
                         if (!PowerApplySettingChanges || DllCall(PowerApplySettingChanges, "Ptr", BrightnessSetter._GUID_VIDEO_SUBGROUP(), "Ptr", BrightnessSetter._GUID_DEVICE_POWER_POLICY_VIDEO_BRIGHTNESS(), "UInt") != 0)
                             DllCall(PowerSetActiveScheme, "Ptr", 0, "Ptr", currSchemeGuid, "UInt")
@@ -142,9 +160,9 @@ class BrightnessSetter {
         if A_OSVersion in WIN_VISTA,WIN_7
             return
         BrightnessSetter._RealiseOSDWindowIfNeeded()
-        ; Thanks to YashMaster @ https://github.com/YashMaster/Tweaky/blob/master/Tweaky/BrightnessHandler.h for realising this could be done:
+        ; 0x38 = Native Brightness OSD Flyout (0x37 was Volume OSD Flyout)
         if (BrightnessSetter._osdHwnd)
-            DllCall(PostMessagePtr, "Ptr", BrightnessSetter._osdHwnd, "UInt", WM_SHELLHOOK, "Ptr", 0x37, "Ptr", 0)
+            DllCall(PostMessagePtr, "Ptr", BrightnessSetter._osdHwnd, "UInt", WM_SHELLHOOK, "Ptr", 0x38, "Ptr", 0)
     }
 
     _RealiseOSDWindowIfNeeded()
@@ -154,19 +172,14 @@ class BrightnessSetter {
             BrightnessSetter._osdHwnd := 0
             try if ((shellProvider := ComObjCreate("{C2F03A33-21F5-47FA-B4BB-156362A2F239}", "{00000000-0000-0000-C000-000000000046}"))) {
                 try if ((flyoutDisp := ComObjQuery(shellProvider, "{41f9d2fb-7834-4ab6-8b1b-73e74064b465}", "{41f9d2fb-7834-4ab6-8b1b-73e74064b465}"))) {
-                    DllCall(NumGet(NumGet(flyoutDisp+0)+3*A_PtrSize), "Ptr", flyoutDisp, "Int", 0, "UInt", 0)
+                    ; IFlyoutDisplay::ShowFlyout enum mapping on Windows 11:
+                    ; 0 = Volume Flyout, 1 = Airplane Mode, 3 = Display Brightness Flyout
+                    DllCall(NumGet(NumGet(flyoutDisp+0)+3*A_PtrSize), "Ptr", flyoutDisp, "Int", 3, "UInt", 0)
                     ,ObjRelease(flyoutDisp)
                 }
                 ObjRelease(shellProvider)
                 if (BrightnessSetter._FindAndSetOSDWindow())
                     return
-            }
-            ; who knows if the SID & IID above will work for future versions of Windows 10 (or Windows 8). Fall back to this if needs must
-            Loop 2 {
-                SendEvent {Volume_Mute 2}
-                if (BrightnessSetter._FindAndSetOSDWindow())
-                    return
-                Sleep 100
             }
         }
     }
