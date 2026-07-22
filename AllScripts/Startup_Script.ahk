@@ -67,7 +67,7 @@ Files.Push(Script_5)
 
 ; Previously Used
 ; Files := [
-; (Join, 
+; (Join,
 ; "Add Path to the AHK FILE"
 ; )]
 
@@ -141,7 +141,7 @@ for Script_Name, Script in Scripts
 }
 
 ; Shortcut Trick to Get Windows 7 to Update Hidden Tray (Uncomment if needed)
-; Send {LWin Down}b{LWin Up}{Enter}{Escape} 
+; Send {LWin Down}b{LWin Up}{Enter}{Escape}
 
 OnExit, ExitSub ; Gosub to ExitSub when this Script Exits
 
@@ -190,7 +190,7 @@ ExitSub:
 			WinKill, % "ahk_id " hWnd
 		}
 	}
-	ExitApp
+ExitApp
 return
 ;}
 
@@ -240,7 +240,7 @@ ScriptCommand:
 	Cmd_ViewHotkeys		= 65408
 	Cmd_ViewKeyHistory	= 65409
 	Pid := RegExReplace(A_ThisMenu,"SubMenu_(\d*)$","$1") ; each SubMenu name included Pid
-    cmd := RegExReplace(A_ThisMenuItem, "[^\w#@$?\[\]]") ; strip invalid chars
+	cmd := RegExReplace(A_ThisMenuItem, "[^\w#@$?\[\]]") ; strip invalid chars
 
 	; if Cmd_Reload, simulate by exiting and running again with captured Pid
 	if (cmd = "Reload")
@@ -257,7 +257,7 @@ ScriptCommand:
 	}
 	else
 	{
-	    if (cmd = "Pause" or cmd = "Suspend")
+		if (cmd = "Pause" or cmd = "Suspend")
 			Menu, SubMenu_%PID%, ToggleCheck, %A_ThisMenuItem%
 		cmd := Cmd_%cmd%
 		PostMessage, 0x111, %cmd%,,,ahk_pid %Pid%
@@ -314,14 +314,14 @@ TrayIconRemove(Attempts)
 	return
 }
 
-; Lexikos 
+; Lexikos
 KillTrayIcon(scriptHwnd) {
-    static NIM_DELETE := 2, AHK_NOTIFYICON := 1028
-    VarSetCapacity(nic, size := 936+4*A_PtrSize)
-    NumPut(size, nic, 0, "uint")
-    NumPut(scriptHwnd, nic, A_PtrSize)
-    NumPut(AHK_NOTIFYICON, nic, A_PtrSize*2, "uint")
-    return DllCall("Shell32\Shell_NotifyIcon", "uint", NIM_DELETE, "ptr", &nic)
+	static NIM_DELETE := 2, AHK_NOTIFYICON := 1028
+	VarSetCapacity(nic, size := 936+4*A_PtrSize)
+	NumPut(size, nic, 0, "uint")
+	NumPut(scriptHwnd, nic, A_PtrSize)
+	NumPut(AHK_NOTIFYICON, nic, A_PtrSize*2, "uint")
+	return DllCall("Shell32\Shell_NotifyIcon", "uint", NIM_DELETE, "ptr", &nic)
 }
 
 TrimAtDelim(String,Length:=124,Delim:="`n",Tail:="...")
