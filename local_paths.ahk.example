@@ -1,0 +1,6 @@
+; Example Local Machine Paths Configuration
+; Copy or rename this file to "local_paths.ahk" in the root directory.
+; "local_paths.ahk" is automatically ignored by Git to protect your privacy and personal folder locations.
+
+PATH_JAVA_COURSE := "D:\Path\To\Your\Java\Course"
+PATH_IP_ROTATOR := "D:\Path\To\Your\Scripts\ROTATE.bat"
