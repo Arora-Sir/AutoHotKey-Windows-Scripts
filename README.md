@@ -1,7 +1,8 @@
 # How to Use AHK Scripts (for Windows 10 & 11)
 
 - Install AutoHotKey
-- Add the scripts directory to `Startup_Scripts.ahk` to run all scripts at once.
+- Add the scripts directory to `Startup_Script.ahk` to run all scripts at once.
+- **Local Custom Paths**: Copy `local_paths.ahk.example` to `local_paths.ahk` in the root directory to define your machine-specific paths (e.g. custom courses or scripts). `local_paths.ahk` is automatically ignored by Git to keep your folder structure private.
 
 ## To Create the EXE from Script
 
@@ -28,11 +29,15 @@
   |      Win+F        |           Open FireFox            |
   |      Win+F8       |      Bluetooth On/Off             |
   |   Win+Shift+A     | Open Notification Center          |
-  |   Win+Shift+E     | Open Downloads (Screenshots) Folder |
+  |   Win+Shift+E     | (Folder) Open Downloads (Screenshots) Folder |
+  |   Win+Shift+J     | (Folder) Open Java Course         |
   |   Win+Alt+C       |      Run Alarm Clock              |
   |   Win+Alt+N       |  Clear Notification Center        |
+  |   Win+Alt+X       | (Script) Reconnect Cloudflare Network |
   |       Alt+X       |     Open Today Calendar in [Checker Plus Extension](https://chromewebstore.google.com/detail/checker-plus-for-google-c/hkhggnncdpfibdhinjiegagmopldibha)           |
   |       Alt+D       |        Open ChatGPT               |
+  |       Alt+G       | Monica AI Grammar Correction      |
+  |   Alt+Shift+S     | Monica AI Content Summary         |
   |   Alt+Shift+T     | This Window Always on Top         |
   |  Alt+Ctrl+D       |    Sort Folder Content by Date    |
   |  Alt+Ctrl+E       |   Enable/Disable File Extension   |

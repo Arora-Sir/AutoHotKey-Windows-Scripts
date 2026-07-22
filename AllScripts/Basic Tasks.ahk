@@ -11,9 +11,10 @@
 ; Win+F8 --> Bluetooth On/Off
 ; Win+Del --> Empty Recycle Bin
 ; Win+Shift+A --> Open Notification center
-; Win+Shift+E --> Open Downloads (My Screenshots) folder
+; Win+Shift+E --> (Folder) Open Downloads (My Screenshots) folder
+; Win+Shift+J --> (Folder) Open Java Course
 ; Win+Alt+C --> Run Alarm Clock
-; Win+Alt+X --> Reconnect Cloudfare Network
+; Win+Alt+X --> (Script) Reconnect Cloudflare Network
 ; Win+Alt+Ctr+C --> Click Center of Screen
 ; Win+Alt+N --> Clear Notification center
 ; Alt+X --> Open Today Calendar
@@ -748,11 +749,11 @@ $^c::CopyToClipboard() ;{ <-- OneNote Copy Mechanism Handeling (instead of SS)
 ; Win+Alt+Ctr+C --> Click Center of Screen
 ;#!^c:: YugenAnime()  ;{ <-- Click Center of Screen (YugenAnime Ad Bypass)
 
-; Win+Shift+E Open Downloads (My Screenshots) folder
+; Win+Shift+E --> (Folder) Open Downloads (My Screenshots) folder
 #+e::Run "%UserProfile%\Pictures\Screenshots" ;{ <-- Open Screenshots Folder
 
-; Win+Shift+J Open Java Course Shrayansh
-#+j::Run "%PATH_JAVA_COURSE%" ;{ <-- Open Java Course Shrayansh
+; Win+Shift+J --> (Folder) Open Java Course
+#+j::Run "%PATH_JAVA_COURSE%" ;{ <-- Open Java Course
 
 ; Win+Del Empty Recycle Bin
 #Del::FileRecycleEmpty ;{ <-- Delete Recycle Bin Data
@@ -804,7 +805,7 @@ $^J::CloseBrowserBottomDownloadsBar() ;{ <-- Close browser downloads bar at bott
 ; Ctr+T+T in browser to open new Tab from anywhere
 ~^T::OpenNewTab() ;{ <-- open browser tab from anywhere
 
-; Win+Alt+X --> Reconnect Cloudfare Network
+; Win+Alt+X --> (Script) Reconnect Cloudfare Network
 #!x::Run "%PATH_IP_ROTATOR%" ;{ <-- Reconnect Cloudfare Network
 
 ;Turn Caps Lock into a Shift key
