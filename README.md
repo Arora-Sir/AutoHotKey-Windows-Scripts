@@ -1,8 +1,17 @@
 # How to Use AHK Scripts (for Windows 10 & 11)
 
-- Install AutoHotKey
+- **Install AutoHotKey (v2 Dual-Runtime Recommended)**:
+  - Install AutoHotkey v2 via [Official Installer](https://www.autohotkey.com/) or PowerShell:
+    ```powershell
+    winget install AutoHotkey.AutoHotkey
+    ```
+  - The AHK v2 installer automatically sets up the **AutoHotkey Launcher**, which seamlessly runs both v1 and v2 scripts side-by-side based on the `#Requires` directive at the top of each script.
+- **Version Directives (`#Requires`)**:
+  - Legacy scripts in `AllScripts/` use `#Requires AutoHotkey v1.1` to ensure the launcher uses the v1 interpreter without breaking functionality.
+  - Any new scripts can use `#Requires AutoHotkey v2.0` to take advantage of modern v2 features.
 - Add the scripts directory to `Startup_Script.ahk` to run all scripts at once.
 - **Local Custom Paths**: Copy `local_paths.ahk.example` to `local_paths.ahk` in the root directory to define your machine-specific paths (e.g. custom courses or scripts). `local_paths.ahk` is automatically ignored by Git to keep your folder structure private.
+- **Personal Keywords & Privacy**: Copy `AllScripts/Personal Keywords.ahk.example` to `AllScripts/Personal Keywords.ahk` to define your private hotstrings, passwords, and shortcuts. `Personal Keywords.ahk` is automatically ignored by Git to prevent accidental data leaks.
 
 ## To Create the EXE from Script
 

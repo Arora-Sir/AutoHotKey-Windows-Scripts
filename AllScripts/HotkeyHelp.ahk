@@ -1,4 +1,6 @@
-﻿; Hotkey Help
+#Requires AutoHotkey v1.1
+
+; Hotkey Help
 ; Fanatic Guru
 ; 2019 01 03
 ;

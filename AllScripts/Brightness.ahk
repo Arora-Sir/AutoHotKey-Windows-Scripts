@@ -1,3 +1,5 @@
+#Requires AutoHotkey v1.1
+
 ; ^ for Ctrl, ! for Alt, # for Win, + for Shift
 ; ~ prefix to prevent blocking native (original) functionality of that key
 

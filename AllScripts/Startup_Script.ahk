@@ -48,7 +48,10 @@ DetectHiddenWindows, On
 Script_1=%a_scriptdir%\Brightness.ahk
 Script_2=%a_scriptdir%\Close Programs.ahk
 Script_3=%a_scriptdir%\Basic Tasks.ahk
-Script_4=%a_scriptdir%\Personal Keywords.ahk
+if FileExist(A_ScriptDir "\Personal_Keywords.ahk")
+	Script_4=%a_scriptdir%\Personal_Keywords.ahk
+else
+	Script_4=%a_scriptdir%\Personal Keywords.ahk
 Script_5=%a_scriptdir%\HotkeyHelp.ahk
 
 Files := []
