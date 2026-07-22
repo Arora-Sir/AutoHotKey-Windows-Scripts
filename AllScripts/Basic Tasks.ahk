@@ -13,11 +13,16 @@
 ; Win+Shift+A --> Open Notification center
 ; Win+Shift+E --> Open Downloads (My Screenshots) folder
 ; Win+Alt+C --> Run Alarm Clock
+; Win+Alt+X --> Reconnect Cloudfare Network
 ; Win+Alt+Ctr+C --> Click Center of Screen
 ; Win+Alt+N --> Clear Notification center
 ; Alt+X --> Open Today Calendar
 ; Alt+D --> Open ChatGPT
 ; Alt+Shift+T --> Active window Always on Top (Disabled -> Using PowerToys)
+
+; Alt+G --> Copy the content, Open Monica & Grammar Correction
+; Alt+Shift+S ---> Copy the content, Open Monica & Summarize Content
+
 ; Alt+Ctr+D --> Sort Folder content by date
 ; Alt+Ctr+E --> Enable/Disable file extension
 ; Alt+Ctr+H --> Enable/Disable hidden files
@@ -33,6 +38,8 @@
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
+#Include *i ..\local_paths.ahk ; Include local custom paths if present (ignored by Git)
+EnvGet, UserProfile, USERPROFILE ; Get Windows UserProfile directory (AHK v1 compatibility)
 #SingleInstance force ; Ensures that only the last executed instance of script is running
 DetectHiddenWindows, On
 
@@ -241,62 +248,62 @@ ClipboardSearch()
 
 ; BluetoothToggle()
 ; {
-    ; Method 1
-    ; Run, ms-settings:bluetooth
-    ; ; Wait for the Bluetooth settings window to open
-    ; WinWait, Settings
-    ; WinActivate
-    ; Sleep, 2000
-    ; Send, {Tab}{Tab}{Tab}{Space}
-    ; ; Close the Bluetooth settings window
-    ; Send, !{F4}
-    ; send {LWinDown}{a down}
-    ; Sleep, 800
-    ; send {Down}{Right}{Enter}{Esc}
+; Method 1
+; Run, ms-settings:bluetooth
+; ; Wait for the Bluetooth settings window to open
+; WinWait, Settings
+; WinActivate
+; Sleep, 2000
+; Send, {Tab}{Tab}{Tab}{Space}
+; ; Close the Bluetooth settings window
+; Send, !{F4}
+; send {LWinDown}{a down}
+; Sleep, 800
+; send {Down}{Right}{Enter}{Esc}
 
-    ; Method 2
-    ; MaxTime = 5	; Max Seconds to wait
-	; StartTime := A_TickCount
-	; WinID = ahk_exe ShellExperienceHost.exe ahk_class Windows.UI.Core.CoreWindow
-	; WinActivate %WinID%
-	; WinWaitActive %WinID%,, %MaxTime% - ((%A_TickCount% - %StartTime%) / 1000)
-	; If ErrorLevel
-	; {
-    ;     MsgBox, WinWait timed out.
-	; }
-    ;     else
-    ; {
-    ;     Sleep, 600
-    ;     send {Down}
-    ;     send {Down}
-    ;     Sleep, 1000
-    ;     send {Right}
-    ;     Sleep, 100
-    ;     send {Enter}{Esc}
-    ; }
-    ; send {Click 1650 690}
-    ; return
+; Method 2
+; MaxTime = 5	; Max Seconds to wait
+; StartTime := A_TickCount
+; WinID = ahk_exe ShellExperienceHost.exe ahk_class Windows.UI.Core.CoreWindow
+; WinActivate %WinID%
+; WinWaitActive %WinID%,, %MaxTime% - ((%A_TickCount% - %StartTime%) / 1000)
+; If ErrorLevel
+; {
+;     MsgBox, WinWait timed out.
+; }
+;     else
+; {
+;     Sleep, 600
+;     send {Down}
+;     send {Down}
+;     Sleep, 1000
+;     send {Right}
+;     Sleep, 100
+;     send {Enter}{Esc}
+; }
+; send {Click 1650 690}
+; return
 ; }
 
-DoubleClick(action)
-{
-    If (A_PriorHotKey = A_ThisHotKey and A_TimeSincePriorHotkey < 500)
-    {
-        WinGetClass, Class, A
+; DoubleClick(action)
+; {
+;     If (A_PriorHotKey = A_ThisHotKey and A_TimeSincePriorHotkey < 500)
+;     {
+;         WinGetClass, Class, A
 
-        ; Show/Hide Taskbar on Double click on taskbar
-        If Class = Shell_TrayWnd ; or ( Class = "Progman" )
-        {
-            static ABM_SETSTATE := 0xA, ABS_AUTOHIDE := 0x1, ABS_ALWAYSONTOP := 0x2
-            VarSetCapacity(APPBARDATA, size := 2*A_PtrSize + 2*4 + 16 + A_PtrSize, 0)
-            NumPut(size, APPBARDATA), NumPut(WinExist("ahk_class Shell_TrayWnd"), APPBARDATA, A_PtrSize)
-            NumPut(action ? ABS_AUTOHIDE : ABS_ALWAYSONTOP, APPBARDATA, size - A_PtrSize)
-            DllCall("Shell32\SHAppBarMessage", UInt, ABM_SETSTATE, Ptr, &APPBARDATA)
-            Return
-        }
-    }
-    return
-}
+;         ; Show/Hide Taskbar on Double click on taskbar
+;         If Class = Shell_TrayWnd ; or ( Class = "Progman" )
+;         {
+;             static ABM_SETSTATE := 0xA, ABS_AUTOHIDE := 0x1, ABS_ALWAYSONTOP := 0x2
+;             VarSetCapacity(APPBARDATA, size := 2*A_PtrSize + 2*4 + 16 + A_PtrSize, 0)
+;             NumPut(size, APPBARDATA), NumPut(WinExist("ahk_class Shell_TrayWnd"), APPBARDATA, A_PtrSize)
+;             NumPut(action ? ABS_AUTOHIDE : ABS_ALWAYSONTOP, APPBARDATA, size - A_PtrSize)
+;             DllCall("Shell32\SHAppBarMessage", UInt, ABM_SETSTATE, Ptr, &APPBARDATA)
+;             Return
+;         }
+;     }
+;     return
+; }
 
 MoveBGApp()
 {
@@ -412,11 +419,16 @@ OpenCalculator()
 
 RunPowerShellAsAdministrator()
 {
+    Send, #x ;Window Start Menu
+    Sleep, 700
+    Send, a ;a as Admin
+
     ; Run, powershell
-    Run, "C:\Program Files\PowerShell\7\pwsh.exe"   
-    WinWait, ahk_class CASCADIA_HOSTING_WINDOW_CLASS
-    Sleep, 1100
-    Send, ^+2 ;Open as Admin
+    ; Run, "C:\Program Files\PowerShell\7\pwsh.exe"
+    ; WinWait, ahk_class CASCADIA_HOSTING_WINDOW_CLASS
+    ; Sleep, 1100
+    ; Send, ^+2 ;Open as Admin
+
     ; Sleep, 1000
     ; WinActivate, ahk_class CASCADIA_HOSTING_WINDOW_CLASS
     ; Sleep, 100
@@ -536,21 +548,23 @@ OpenCalendar(){
 }
 
 OpenChatGPT(){
-    if (WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe"))
-    {
-        Run, https://chatgpt.com/?model=gpt-4
-    }
-    else If (WinExist ("ahk_exe brave.exe"))
-    {
-        ; WinActivate, ahk_exe brave.exe
-        Run, https://chatgpt.com/?model=gpt-4
+        ; if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250){
+        if (WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe"))
+        {
+            Run, https://chatgpt.com
+        }
+        else If (WinExist ("ahk_exe brave.exe"))
+        {
+            ; WinActivate, ahk_exe brave.exe
+            Run, https://chatgpt.com
 
-    }
-    else If (WinExist ("ahk_exe chrome.exe"))
-    {
-        ; WinActivate, ahk_exe chrome.exe
-        Run, https://chatgpt.com/?model=gpt-4
-    }
+        }
+        else If (WinExist ("ahk_exe chrome.exe"))
+        {
+            ; WinActivate, ahk_exe chrome.exe
+            Run, https://chatgpt.com
+        }
+    ; }
 }
 
 CopyToClipboard()
@@ -558,9 +572,9 @@ CopyToClipboard()
     Send, ^c
     ClipWait, 1
 
-    ; Sleep, 500 
+    ; Sleep, 500
     ; Send, ^c
-    
+
     if ErrorLevel
     {
         ; MsgBox, Copying to clipboard failed.
@@ -601,18 +615,18 @@ RevertVideoIntruption() {
         ;     Send, ^w
         ;     Sleep, 500 ; Give some time for the tab to close
         ; }
-        
+
         Sleep, 1000
         send {LCtrl down}{LShift down}{tab down}
         send {LCtrl up}{LShift up}{tab up}
-        Sleep,400
+        Sleep,600
+        Send, f
 
         ; ControlGetText, url, Edit1, ahk_class Chrome_WidgetWin_1
         ; MsgBox, %url%
 
         ; if InStr(url, "youtube.com")
         ; {
-            Send, f
         ; }
     }
     return
@@ -633,6 +647,52 @@ RevertVideoIntruption() {
     ;     Sleep,400
     ;     Send, f
     ; }
+}
+
+; MonicaQuickAccess() ;Grammar Correction
+; {
+;     Send, ^c
+;     Sleep, 100
+;     Send, !^f ;Shortcut to Open Monica
+;     Sleep, 500
+;     Send, {Tab} ;Going to Grammar section
+;     Send, {Enter}
+; }
+
+MonicaGrammarCorrection() ;Grammar Correction
+{
+    Send, ^c
+    Sleep, 100
+    Send, !f ;Shortcut to Open Monica
+    Sleep, 500
+    ; Send, {Tab} ;Going to Grammar section
+    Send, {Enter}
+}
+
+MonicaSummary() ;Summary
+{
+    Send, ^c
+    Sleep, 100
+    Send, !f ;Shortcut to Open Monica
+    Sleep, 500
+    Send, {Tab} ;Going to Summry section
+    ; Send, {Tab} ;Going to Summry section
+    Send, {Enter}
+}
+
+; Alt+Ctr+Z ShareX Image Editor
+~!^Z:: ImageEditor() ;{ <-- ShareX Image Editor
+
+ImageEditor()
+{
+    ; Send, ^c
+    ; MouseClick, left, 902, 471
+
+    Send, ^c
+    ; ClipWait, 1
+    Run, "C:\Program Files\ShareX\ShareX.exe" -ImageEditor
+    ; Sleep, 500
+    MouseClick, left, 902, 471
 }
 
 ; Ctr+Shift+V in browser to go to previous tab when taking a screenshot
@@ -660,7 +720,7 @@ $^c::CopyToClipboard() ;{ <-- OneNote Copy Mechanism Handeling (instead of SS)
 ; #F8::BluetoothToggle() ;{ <-- Bluetooth Toggle [Discard]
 
 ; MouseLButton DoubleClick Show/Hide Taskbar;
-~LButton::DoubleClick(hide := !hide) ;{ <-- Double Click Functions (WindHawk Now)
+; ~LButton::DoubleClick(hide := !hide) ;{ <-- Double Click Functions (WindHawk Now)
 
 ; Alt+MouseLButton Move background apps
 ^!LButton::MoveBGApp() ;{ <-- Move BG Apps
@@ -669,7 +729,7 @@ $^c::CopyToClipboard() ;{ <-- OneNote Copy Mechanism Handeling (instead of SS)
 #f::Run Firefox ;{ <-- Open FireFox
 
 ; Ctr+G Select text to search in browser
-^G::ClipboardSearch() ;{ <-- Search the selected/clipboard text
+^G:: ClipboardSearch() ;{ <-- Search the selected/clipboard text
 
 ; Win+C Run Calculator
 #c:: OpenCalculator() ;{ <-- Open calculaor
@@ -689,7 +749,10 @@ $^c::CopyToClipboard() ;{ <-- OneNote Copy Mechanism Handeling (instead of SS)
 ;#!^c:: YugenAnime()  ;{ <-- Click Center of Screen (YugenAnime Ad Bypass)
 
 ; Win+Shift+E Open Downloads (My Screenshots) folder
-#+e::Run "C:\Users\Mohit\Pictures\Screenshots" ;{ <-- Open Screenshots Folder
+#+e::Run "%UserProfile%\Pictures\Screenshots" ;{ <-- Open Screenshots Folder
+
+; Win+Shift+J Open Java Course Shrayansh
+#+j::Run "%PATH_JAVA_COURSE%" ;{ <-- Open Java Course Shrayansh
 
 ; Win+Del Empty Recycle Bin
 #Del::FileRecycleEmpty ;{ <-- Delete Recycle Bin Data
@@ -705,6 +768,12 @@ $^c::CopyToClipboard() ;{ <-- OneNote Copy Mechanism Handeling (instead of SS)
 
 ; Alt+Ctr+J Testing Automation
 ; $!^J:: TestingAutomation() ;{ <-- Testing Automation
+
+; Alt+G Copy the content, Open Monica & Grammar Correction
+!G:: MonicaGrammarCorrection() ;{ <-- Monica Grammar Correction
+
+; Alt+Shift+S Copy the content, Open Monica & Summarize Content
+!+S:: MonicaSummary() ;{ <-- Monica Summarize Content
 
 ; Alt+Ctr+E Enable/Disable file extension
 $!^E:: ToggleFileExt() ;{ <-- Show/Hide Extenstions
@@ -734,6 +803,9 @@ $^J::CloseBrowserBottomDownloadsBar() ;{ <-- Close browser downloads bar at bott
 
 ; Ctr+T+T in browser to open new Tab from anywhere
 ~^T::OpenNewTab() ;{ <-- open browser tab from anywhere
+
+; Win+Alt+X --> Reconnect Cloudfare Network
+#!x::Run "%PATH_IP_ROTATOR%" ;{ <-- Reconnect Cloudfare Network
 
 ;Turn Caps Lock into a Shift key
 ; Capslock::Shift

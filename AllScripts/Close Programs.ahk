@@ -128,7 +128,26 @@ CLoseSpecificPrograms()
     return
 }
 
+KeyWait, F4
+KeyWait, Alt
 
-$!F4:: CLoseCurrentlyActiveScreen() ;{ <-- CLose Currently Active Screen
+isReady := false
+SetTimer, InitDone, -300
+
+InitDone:
+isReady := true
+return
+
+; Alt+F4 --> Close currently active program
+; $!F4:: CLoseCurrentlyActiveScreen() ;{ <-- CLose Currently Active Screen
+$!F4::
+if (!isReady || !GetKeyState("F4", "P"))
+    return
+CLoseCurrentlyActiveScreen()
+return
+
+; Alt+Shift+F4 --> Close specific active program
 $!+F4:: CLoseSpecificPrograms() ;{ <-- CLose Specific Programs
+
+; Alt+Ctr+F4 --> Close All Programs
 $!^F4:: CLoseAllPrograms() ;{ <-- CLose All Program
