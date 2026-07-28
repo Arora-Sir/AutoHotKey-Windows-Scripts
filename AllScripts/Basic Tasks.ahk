@@ -16,8 +16,9 @@
 ; Win+Shift+E --> (Folder) Open Downloads (My Screenshots) folder
 ; Win+Shift+J --> (Folder) Open Java Course
 ; Win+Alt+C --> Run Alarm Clock
+; Win+Alt+Ctr+C --> Open PowerShell
+; Win+Alt+Ctr+K --> Click Center of Screen (Disabled)
 ; Win+Alt+X --> (Script) Reconnect Cloudflare Network
-; Win+Alt+Ctr+C --> Click Center of Screen
 ; Win+Alt+N --> Clear Notification center
 ; Alt+X --> Open Today Calendar
 ; Alt+D --> Open ChatGPT
@@ -423,7 +424,7 @@ OpenCalculator()
 RunPowerShellAsAdministrator()
 {
     Send, #x ;Window Start Menu
-    Sleep, 700
+    Sleep, 1000
     Send, a ;a as Admin
 
     ; Run, powershell
@@ -438,6 +439,14 @@ RunPowerShellAsAdministrator()
     ; Send, !{Tab} ;Previous Instance without admin rights
     ; Sleep, 100
     ; Send, !{F4}
+}
+
+ClickCenterOfScreen()
+{
+    CoordMode, Mouse, Screen
+    MouseMove, A_ScreenWidth / 2, A_ScreenHeight / 2
+    Click
+    return
 }
 
 SortFolderByDate()
@@ -743,13 +752,12 @@ $^c::CopyToClipboard() ;{ <-- OneNote Copy Mechanism Handeling (instead of SS)
 ; Win+Alt+C Run Alarm Clock
 #!c:: Run "shell:Appsfolder\Microsoft.WindowsAlarms_8wekyb3d8bbwe!App" ;{ <-- Open clock
 
-; Win+Alt+C Open Powershell
+; Win+Alt+Ctrl+C Open Powershell
 #!^c:: RunPowerShellAsAdministrator() ;{ <-- Open Powershell
 ;Run "C:\Program Files\PowerShell\7\pwsh.exe" -WorkingDirectory ~
 
-;Todo: Use Case
-; Win+Alt+Ctr+C --> Click Center of Screen
-;#!^c:: YugenAnime()  ;{ <-- Click Center of Screen (YugenAnime Ad Bypass)
+; Win+Alt+Ctrl+K --> Click Center of Screen
+;#!^k:: ClickCenterOfScreen() ;{ <-- Click Center of Screen
 
 ; Win+Shift+E --> (Folder) Open Downloads (My Screenshots) folder
 #+e::Run "%UserProfile%\Pictures\Screenshots" ;{ <-- Open Screenshots Folder
