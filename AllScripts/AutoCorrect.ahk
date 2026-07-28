@@ -60,6 +60,7 @@
 ;------------------------------------------------------------------------------
 #NoEnv ; For security
 #SingleInstance force
+DetectHiddenWindows, On
 
 ;------------------------------------------------------------------------------
 ; AUto-COrrect TWo COnsecutive CApitals.

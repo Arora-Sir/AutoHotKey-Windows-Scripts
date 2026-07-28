@@ -292,7 +292,7 @@ GetCurrentBrightNess()
 }
 
 BS := new BrightnessSetter()
-Increments := 5
+Increments := 10
 +F1::BS.SetBrightness(-Increments) ;{ <-- Brightness decreased by 5 
 F1::BS.SetBrightness(+Increments) ;{ <-- Brightness increased by 5 
 

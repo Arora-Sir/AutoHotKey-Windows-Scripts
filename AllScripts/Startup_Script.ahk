@@ -148,6 +148,11 @@ for Script_Name, Script in Scripts
 {
 	if !Script.Status
 		continue
+	; Terminate any existing instance running this script path before spawning
+	DetectHiddenWindows, On
+	SetTitleMatchMode, 2
+	WinClose, % Script.Path " ahk_class AutoHotkey"
+
 	; Use same AutoHotkey version to run scripts as this current script is using
 	; Required to deal with 'launcher' that was introduced when Autohotkey v2 is installed
 	; Requires literal quotes around variables to handle spaces in file paths/names
@@ -159,6 +164,21 @@ for Script_Name, Script in Scripts
 ; Send {LWin Down}b{LWin Up}{Enter}{Escape}
 
 OnExit, ExitSub ; Gosub to ExitSub when this Script Exits
+
+; Register TaskbarCreated event to automatically restore tray icon if Explorer restarts or loads late
+WM_TASKBARCREATED := DllCall("RegisterWindowMessage", "str", "TaskbarCreated")
+OnMessage(WM_TASKBARCREATED, "AHK_TASKBARCREATED")
+
+; Allow Explorer (Medium integrity) to send TaskbarCreated & Tray notification messages across UIPI elevation boundaries
+DllCall("User32\ChangeWindowMessageFilterEx", "ptr", A_ScriptHwnd, "uint", WM_TASKBARCREATED, "uint", 1, "ptr", 0) ; MSGFLT_ALLOW := 1
+DllCall("User32\ChangeWindowMessageFilterEx", "ptr", A_ScriptHwnd, "uint", 0x0404, "uint", 1, "ptr", 0) ; 0x0404 AHK_NOTIFYICON
+DllCall("User32\ChangeWindowMessageFilterEx", "ptr", A_ScriptHwnd, "uint", 0x007E, "uint", 1, "ptr", 0) ; 0x007E WM_DISPLAYCHANGE
+
+; Ensure Master Tray Icon is explicitly visible
+if FileExist(A_ScriptDir "\..\Startup_Script.ico")
+	Menu, Tray, Icon, % A_ScriptDir "\..\Startup_Script.ico"
+else
+	Menu, Tray, Icon
 
 ; Build Menu and TrayTip then Remove Tray Icons
 gosub TrayTipBuild
@@ -177,13 +197,30 @@ TrayIconRemove(10)
 ;Win+ScrollLock Suspend AutoHotkey
 #ScrollLock::Suspend ;{ +Fn <-- Suspend All Scripts
 #^!ScrollLock::ExitApp ;{ +Fn <-- Terminate All Scripts
-#^!R::Reload ;{ <-- Reload All Scripts
+#^!R::gosub ReloadAll ;{ <-- Reload All Scripts Cleanly
 #^!W::Run "C:\Program Files\AutoHotkey\WindowSpy.ahk" ;{ <-- Run Window Spy Script
 ;}
 
 ; SUBROUTINES
 ;{-----------------------------------------------
 ;
+ReloadAll:
+	DetectHiddenWindows, On
+	SetTitleMatchMode, 2
+	for Script_Name, Script in Scripts
+	{
+		if Script.Path
+			WinClose, % Script.Path " ahk_class AutoHotkey"
+		if Script.Pid
+		{
+			Process, Close, % Script.Pid
+			Process, WaitClose, % Script.Pid, 1
+		}
+	}
+	Sleep, 100
+	Reload
+return
+
 TrayTipBuild:
 	Tip_Text := ""
 	for Script_Name, Script in Scripts
@@ -196,13 +233,16 @@ return
 
 ; Stop All the Scripts with Status true (Called When this Scripts Exits)
 ExitSub:
+	DetectHiddenWindows, On
+	SetTitleMatchMode, 2
 	for Script_Name, Script in Scripts
 	{
-		WinGet, hWnds, List, % "ahk_pid " Script.Pid
-		Loop % hWnds
+		if Script.Path
+			WinClose, % Script.Path " ahk_class AutoHotkey"
+		if Script.Pid
 		{
-			hWnd := hWnds%A_Index%
-			WinKill, % "ahk_id " hWnd
+			Process, Close, % Script.Pid
+			Process, WaitClose, % Script.Pid, 1
 		}
 	}
 ExitApp
@@ -241,6 +281,11 @@ MenuBuild:
 	try Menu, Tray, Add, Load, :SubMenu_Load ; SubMenu_Load does not always exist
 	Menu, Tray, Standard
 	try Menu, Tray, Default, Load ; SubMenu_Load does not always exist
+
+	if FileExist(A_ScriptDir "\..\Startup_Script.ico")
+		Menu, Tray, Icon, % A_ScriptDir "\..\Startup_Script.ico"
+	else
+		Menu, Tray, Icon
 return
 
 ScriptCommand:
@@ -321,7 +366,8 @@ TrayIconRemove(Attempts)
 				Loop % hWnds
 				{
 					hWnd := hWnds%A_Index%
-					KillTrayIcon(hWnd)
+					if (hWnd != A_ScriptHwnd)
+						KillTrayIcon(hWnd)
 				}
 			}
 		Sleep A_index**2 * 200
@@ -359,5 +405,16 @@ AHK_DISPLAYCHANGE(wParam, lParam) ; OnMessage(0x7E, "AHK_DISPLAYCHANGE")
 {
 	; Cleanup Tray Icons on Resolution Change
 	TrayIconRemove(8) ; Resolution Change can take a moment so try over time
+}
+
+AHK_TASKBARCREATED(wParam, lParam)
+{
+	gosub TrayTipBuild
+	gosub MenuBuild
+	if FileExist(A_ScriptDir "\..\Startup_Script.ico")
+		Menu, Tray, Icon, % A_ScriptDir "\..\Startup_Script.ico"
+	else
+		Menu, Tray, Icon
+	TrayIconRemove(5)
 }
 ;}
