@@ -9,17 +9,18 @@
 - **Version Directives (`#Requires`)**:
   - Legacy scripts in `AllScripts/` use `#Requires AutoHotkey v1.1` to ensure the launcher uses the v1 interpreter without breaking functionality.
   - Any new scripts can use `#Requires AutoHotkey v2.0` to take advantage of modern v2 features.
-- Add the scripts directory to `Startup_Script.ahk` to run all scripts at once.
+- Add the scripts directory to `StartupScript.ahk` to run all scripts at once.
 - **Local Custom Paths**: Copy `local_paths.ahk.example` to `local_paths.ahk` in the root directory to define your machine-specific paths (e.g. custom courses or scripts). `local_paths.ahk` is automatically ignored by Git to keep your folder structure private.
-- **Personal Keywords & Privacy**: Copy `AllScripts/Personal Keywords.ahk.example` to `AllScripts/Personal Keywords.ahk` to define your private hotstrings, passwords, and shortcuts. `Personal Keywords.ahk` is automatically ignored by Git to prevent accidental data leaks.
+- **Personal Keywords & Privacy**: Copy `AllScripts/PersonalKeywords.ahk.example` to `AllScripts/PersonalKeywords.ahk` to define your private hotstrings, passwords, and shortcuts. `PersonalKeywords.ahk` is automatically ignored by Git to prevent accidental data leaks.
+- **Compiled Executables**: `.exe` files are **not tracked in Git**. Compile `StartupScript.ahk` locally using Ahk2Exe whenever needed (see section below).
 
 ## To Create the EXE from Script (with Custom Icon)
 
 ### Method 1: Using Ahk2Exe GUI
-1. Right-click any `.ahk` script (e.g. `Startup_Script.ahk`) in File Explorer and select **Compile Script (GUI)** (or launch `C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe`).
+1. Right-click any `.ahk` script (e.g. `StartupScript.ahk`) in File Explorer and select **Compile Script (GUI)** (or launch `C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe`).
 2. **Source**: Select your `.ahk` script file.
-3. **Destination**: Select the output `.exe` filename (e.g. `Startup_Script.exe`).
-4. **Custom Icon (.ico)**: Click **Browse** and select your `.ico` file.
+3. **Destination**: Select the output `.exe` filename (e.g. `StartupScript.exe`).
+4. **Custom Icon (.ico)**: Click **Browse** and select your `.ico` file (e.g. `StartupScript.ico`).
 5. **Base Bin**: Select `Unicode 64-bit.bin` (for v1) or v2 binary base.
 6. **Compression (Optional)**: Set the UPX path to `upx-3.95-win64\upx.exe` for executable compression.
 7. Click **Convert**.
@@ -27,7 +28,7 @@
 ### Method 2: Using Command Line
 Run the following command in PowerShell / CMD to compile with a custom icon:
 ```powershell
-& "C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe" /in "AllScripts\Startup_Script.ahk" /out "AllScripts\Startup_Script.exe" /icon "path\to\custom_icon.ico"
+& "C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe" /in "AllScripts\StartupScript.ahk" /out "AllScripts\StartupScript.exe" /icon "StartupScript.ico"
 ```
 
 ## Working Hotkeys
@@ -128,7 +129,7 @@ Run the following command in PowerShell / CMD to compile with a custom icon:
 
 <h3>
   <p align="center">
-    :exclamation::exclamation: Reload the script `Startup_Scripts.ahk` after any edit in ".ahk" file :smile:
+    :exclamation::exclamation: Reload the script `StartupScript.ahk` after any edit in ".ahk" file :smile:
   </p>
 </h3>
 
