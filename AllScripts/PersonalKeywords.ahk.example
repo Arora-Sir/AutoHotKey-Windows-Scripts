@@ -1,0 +1,30 @@
+#Requires AutoHotkey v1.1
+
+; Example Personal Keywords Configuration
+; Copy or rename this file to "PersonalKeywords.ahk" in the AllScripts directory.
+; "PersonalKeywords.ahk" is automatically ignored by Git to protect your privacy.
+
+#NoEnv
+SendMode Input
+SetWorkingDir %A_ScriptDir%
+#SingleInstance force
+DetectHiddenWindows, On
+
+; Example Personal Hotstrings (Type keyword to expand)
+:*:E1.::your.email@example.com
+:*:Pro.::https://yourwebsite.com/
+:*:GitPro.::https://github.com/your-username
+
+; Example Custom App Launchers
+OpenNotesApp(){
+    If WinExist("Notes")
+    {
+        WinActivate
+    }
+    else{
+        Run, notepad.exe
+    }
+}
+
+; Custom Hotkey Binding (Win + Alt + A)
+#!a:: OpenNotesApp()

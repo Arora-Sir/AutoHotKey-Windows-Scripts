@@ -47,6 +47,9 @@ EnvGet, UserProfile, USERPROFILE ; Get Windows UserProfile directory (AHK v1 com
 #SingleInstance force ; Ensures that only the last executed instance of script is running
 DetectHiddenWindows, On
 
+; Auto-start / reload GravityBridge Proxy Server
+RestartPythonServer(PATH_GRAVITY_BRIDGE "\proxy.py")
+
 SetNumlockState, AlwaysOn ; Set Lock keys permanently
 ; SetScrollLockState, AlwaysOff ;Commented this as scrollLock key is now being used to suspend & terminate AHK Scripts
 ; SetCapsLockState, AlwaysOff
@@ -829,3 +832,30 @@ $^J::CloseBrowserBottomDownloadsBar() ;{ <-- Close browser downloads bar at bott
 
 ; #LAlt::^#Right ; switch to next desktop with Windows key + Left Alt key -> Original is Win + Ctr + Right
 ; #LCtrl::^#Left ; switch to next desktop with Windows key + Left CTRL key -> Original is Win r+ Ctr + Left
+
+RestartPythonServer(ScriptPath, WorkingDir:="", PythonExe:="") {
+    global PATH_PYTHON_EXE
+
+    ScriptPath := Trim(ScriptPath, """")
+    if (!ScriptPath || !FileExist(ScriptPath))
+        return false
+
+    SplitPath, ScriptPath, FileName, Directory
+    if (!WorkingDir)
+        WorkingDir := Directory
+    if (!PythonExe)
+        PythonExe := PATH_PYTHON_EXE ? PATH_PYTHON_EXE : "pythonw.exe"
+    PythonExe := Trim(PythonExe, """")
+
+    ; Kill any existing instance running this script (native WMI, no shell spawned)
+    try {
+        for proc in ComObjGet("winmgmts:").ExecQuery("SELECT ProcessId,CommandLine FROM Win32_Process WHERE Name LIKE 'python%'")
+            if InStr(proc.CommandLine, FileName)
+                Process, Close, % proc.ProcessId
+    }
+    Sleep, 200
+
+    ; Launch silently - pythonw.exe never creates a console window
+    Run, "%PythonExe%" "%ScriptPath%", %WorkingDir%, Hide
+    return true
+}

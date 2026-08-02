@@ -4,3 +4,7 @@
 
 PATH_JAVA_COURSE := "D:\Path\To\Your\Java\Course"
 PATH_IP_ROTATOR := "D:\Path\To\Your\Scripts\ROTATE.bat"
+
+; GravityBridge Proxy Server Paths
+PATH_GRAVITY_BRIDGE := "D:\Path\To\Your\Gravity-Bridge"
+PATH_PYTHON_EXE := "C:\Python314\pythonw.exe"
