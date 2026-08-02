@@ -46,17 +46,11 @@ DetectHiddenWindows, On
 
 ; Additional Startup Files and Folders Can Be Added Here
 Script_1=%a_scriptdir%\Brightness.ahk
-
-Script_2=%a_scriptdir%\Close Programs.ahk
-
-Script_3=%a_scriptdir%\Basic Tasks.ahk
-
-if FileExist(A_ScriptDir "\Personal_Keywords.ahk")
-	Script_4=%a_scriptdir%\Personal_Keywords.ahk
-else
-	Script_4=%a_scriptdir%\Personal Keywords.ahk
-
+Script_2=%a_scriptdir%\ClosePrograms.ahk
+Script_3=%a_scriptdir%\BasicTasks.ahk
+Script_4=%a_scriptdir%\PersonalKeywords.ahk
 Script_5=%a_scriptdir%\HotkeyHelp.ahk
+Script_6=%a_scriptdir%\VolumeOsd.ahk
 
 Files := []
 Files.Push(Script_1)
@@ -64,6 +58,7 @@ Files.Push(Script_2)
 Files.Push(Script_3)
 Files.Push(Script_4)
 Files.Push(Script_5)
+Files.Push(Script_6)
 
 ; Loop, 1
 ; {
@@ -79,14 +74,7 @@ Files.Push(Script_5)
 ; )]
 
 ; Define Path to AutoHotkey.exe for v1 and v2
-if (A_IsCompiled)
-{
-	RunPathV1 := FileExist("C:\Program Files\AutoHotkey\AutoHotkeyU64.exe") ? "C:\Program Files\AutoHotkey\AutoHotkeyU64.exe" : (FileExist("C:\Program Files\AutoHotkey\AutoHotkey.exe") ? "C:\Program Files\AutoHotkey\AutoHotkey.exe" : A_AhkPath)
-}
-else
-{
-	RunPathV1 := A_AhkPath
-}
+RunPathV1 := FileExist("C:\Program Files\AutoHotkey\AutoHotkeyU64.exe") ? "C:\Program Files\AutoHotkey\AutoHotkeyU64.exe" : (FileExist("C:\Program Files\AutoHotkey\AutoHotkey.exe") ? "C:\Program Files\AutoHotkey\AutoHotkey.exe" : A_AhkPath)
 
 RunPathV2 := FileExist("C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe") ? "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe" : "C:\Program Files\AutoHotkey\UX\AutoHotkeyUX.exe"
 ;}
@@ -156,7 +144,7 @@ for Script_Name, Script in Scripts
 	; Use same AutoHotkey version to run scripts as this current script is using
 	; Required to deal with 'launcher' that was introduced when Autohotkey v2 is installed
 	; Requires literal quotes around variables to handle spaces in file paths/names
-	Run, % """" Script.RunPath """ """ Script.Path """",,, Pid ; specify Autohotkey version
+	Run, % """" Script.RunPath """ """ Script.Path """",, Hide, Pid ; specify Autohotkey version
 	Scripts[Script_Name,"Pid"] := Pid
 }
 
@@ -175,7 +163,9 @@ DllCall("User32\ChangeWindowMessageFilterEx", "ptr", A_ScriptHwnd, "uint", 0x040
 DllCall("User32\ChangeWindowMessageFilterEx", "ptr", A_ScriptHwnd, "uint", 0x007E, "uint", 1, "ptr", 0) ; 0x007E WM_DISPLAYCHANGE
 
 ; Ensure Master Tray Icon is explicitly visible
-if FileExist(A_ScriptDir "\..\Startup_Script.ico")
+if FileExist(A_ScriptDir "\..\StartupScript.ico")
+	Menu, Tray, Icon, % A_ScriptDir "\..\StartupScript.ico"
+else if FileExist(A_ScriptDir "\..\Startup_Script.ico")
 	Menu, Tray, Icon, % A_ScriptDir "\..\Startup_Script.ico"
 else
 	Menu, Tray, Icon
@@ -282,7 +272,9 @@ MenuBuild:
 	Menu, Tray, Standard
 	try Menu, Tray, Default, Load ; SubMenu_Load does not always exist
 
-	if FileExist(A_ScriptDir "\..\Startup_Script.ico")
+	if FileExist(A_ScriptDir "\..\StartupScript.ico")
+		Menu, Tray, Icon, % A_ScriptDir "\..\StartupScript.ico"
+	else if FileExist(A_ScriptDir "\..\Startup_Script.ico")
 		Menu, Tray, Icon, % A_ScriptDir "\..\Startup_Script.ico"
 	else
 		Menu, Tray, Icon
@@ -310,7 +302,7 @@ ScriptCommand:
 				break
 		Menu, SubMenu_%PID%, DeleteAll ; delete Tray SubMenu of old Pid (use 'try' just in case)
 		PostMessage, 0x111, Cmd_Exit,,,ahk_pid %Pid%
-		Run, % """" Script.RunPath """ """ Script.Path """",,, Pid ; specify Autohotkey version
+		Run, % """" Script.RunPath """ """ Script.Path """",, Hide, Pid ; specify Autohotkey version
 		Scripts[Script_Name,"Pid"] := Pid
 		gosub MenuBuild ; need to rebuild menu because changed Pid is used in menu names
 		TrayIconRemove(8) ; need to remove new icon
@@ -339,7 +331,7 @@ return
 
 ScriptCommand_Load:
 	; Run Script and Keep Info
-	Run, % """" Scripts[A_ThisMenuItem].RunPath """ """ Scripts[A_ThisMenuItem].Path """",,, Pid ; specify Autohotkey version
+	Run, % """" Scripts[A_ThisMenuItem].RunPath """ """ Scripts[A_ThisMenuItem].Path """",, Hide, Pid ; specify Autohotkey version
 	Scripts[A_ThisMenuItem, "Pid"] := Pid
 	Scripts[A_ThisMenuItem, "Status"] := true
 
@@ -411,7 +403,9 @@ AHK_TASKBARCREATED(wParam, lParam)
 {
 	gosub TrayTipBuild
 	gosub MenuBuild
-	if FileExist(A_ScriptDir "\..\Startup_Script.ico")
+	if FileExist(A_ScriptDir "\..\StartupScript.ico")
+		Menu, Tray, Icon, % A_ScriptDir "\..\StartupScript.ico"
+	else if FileExist(A_ScriptDir "\..\Startup_Script.ico")
 		Menu, Tray, Icon, % A_ScriptDir "\..\Startup_Script.ico"
 	else
 		Menu, Tray, Icon

@@ -1,6 +1,8 @@
 upx*/
-Personal_Keywords.ahk
+PersonalKeywords.ahk
 *Dialog*
 bfg*
 local_paths.ahk
 .vscode/
+*.log
+*.exe

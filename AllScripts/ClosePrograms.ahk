@@ -37,6 +37,7 @@ CLoseCurrentlyActiveScreen()
         Case "Unity Hub.exe": Run cmd.exe /c taskkill /F /IM "Unity Hub.exe" ,,Hide
         Case "uTorrent.exe": Run cmd.exe /c taskkill /F /IM uTorrent.exe ,,Hide
         Case "Wondershare Filmora X.exe": Run cmd.exe /c taskkill /F /IM WSHelper.exe ,,Hide
+        Case "WhatsApp.Root.exe": Run cmd.exe /c taskkill /F /IM WhatsApp.Root.exe ,,Hide
         Case "wps.exe": Run cmd.exe /c taskkill /F /IM wpscenter.exe & taskkill /F /IM wpscloudsvr.exe,,Hide
         Case "Zoom.exe": Run cmd.exe /c taskkill /F /IM zoom.exe ,,Hide
  	    Case "hsscp.exe": Run cmd.exe /c taskkill /F /IM hsscp.exe ,,Hide ;HotSpot Sheild
@@ -130,8 +131,11 @@ CLoseSpecificPrograms()
     return
 }
 
+; Suspend hotkeys during startup key-release to prevent Alt+F4 misfiring
+Suspend, On
 KeyWait, F4
 KeyWait, Alt
+Suspend, Off
 
 isReady := false
 SetTimer, InitDone, -300
