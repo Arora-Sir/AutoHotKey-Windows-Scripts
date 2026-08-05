@@ -47,8 +47,10 @@ EnvGet, UserProfile, USERPROFILE ; Get Windows UserProfile directory (AHK v1 com
 #SingleInstance force ; Ensures that only the last executed instance of script is running
 DetectHiddenWindows, On
 
-; Auto-start / reload GravityBridge Proxy Server
+; Auto-start / reload GravityBridge Proxy Server & CopyClip
 RestartPythonServer(PATH_GRAVITY_BRIDGE "\proxy.py")
+RestartPythonServer(PATH_COPYCLIP "\copyclip.py")
+
 
 SetNumlockState, AlwaysOn ; Set Lock keys permanently
 ; SetScrollLockState, AlwaysOff ;Commented this as scrollLock key is now being used to suspend & terminate AHK Scripts
