@@ -48,8 +48,10 @@ EnvGet, UserProfile, USERPROFILE ; Get Windows UserProfile directory (AHK v1 com
 DetectHiddenWindows, On
 
 ; Auto-start / reload GravityBridge Proxy Server & CopyClip
-RestartPythonServer(PATH_GRAVITY_BRIDGE "\proxy.py")
-RestartPythonServer(PATH_COPYCLIP "\copyclip.py")
+; Named per-project so Task Manager's Name column shows "CopyClip_Python.exe" /
+; "GravityBridge_Python.exe" instead of an anonymous "pythonw.exe" you can't tell apart.
+RestartNamedPythonServer("GravityBridge", PATH_GRAVITY_BRIDGE "\proxy.py")
+RestartNamedPythonServer("CopyClip", PATH_COPYCLIP "\copyclip.py")
 
 
 SetNumlockState, AlwaysOn ; Set Lock keys permanently
@@ -835,7 +837,19 @@ $^J::CloseBrowserBottomDownloadsBar() ;{ <-- Close browser downloads bar at bott
 ; #LAlt::^#Right ; switch to next desktop with Windows key + Left Alt key -> Original is Win + Ctr + Right
 ; #LCtrl::^#Left ; switch to next desktop with Windows key + Left CTRL key -> Original is Win r+ Ctr + Left
 
-RestartPythonServer(ScriptPath, WorkingDir:="", PythonExe:="") {
+; Launches a Python script under a per-project renamed copy of pythonw.exe, so Task
+; Manager's Name column shows e.g. "CopyClip_Python.exe" instead of an anonymous
+; "pythonw.exe" indistinguishable from every other Python process on the machine.
+;
+; Verified before wiring this in: a bare copy of pythonw.exe, renamed and placed in an
+; arbitrary directory (no DLLs alongside it), runs correctly -- this Python install
+; resolves its interpreter DLL and stdlib via PATH/registry, not relative to the exe's own
+; location, so the renamed copy does not need to live next to python3XX.dll.
+;
+; The copy is cached under AllScripts\PythonExes\ and only made once; it is not
+; auto-refreshed on a Python upgrade. Delete that folder (or a project's one *_Python.exe)
+; to force a fresh copy on the next call.
+RestartNamedPythonServer(ProjectName, ScriptPath, WorkingDir:="", PythonExe:="") {
     global PATH_PYTHON_EXE
 
     ScriptPath := Trim(ScriptPath, """")
@@ -849,15 +863,34 @@ RestartPythonServer(ScriptPath, WorkingDir:="", PythonExe:="") {
         PythonExe := PATH_PYTHON_EXE ? PATH_PYTHON_EXE : "pythonw.exe"
     PythonExe := Trim(PythonExe, """")
 
-    ; Kill any existing instance running this script (native WMI, no shell spawned)
+    NamedExeDir := A_ScriptDir "\PythonExes"
+    if !FileExist(NamedExeDir)
+        FileCreateDir, %NamedExeDir%
+    NamedExeName := ProjectName "_Python.exe"
+    NamedExePath := NamedExeDir "\" NamedExeName
+    if !FileExist(NamedExePath)
+        FileCopy, %PythonExe%, %NamedExePath%
+
+    ; Kill any existing instance of this script, however it was launched. Two match rules,
+    ; either one is enough:
+    ;   1. Name = the renamed exe -- catches a previous run under this same named scheme.
+    ;   2. A generic 'python%' process whose CommandLine names this exact script file --
+    ;      catches anything still running under the OLD generic pythonw.exe name (this
+    ;      migration's own leftover), and any other way this script might get launched
+    ;      (Desktop shortcut, a bare "python script.py", etc. -- see bugs/BUG-003 in the
+    ;      CopyClip repo for why relying on only one launch path here is exactly how a
+    ;      duplicate daemon slips in). Rule 1 alone would miss anything not already
+    ;      launched by this function, which is precisely the gap that let a stray old
+    ;      pythonw.exe survive a reload during testing and run alongside the new one.
+    KillQuery := "SELECT ProcessId,Name,CommandLine FROM Win32_Process WHERE Name = '" NamedExeName "' OR Name LIKE 'python%'"
     try {
-        for proc in ComObjGet("winmgmts:").ExecQuery("SELECT ProcessId,CommandLine FROM Win32_Process WHERE Name LIKE 'python%'")
-            if InStr(proc.CommandLine, FileName)
+        for proc in ComObjGet("winmgmts:").ExecQuery(KillQuery)
+            if (proc.Name = NamedExeName) || InStr(proc.CommandLine, FileName)
                 Process, Close, % proc.ProcessId
     }
     Sleep, 200
 
-    ; Launch silently - pythonw.exe never creates a console window
-    Run, "%PythonExe%" "%ScriptPath%", %WorkingDir%, Hide
+    ; Launch silently - the renamed pythonw.exe copy never creates a console window either
+    Run, "%NamedExePath%" "%ScriptPath%", %WorkingDir%, Hide
     return true
 }
