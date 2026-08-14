@@ -53,6 +53,16 @@ DetectHiddenWindows, On
 RestartNamedPythonServer("GravityBridge", PATH_GRAVITY_BRIDGE "\proxy.py")
 RestartNamedPythonServer("CopyClip", PATH_COPYCLIP "\copyclip.py")
 
+; Auto-start Tailscale's tray app in the same burst as the scripts above, deterministically,
+; instead of racing 14+ other Startup-folder apps through Explorer with no ordering
+; guarantee. tailscaled itself (the actual VPN backend CopyClip depends on) is a Windows
+; service and starts independently of this either way -- this only affects how soon the
+; tray icon shows up. Guarded so a plain AHK reload doesn't relaunch an already-running copy.
+TailscaleExe := "C:\Program Files\Tailscale\tailscale-ipn.exe"
+Process, Exist, tailscale-ipn.exe
+if (!ErrorLevel && FileExist(TailscaleExe))
+    Run, %TailscaleExe%
+
 
 SetNumlockState, AlwaysOn ; Set Lock keys permanently
 ; SetScrollLockState, AlwaysOff ;Commented this as scrollLock key is now being used to suspend & terminate AHK Scripts
@@ -870,6 +880,29 @@ RestartNamedPythonServer(ProjectName, ScriptPath, WorkingDir:="", PythonExe:="")
     NamedExePath := NamedExeDir "\" NamedExeName
     if !FileExist(NamedExePath)
         FileCopy, %PythonExe%, %NamedExePath%
+
+    ; Skip the kill+relaunch entirely when a single, correctly-named instance is already
+    ; running and no stray/duplicate process exists. Killing and relaunching an
+    ; already-healthy daemon here serves no purpose except interrupting it -- for
+    ; CopyClip specifically, that resets its in-memory "have I seen this device before"
+    ; state and makes it silently drop the next clip as an unsynced baseline instead of
+    ; syncing it (see bugs/ in the CopyClip repo, restart-drops-baseline). Restart is
+    ; still correct, and happens below exactly as before, whenever this ISN'T true:
+    ; nothing running yet, a stray duplicate under a different name exists, or somehow
+    ; more than one correctly-named instance is running.
+    NamedCount := 0, StrayCount := 0
+    CountQuery := "SELECT ProcessId,Name,CommandLine FROM Win32_Process WHERE Name = '" NamedExeName "' OR Name LIKE 'python%'"
+    try {
+        for proc in ComObjGet("winmgmts:").ExecQuery(CountQuery)
+        {
+            if (proc.Name = NamedExeName)
+                NamedCount++
+            else if InStr(proc.CommandLine, FileName)
+                StrayCount++
+        }
+    }
+    if (NamedCount = 1 && StrayCount = 0)
+        return true
 
     ; Kill any existing instance of this script, however it was launched. Two match rules,
     ; either one is enough:
