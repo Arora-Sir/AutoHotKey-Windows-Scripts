@@ -51,6 +51,7 @@ Script_3=%a_scriptdir%\BasicTasks.ahk
 Script_4=%a_scriptdir%\PersonalKeywords.ahk
 Script_5=%a_scriptdir%\HotkeyHelp.ahk
 Script_6=%a_scriptdir%\VolumeOsd.ahk
+Script_7=%a_scriptdir%\Watchdog.ahk
 
 Files := []
 Files.Push(Script_1)
@@ -59,6 +60,7 @@ Files.Push(Script_3)
 Files.Push(Script_4)
 Files.Push(Script_5)
 Files.Push(Script_6)
+Files.Push(Script_7)
 
 ; Loop, 1
 ; {

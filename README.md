@@ -16,20 +16,56 @@
 
 ## To Create the EXE from Script (with Custom Icon)
 
-### Method 1: Using Ahk2Exe GUI
+Note: Task Scheduler's "AHK Startup Script" task launches the compiled `StartupScript.exe`,
+not the `.ahk` source directly — a source edit alone does not take effect until the exe is
+rebuilt using one of the methods below.
+
+### Method 1: Using the Build Script (Recommended)
+```powershell
+.\build_startup_exe.ps1
+```
+Rebuilds `StartupScript.exe` with the correct icon and base binary in one step, and
+auto-stops any already-running `StartupScript.exe` first (it locks itself while running,
+which otherwise makes the compiler fail with *"is still running, and needs to be
+unloaded"*). Doesn't relaunch it after building — prints the command to do that when ready.
+
+### Method 2: Using Ahk2Exe GUI
 1. Right-click any `.ahk` script (e.g. `StartupScript.ahk`) in File Explorer and select **Compile Script (GUI)** (or launch `C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe`).
 2. **Source**: Select your `.ahk` script file.
 3. **Destination**: Select the output `.exe` filename (e.g. `StartupScript.exe`).
 4. **Custom Icon (.ico)**: Click **Browse** and select your `.ico` file (e.g. `StartupScript.ico`).
-5. **Base Bin**: Select `Unicode 64-bit.bin` (for v1) or v2 binary base.
+5. **Base Bin**: Select the installed `AutoHotkeyU64.exe` (v1) — not a `.bin` file on this setup.
 6. **Compression (Optional)**: Set the UPX path to `upx-3.95-win64\upx.exe` for executable compression.
-7. Click **Convert**.
+7. Click **Convert**. Stop any already-running `StartupScript.exe` first (Task Manager), same reason as Method 1.
 
-### Method 2: Using Command Line
+### Method 3: Using Command Line
 Run the following command in PowerShell / CMD to compile with a custom icon:
 ```powershell
-& "C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe" /in "AllScripts\StartupScript.ahk" /out "AllScripts\StartupScript.exe" /icon "StartupScript.ico"
+& "C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe" /in "AllScripts\StartupScript.ahk" /out "AllScripts\StartupScript.exe" /icon "StartupScript.ico" /base "C:\Program Files\AutoHotkey\AutoHotkeyU64.exe" /silent verbose
 ```
+`/silent verbose` is required when running non-interactively (e.g. from a script) — without it, Ahk2Exe opens its GUI compiler window instead of compiling directly and does nothing.
+
+## Watchdog: auto-relaunch an app if it crashes or closes
+
+`AllScripts\Watchdog.ahk` (one of the scripts `StartupScript.ahk` launches at boot) polls
+a configurable list of apps and relaunches any that aren't running. Fully generic — it has
+no knowledge of which apps it watches; that lives entirely in `local_paths.ahk`, so real
+paths never end up in a tracked file.
+
+To watch an app, add one entry to `WATCHDOG_APPS` in `local_paths.ahk` (see
+`local_paths.ahk.example` for the placeholder form):
+```ahk
+WATCHDOG_APPS := [{name: "SomeApp.exe", path: "C:\Path\To\SomeApp.exe"}]
+```
+Multiple entries are just more array items. Nothing else needs to change — `Watchdog.ahk`
+itself never needs editing to add or remove a watched app.
+
+Reacts to *any* exit (crash or deliberate close) — there's no reliable way from outside
+the process to tell the two apart, so closing a watched app normally will bring it back
+within one poll interval (`CheckIntervalMs` in `Watchdog.ahk`, 10s by default). This
+replaced an earlier attempt using Task Scheduler's `RestartOnFailure` setting, which was
+measured to correctly detect a crash's failure exit code but never actually queue a
+restart — unreliable in practice, not just here.
 
 ## Working Hotkeys
 
