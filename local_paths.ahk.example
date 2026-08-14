@@ -10,3 +10,6 @@ PATH_GRAVITY_BRIDGE := "D:\Path\To\Your\Gravity-Bridge"
 PATH_COPYCLIP := "D:\Path\To\Your\CopyClip"
 PATH_PYTHON_EXE := "C:\Python314\pythonw.exe"
 
+; Watchdog: apps to auto-relaunch if they crash or close. Add one entry per app.
+WATCHDOG_APPS := [{name: "ExampleApp.exe", path: "D:\Path\To\Your\ExampleApp.exe"}]
+
