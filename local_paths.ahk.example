@@ -11,5 +11,14 @@ PATH_COPYCLIP := "D:\Path\To\Your\CopyClip"
 PATH_PYTHON_EXE := "C:\Python314\pythonw.exe"
 
 ; Watchdog: apps to auto-relaunch if they crash or close. Add one entry per app.
-WATCHDOG_APPS := [{name: "ExampleApp.exe", path: "D:\Path\To\Your\ExampleApp.exe"}]
+; Wrap path in quotes if arguments are included (e.g. """C:\Path\App.exe"" --arg").
+WATCHDOG_APPS := [ {name: "TrafficMonitor.exe", path: "D:\Path\To\TrafficMonitor.exe"}
+				 , {name: "ssn.exe",           path: "C:\Program Files (x86)\Simnet\Simple Sticky Notes\ssn.exe"}
+				 , {name: "Monica.exe",        path: "C:\Program Files\Monica\Monica.exe"}
+				 , {name: "GoogleDriveFS.exe", path: """C:\Program Files\Google\Drive File Stream\129.0.1.0\GoogleDriveFS.exe"" --startup_mode"}
+				 , {name: "Fences.exe",        path: """C:\Program Files (x86)\Stardock\Fences\Fences.exe"" /startup"} ]
 
+; Sefirah (Phone Link alternative) Sleep Auto-Reconnect
+; Space-separated "ip:port" list of wireless ADB targets (e.g. "192.168.1.50:5555" or "100.x.y.z:5555")
+PATH_ADB_EXE := "D:\Path\To\Your\adb.exe"
+SEFIRAH_ADB_TARGETS := "192.168.1.50:5555"
