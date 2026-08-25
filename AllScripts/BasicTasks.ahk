@@ -38,6 +38,10 @@
 ; Ctr+Y+T --> Open Youtube (In browser: maximum 0.15s second gap between Y & T)
 ; Ctr+Shift+V --> Browser to go to previous tab when taking a screenshot
 ; MouseLButton --> Double Click Functions (Taskbar Show/Hide; ) -->> Doing this with WindHawk Now
+; Ctr+Shift+WheelUp --> (VS Code) Increase Whole UI Zoom (+0.05)
+; Ctr+Shift+WheelDown --> (VS Code) Decrease Whole UI Zoom (-0.05)
+
+; [Sefirah] Phone Link alternative (paired with CopyClip Python server): On Windows wake-from-sleep, auto-reconnects Sefirah via WM_POWERBROADCAST hook
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
@@ -51,7 +55,7 @@ DetectHiddenWindows, On
 ; Named per-project so Task Manager's Name column shows "CopyClip_Python.exe" /
 ; "GravityBridge_Python.exe" instead of an anonymous "pythonw.exe" you can't tell apart.
 RestartNamedPythonServer("GravityBridge", PATH_GRAVITY_BRIDGE "\proxy.py")
-RestartNamedPythonServer("CopyClip", PATH_COPYCLIP "\copyclip.py")
+RestartNamedPythonServer("CopyClip", PATH_COPYCLIP "\copyclip.py") ; Can also use "Safirah"
 
 ; Auto-start Tailscale's tray app in the same burst as the scripts above, deterministically,
 ; instead of racing 14+ other Startup-folder apps through Explorer with no ordering
@@ -955,3 +959,106 @@ RestartNamedPythonServer(ProjectName, ScriptPath, WorkingDir:="", PythonExe:="")
     Run, "%NamedExePath%" "%ScriptPath%", %WorkingDir%, Hide
     return true
 }
+
+; =============================================================================
+; SEFIRAH - Phone Link Alternative (Sleep Auto-Reconnect)
+; [START: Sefirah WM_POWERBROADCAST hook]
+;
+; On Windows wake-from-sleep, Sefirah's TCP socket on port 5150 is killed by the
+; OS and the Android client does not auto-reconnect. This block registers a Win32
+; WM_POWERBROADCAST (0x0218) listener that fires a one-shot timer 4 seconds after
+; wake, then sends a foreground-service CONNECT intent via ADB to every device
+; listed in SEFIRAH_ADB_TARGETS (defined in local_paths.ahk -- never hardcoded).
+;
+; Pairs with the CopyClip Python server which handles clipboard / notification sync.
+; Together they replace Microsoft Phone Link on this machine.
+;
+; Dependencies (all from local_paths.ahk):
+;   PATH_ADB_EXE          - full path to adb.exe
+;   SEFIRAH_ADB_TARGETS   - space-separated "ip:port" list of Android targets
+; =============================================================================
+
+OnMessage(0x0218, "Sefirah_WM_POWERBROADCAST")
+
+; WM_POWERBROADCAST handler - must stay lightweight; called on the AHK message pump.
+;   wParam 18 (0x12) = PBT_APMRESUMEAUTOMATIC  (any system wake, incl. Modern Standby)
+;   wParam  7 (0x07) = PBT_APMRESUMESUSPEND    (user-initiated resume after suspend)
+Sefirah_WM_POWERBROADCAST(wParam, lParam) {
+    if (wParam = 18 || wParam = 7)
+        SetTimer, Sefirah_DoReconnect, -4000  ; one-shot, 4 s after wake
+}
+
+; Fires once, ~4 s after wake. Iterates over every target in SEFIRAH_ADB_TARGETS
+; and issues a foreground-service CONNECT intent to Sefirah's NetworkService.
+Sefirah_DoReconnect() {
+    global PATH_ADB_EXE, SEFIRAH_ADB_TARGETS
+
+    ; Guard: bail silently when local_paths.ahk is absent or variables not set
+    if (!PATH_ADB_EXE || !SEFIRAH_ADB_TARGETS)
+        return
+
+    ; %A_Space% is the correct AHK v1 delimiter token for Loop Parse
+    Loop, Parse, SEFIRAH_ADB_TARGETS, %A_Space%
+    {
+        target := Trim(A_LoopField)
+        if (target = "")
+            continue
+        ; Ensure wireless ADB link is connected, then trigger Sefirah foreground-service CONNECT
+        Run, %ComSpec% /c ""%PATH_ADB_EXE%" connect %target% && "%PATH_ADB_EXE%" -s %target% shell am start-foreground-service -a CONNECT -n com.castle.sefirah/sefirah.network.NetworkService",, Hide
+    }
+}
+
+; [END: Sefirah WM_POWERBROADCAST hook]
+
+
+; =========================================================================
+; [START: VS Code Fine-Grained Whole UI Zoom Hook]
+; Hotkey: Ctrl + Shift + MouseWheelUp / MouseWheelDown
+; Target: Exclusively active when VS Code (ahk_exe Code.exe) is in the foreground
+; Behavior: Smoothly increments/decrements window.zoomLevel in settings.json by 0.05
+; Safety: Clamped between -2.0 and 5.0, non-blocking HUD tooltip, isolated to Code.exe
+; =========================================================================
+#IfWinActive ahk_exe Code.exe
+; Ctr+Shift+WheelUp (VS Code) Increase Whole UI Zoom
+^+WheelUp::AdjustVsCodeZoom(0.05) ;{ <-- (VS Code) Increase Whole UI Zoom (+0.05)
+; Ctr+Shift+WheelDown (VS Code) Decrease Whole UI Zoom
+^+WheelDown::AdjustVsCodeZoom(-0.05) ;{ <-- (VS Code) Decrease Whole UI Zoom (-0.05)
+#If
+
+AdjustVsCodeZoom(delta) {
+    settingsFile := A_AppData "\Code\User\settings.json"
+    if !FileExist(settingsFile)
+        return
+
+    FileRead, sContent, %settingsFile%
+    q := Chr(34)
+    pattern := q . "window\.zoomLevel" . q . "\s*:\s*(-?\d+(\.\d+)?)"
+    if RegExMatch(sContent, pattern, match) {
+        currentZoom := Round(match1 + delta, 2)
+        ; Clamp zoom level between -2.0 (minimum) and 5.0 (maximum) for UI safety
+        if (currentZoom < -2.0)
+            currentZoom := -2.0
+        if (currentZoom > 5.0)
+            currentZoom := 5.0
+
+        rep := q . "window.zoomLevel" . q . ": " . currentZoom
+        newContent := RegExReplace(sContent, pattern, rep)
+        
+        File := FileOpen(settingsFile, "w", "UTF-8")
+        if IsObject(File) {
+            File.Write(newContent)
+            File.Close()
+        }
+
+        ; Non-intrusive HUD tooltip showing current exact scale factor
+        ToolTip, % "VS Code Whole UI Zoom: " . currentZoom
+        SetTimer, RemoveVsCodeZoomToolTip, -800
+    }
+}
+
+RemoveVsCodeZoomToolTip:
+    ToolTip
+return
+; [END: VS Code Fine-Grained Whole UI Zoom Hook]
+
+

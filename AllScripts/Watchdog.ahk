@@ -1,8 +1,9 @@
 #Requires AutoHotkey v1.1
 #NoEnv
+#Persistent
 SendMode Input
 SetWorkingDir %A_ScriptDir%
-#Include *i ..\local_paths.ahk ; Include local custom paths if present (ignored by Git)
+#Include *i %A_ScriptDir%\..\local_paths.ahk ; Include local custom paths if present (ignored by Git)
 #SingleInstance force
 DetectHiddenWindows, On
 
@@ -30,9 +31,22 @@ Loop
     {
         if !(app.name && app.path) ; skip malformed entries instead of erroring on blank Run
             continue
-        Process, Exist, % app.name
+        appName := app.name
+        Process, Exist, %appName%
         if !ErrorLevel
-            Run, % app.path
+        {
+            cmd := app.path
+            exeOnly := cmd
+            if RegExMatch(cmd, "^""([^""]+)""", match)
+                exeOnly := match1
+            else if RegExMatch(cmd, "^(.*?\.exe)(?:\s|$)", match)
+                exeOnly := match1
+            SplitPath, exeOnly, , appDir
+
+            if (SubStr(cmd, 1, 1) != """" && InStr(cmd, " "))
+                cmd := """" cmd """"
+            try Run, % cmd, % appDir
+        }
     }
     Sleep, % CheckIntervalMs
 }
