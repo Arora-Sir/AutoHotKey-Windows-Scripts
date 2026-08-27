@@ -6,11 +6,11 @@
 $ErrorActionPreference = "Stop"
 
 $root     = $PSScriptRoot
-$compiler = "C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe"
+$compiler = Join-Path $env:ProgramFiles "AutoHotkey\Compiler\Ahk2Exe.exe"
 $src      = Join-Path $root "AllScripts\StartupScript.ahk"
 $out      = Join-Path $root "AllScripts\StartupScript.exe"
 $icon     = Join-Path $root "StartupScript.ico"
-$base     = "C:\Program Files\AutoHotkey\AutoHotkeyU64.exe"
+$base     = Join-Path $env:ProgramFiles "AutoHotkey\AutoHotkeyU64.exe"
 
 if (-not (Test-Path $compiler)) { throw "Ahk2Exe.exe not found at $compiler -- is AutoHotkey installed?" }
 if (-not (Test-Path $src))      { throw "Source script not found: $src" }

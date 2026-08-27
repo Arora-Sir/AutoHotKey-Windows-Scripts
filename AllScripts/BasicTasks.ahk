@@ -41,32 +41,13 @@
 ; Ctr+Shift+WheelUp --> (VS Code) Increase Whole UI Zoom (+0.05)
 ; Ctr+Shift+WheelDown --> (VS Code) Decrease Whole UI Zoom (-0.05)
 
-; [Sefirah] Phone Link alternative (paired with CopyClip Python server): On Windows wake-from-sleep, auto-reconnects Sefirah via WM_POWERBROADCAST hook
-
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
-#Include *i ..\local_paths.ahk ; Include local custom paths if present (ignored by Git)
+#Include *i local_paths.ahk ; Include local custom paths if present (ignored by Git)
 EnvGet, UserProfile, USERPROFILE ; Get Windows UserProfile directory (AHK v1 compatibility)
 #SingleInstance force ; Ensures that only the last executed instance of script is running
 DetectHiddenWindows, On
-
-; Auto-start / reload GravityBridge Proxy Server & CopyClip
-; Named per-project so Task Manager's Name column shows "CopyClip_Python.exe" /
-; "GravityBridge_Python.exe" instead of an anonymous "pythonw.exe" you can't tell apart.
-RestartNamedPythonServer("GravityBridge", PATH_GRAVITY_BRIDGE "\proxy.py")
-RestartNamedPythonServer("CopyClip", PATH_COPYCLIP "\copyclip.py") ; Can also use "Safirah"
-
-; Auto-start Tailscale's tray app in the same burst as the scripts above, deterministically,
-; instead of racing 14+ other Startup-folder apps through Explorer with no ordering
-; guarantee. tailscaled itself (the actual VPN backend CopyClip depends on) is a Windows
-; service and starts independently of this either way -- this only affects how soon the
-; tray icon shows up. Guarded so a plain AHK reload doesn't relaunch an already-running copy.
-TailscaleExe := "C:\Program Files\Tailscale\tailscale-ipn.exe"
-Process, Exist, tailscale-ipn.exe
-if (!ErrorLevel && FileExist(TailscaleExe))
-    Run, %TailscaleExe%
-
 
 SetNumlockState, AlwaysOn ; Set Lock keys permanently
 ; SetScrollLockState, AlwaysOff ;Commented this as scrollLock key is now being used to suspend & terminate AHK Scripts
@@ -878,138 +859,6 @@ $^J::CloseBrowserBottomDownloadsBar() ;{ <-- Close browser downloads bar at bott
 
 ; #LAlt::^#Right ; switch to next desktop with Windows key + Left Alt key -> Original is Win + Ctr + Right
 ; #LCtrl::^#Left ; switch to next desktop with Windows key + Left CTRL key -> Original is Win r+ Ctr + Left
-
-; Launches a Python script under a per-project renamed copy of pythonw.exe, so Task
-; Manager's Name column shows e.g. "CopyClip_Python.exe" instead of an anonymous
-; "pythonw.exe" indistinguishable from every other Python process on the machine.
-;
-; Verified before wiring this in: a bare copy of pythonw.exe, renamed and placed in an
-; arbitrary directory (no DLLs alongside it), runs correctly -- this Python install
-; resolves its interpreter DLL and stdlib via PATH/registry, not relative to the exe's own
-; location, so the renamed copy does not need to live next to python3XX.dll.
-;
-; The copy is cached under AllScripts\PythonExes\ and only made once; it is not
-; auto-refreshed on a Python upgrade. Delete that folder (or a project's one *_Python.exe)
-; to force a fresh copy on the next call.
-RestartNamedPythonServer(ProjectName, ScriptPath, WorkingDir:="", PythonExe:="") {
-    global PATH_PYTHON_EXE
-
-    ScriptPath := Trim(ScriptPath, """")
-    if (!ScriptPath || !FileExist(ScriptPath))
-        return false
-
-    SplitPath, ScriptPath, FileName, Directory
-    if (!WorkingDir)
-        WorkingDir := Directory
-    if (!PythonExe)
-        PythonExe := PATH_PYTHON_EXE ? PATH_PYTHON_EXE : "pythonw.exe"
-    PythonExe := Trim(PythonExe, """")
-
-    NamedExeDir := A_ScriptDir "\PythonExes"
-    if !FileExist(NamedExeDir)
-        FileCreateDir, %NamedExeDir%
-    NamedExeName := ProjectName "_Python.exe"
-    NamedExePath := NamedExeDir "\" NamedExeName
-    if !FileExist(NamedExePath)
-        FileCopy, %PythonExe%, %NamedExePath%
-
-    ; Skip the kill+relaunch entirely when a single, correctly-named instance is already
-    ; running and no stray/duplicate process exists. Killing and relaunching an
-    ; already-healthy daemon here serves no purpose except interrupting it -- for
-    ; CopyClip specifically, that resets its in-memory "have I seen this device before"
-    ; state and makes it silently drop the next clip as an unsynced baseline instead of
-    ; syncing it (see bugs/ in the CopyClip repo, restart-drops-baseline). Restart is
-    ; still correct, and happens below exactly as before, whenever this ISN'T true:
-    ; nothing running yet, a stray duplicate under a different name exists, or somehow
-    ; more than one correctly-named instance is running.
-    NamedCount := 0, StrayCount := 0
-    CountQuery := "SELECT ProcessId,Name,CommandLine FROM Win32_Process WHERE Name = '" NamedExeName "' OR Name LIKE 'python%'"
-    try {
-        for proc in ComObjGet("winmgmts:").ExecQuery(CountQuery)
-        {
-            if (proc.Name = NamedExeName)
-                NamedCount++
-            else if InStr(proc.CommandLine, FileName)
-                StrayCount++
-        }
-    }
-    if (NamedCount = 1 && StrayCount = 0)
-        return true
-
-    ; Kill any existing instance of this script, however it was launched. Two match rules,
-    ; either one is enough:
-    ;   1. Name = the renamed exe -- catches a previous run under this same named scheme.
-    ;   2. A generic 'python%' process whose CommandLine names this exact script file --
-    ;      catches anything still running under the OLD generic pythonw.exe name (this
-    ;      migration's own leftover), and any other way this script might get launched
-    ;      (Desktop shortcut, a bare "python script.py", etc. -- see bugs/BUG-003 in the
-    ;      CopyClip repo for why relying on only one launch path here is exactly how a
-    ;      duplicate daemon slips in). Rule 1 alone would miss anything not already
-    ;      launched by this function, which is precisely the gap that let a stray old
-    ;      pythonw.exe survive a reload during testing and run alongside the new one.
-    KillQuery := "SELECT ProcessId,Name,CommandLine FROM Win32_Process WHERE Name = '" NamedExeName "' OR Name LIKE 'python%'"
-    try {
-        for proc in ComObjGet("winmgmts:").ExecQuery(KillQuery)
-            if (proc.Name = NamedExeName) || InStr(proc.CommandLine, FileName)
-                Process, Close, % proc.ProcessId
-    }
-    Sleep, 200
-
-    ; Launch silently - the renamed pythonw.exe copy never creates a console window either
-    Run, "%NamedExePath%" "%ScriptPath%", %WorkingDir%, Hide
-    return true
-}
-
-; =============================================================================
-; SEFIRAH - Phone Link Alternative (Sleep Auto-Reconnect)
-; [START: Sefirah WM_POWERBROADCAST hook]
-;
-; On Windows wake-from-sleep, Sefirah's TCP socket on port 5150 is killed by the
-; OS and the Android client does not auto-reconnect. This block registers a Win32
-; WM_POWERBROADCAST (0x0218) listener that fires a one-shot timer 4 seconds after
-; wake, then sends a foreground-service CONNECT intent via ADB to every device
-; listed in SEFIRAH_ADB_TARGETS (defined in local_paths.ahk -- never hardcoded).
-;
-; Pairs with the CopyClip Python server which handles clipboard / notification sync.
-; Together they replace Microsoft Phone Link on this machine.
-;
-; Dependencies (all from local_paths.ahk):
-;   PATH_ADB_EXE          - full path to adb.exe
-;   SEFIRAH_ADB_TARGETS   - space-separated "ip:port" list of Android targets
-; =============================================================================
-
-OnMessage(0x0218, "Sefirah_WM_POWERBROADCAST")
-
-; WM_POWERBROADCAST handler - must stay lightweight; called on the AHK message pump.
-;   wParam 18 (0x12) = PBT_APMRESUMEAUTOMATIC  (any system wake, incl. Modern Standby)
-;   wParam  7 (0x07) = PBT_APMRESUMESUSPEND    (user-initiated resume after suspend)
-Sefirah_WM_POWERBROADCAST(wParam, lParam) {
-    if (wParam = 18 || wParam = 7)
-        SetTimer, Sefirah_DoReconnect, -4000  ; one-shot, 4 s after wake
-}
-
-; Fires once, ~4 s after wake. Iterates over every target in SEFIRAH_ADB_TARGETS
-; and issues a foreground-service CONNECT intent to Sefirah's NetworkService.
-Sefirah_DoReconnect() {
-    global PATH_ADB_EXE, SEFIRAH_ADB_TARGETS
-
-    ; Guard: bail silently when local_paths.ahk is absent or variables not set
-    if (!PATH_ADB_EXE || !SEFIRAH_ADB_TARGETS)
-        return
-
-    ; %A_Space% is the correct AHK v1 delimiter token for Loop Parse
-    Loop, Parse, SEFIRAH_ADB_TARGETS, %A_Space%
-    {
-        target := Trim(A_LoopField)
-        if (target = "")
-            continue
-        ; Ensure wireless ADB link is connected, then trigger Sefirah foreground-service CONNECT
-        Run, %ComSpec% /c ""%PATH_ADB_EXE%" connect %target% && "%PATH_ADB_EXE%" -s %target% shell am start-foreground-service -a CONNECT -n com.castle.sefirah/sefirah.network.NetworkService",, Hide
-    }
-}
-
-; [END: Sefirah WM_POWERBROADCAST hook]
-
 
 ; =========================================================================
 ; [START: VS Code Fine-Grained Whole UI Zoom Hook]

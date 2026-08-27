@@ -3,7 +3,7 @@
 #Persistent
 SendMode Input
 SetWorkingDir %A_ScriptDir%
-#Include *i %A_ScriptDir%\..\local_paths.ahk ; Include local custom paths if present (ignored by Git)
+#Include *i %A_ScriptDir%\local_paths.ahk ; Include local custom paths if present (ignored by Git)
 #SingleInstance force
 DetectHiddenWindows, On
 
@@ -20,6 +20,10 @@ DetectHiddenWindows, On
 ; not stay resident reliably (process observed exiting right after auto-execute completed,
 ; timer never fired) -- a real blocking loop, matching the pattern the original
 ; TrafficMonitorWatchdog.ahk used, was confirmed to actually stay running.
+;
+; This whole polling approach replaced an earlier attempt using Task Scheduler's own
+; RestartOnFailure action: it correctly detected a crash's failure exit code but never
+; actually queued the restart -- unreliable in practice, not just here.
 CheckIntervalMs := 10000
 
 if !IsObject(WATCHDOG_APPS)

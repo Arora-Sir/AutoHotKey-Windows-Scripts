@@ -1,0 +1,39 @@
+; Example Local Machine Paths Configuration
+; Copy or rename this file to "local_paths.ahk" in the AllScripts folder.
+; "local_paths.ahk" is automatically ignored by Git to protect your privacy and personal folder locations.
+;
+; OVERVIEW: PATH_* vars for personal folders/tools, WATCHDOG_APPS (apps Watchdog.ahk
+; auto-relaunches), and the Sefirah section (SEFIRAH_ADB_TARGETS / SEFIRAH_PRIORITY_TARGET
+; for phone/tablet reconnect + priority). Detail lives in the comment above each group below.
+#Persistent ; Lets this run standalone via StartupScript.ahk's tray entry -- View Variables/Edit/Reload all need a live process, not a script that auto-exits the instant it's loaded
+
+PATH_JAVA_COURSE := "D:\Path\To\Your\Java\Course"
+PATH_IP_ROTATOR := "D:\Path\To\Your\Scripts\ROTATE.bat"
+
+; GravityBridge Proxy Server Paths
+PATH_GRAVITY_BRIDGE := "D:\Path\To\Your\Gravity-Bridge"
+PATH_COPYCLIP := "D:\Path\To\Your\CopyClip"
+PATH_PYTHON_EXE := "C:\Python314\pythonw.exe"
+
+; Google Drive: resolve the versioned install path from its own Run-key registry value (kept current by Google's installer/updater on every version bump) instead of hardcoding a version number, which goes stale the moment Drive auto-updates.
+GoogleDrivePath := ""
+RegRead, GoogleDrivePath, HKCU, Software\Microsoft\Windows\CurrentVersion\Run, GoogleDriveFS
+if (ErrorLevel || !GoogleDrivePath)
+	GoogleDrivePath := """C:\Program Files\Google\Drive File Stream\<version>\GoogleDriveFS.exe"" --startup_mode" ; fallback only if the Run key is ever missing -- check your own installed version folder
+
+; Watchdog: apps to auto-relaunch if they crash or close. Add one entry per app.
+; Wrap path in quotes if arguments are included (e.g. """C:\Path\App.exe"" --arg").
+WATCHDOG_APPS := [ {name: "TrafficMonitor.exe", path: "D:\Path\To\TrafficMonitor.exe"}
+				 , {name: "ssn.exe",           path: "C:\Program Files (x86)\Simnet\Simple Sticky Notes\ssn.exe"}
+				 , {name: "Monica.exe",        path: "C:\Program Files\Monica\Monica.exe"}
+				 , {name: "GoogleDriveFS.exe", path: GoogleDrivePath}
+				 , {name: "Fences.exe",        path: """C:\Program Files (x86)\Stardock\Fences\Fences.exe"" /startup"}
+				 , {name: "GravityBridge_Python.exe", path: """D:\Path\To\Your\AllScripts\PythonExes\GravityBridge_Python.exe"" ""D:\Path\To\Your\Gravity-Bridge\proxy.py"""}
+				 , {name: "CopyClip_Python.exe",      path: """D:\Path\To\Your\AllScripts\PythonExes\CopyClip_Python.exe"" ""D:\Path\To\Your\CopyClip\copyclip.py"""} ]
+
+; Sefirah (Phone Link alternative) Sleep Auto-Reconnect + Phone Priority
+; SEFIRAH_ADB_TARGETS     - space-separated "ip:port" of every device to reconnect on wake
+; SEFIRAH_PRIORITY_TARGET - the one device that should win Sefirah's ActiveDevice slot whenever it's reachable -- must exactly match one entry in SEFIRAH_ADB_TARGETS above
+PATH_ADB_EXE := "D:\Path\To\Your\adb.exe"
+SEFIRAH_ADB_TARGETS := "192.168.1.50:5555 192.168.1.60:5555"
+SEFIRAH_PRIORITY_TARGET := "192.168.1.50:5555"

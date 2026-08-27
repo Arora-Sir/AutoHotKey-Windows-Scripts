@@ -43,6 +43,9 @@ DetectHiddenWindows, On
 ; "/noload" indicates to not load the script initially but add to Load submenu
 ; "/v1" or no version flag indicates to run with AutoHotkey v1 exe
 ; "/v2" indicates to run with AutoHotkey v2 exe
+; Known limitation: a script run this way doesn't behave correctly in the tray submenu below
+; (Pause/Suspend/Reload/View Lines etc. PostMessage v1-specific tray command IDs to the target
+; process), which is why every script in this project stays on v1.1 for now instead of using /v2.
 
 ; Additional Startup Files and Folders Can Be Added Here
 Script_1=%a_scriptdir%\Brightness.ahk
@@ -52,6 +55,8 @@ Script_4=%a_scriptdir%\PersonalKeywords.ahk
 Script_5=%a_scriptdir%\HotkeyHelp.ahk
 Script_6=%a_scriptdir%\VolumeOsd.ahk
 Script_7=%a_scriptdir%\Watchdog.ahk
+Script_8=%a_scriptdir%\BackgroundAutomations.ahk
+Script_9=%a_scriptdir%\local_paths.ahk
 
 Files := []
 Files.Push(Script_1)
@@ -61,6 +66,8 @@ Files.Push(Script_4)
 Files.Push(Script_5)
 Files.Push(Script_6)
 Files.Push(Script_7)
+Files.Push(Script_8)
+Files.Push(Script_9)
 
 ; Loop, 1
 ; {
