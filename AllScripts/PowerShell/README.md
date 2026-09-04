@@ -9,16 +9,17 @@ Automated, commercial-grade storage engine for mounting, managing, and browsing 
 Windows 11 cannot natively read or mount `ext4` filesystems without third-party drivers. This engine bridges the gap by leveraging Hyper-V block device attachment (`wsl --mount`), guest ext4 optimization (`noatime,nodiratime,errors=remount-ro`), and loopback Direct SMB (port 445), orchestrated by event-driven AutoHotkey monitoring.
 
 ```
-                              STORAGE LIFECYCLE ENGINE
-+-------------------------+      +---------------------------+      +---------------------------+
-|     USB PLUG EVENT      | ---> |   HARDWARE BUS DETECT     | ---> |    WSL ATTACH & KEEP-ALIVE|
-| (DBT_DEVNODES_CHANGED)  |      |   (22ms in-memory query)  |      | (noatime, nodiratime, fsck|
-+-------------------------+      +---------------------------+      +---------------------------+
-                                                                                  |
-+-------------------------+      +---------------------------+                    v
-|    SAFE EJECT / PULL    | <--- |  EXPLORER AUTO-REDIRECT   | <--- |   PURE DIRECT SMB 445     |
-| (Lazy umount & flush)   |      |  (Redirect to "This PC")  |      |  (net use P: mapped OK)   |
-+-------------------------+      +---------------------------+      +---------------------------+
+                                       STORAGE LIFECYCLE ENGINE
++----------------------------+      +----------------------------+      +----------------------------+
+|       USB PLUG EVENT       | ---> |    HARDWARE BUS DETECT     | ---> |  WSL ATTACH & KEEP-ALIVE   |
+|   (DBT_DEVNODES_CHANGED)   |      |   (22ms in-memory query)   |      | (noatime, nodiratime, fsck)|
++----------------------------+      +----------------------------+      +----------------------------+
+                                                                                      |
+                                                                                      v
++----------------------------+      +----------------------------+      +----------------------------+
+|     SAFE EJECT / PULL      | <--- |   EXPLORER AUTO-REDIRECT   | <--- |    PURE DIRECT SMB 445     |
+|   (Lazy umount & flush)    |      |   (Redirect to "This PC")  |      |   (net use P: mapped OK)   |
++----------------------------+      +----------------------------+      +----------------------------+
 ```
 
 ---
@@ -168,21 +169,21 @@ sudo service smbd restart
 
 ## 📁 File Manifest
 
-| File                          | Type            | Purpose                                                                                         |
-| :---------------------------- | :-------------- | :---------------------------------------------------------------------------------------------- |
-| `ssd_config.json.example`     | Git Tracked     | Open-source JSON configuration template.                                                        |
-| `ssd_config.json`             | Gitignored      | Active workstation configuration (credentials, hardware filters).                               |
-| `ssd_common.ps1`              | Helper Script   | Shared module providing `Get-SSDConfig` and `Find-TargetSSD`.                                   |
-| `mount_wsl_ssd.ps1`           | Orchestrator    | Attaches disk, suppresses RAW drive letter, probes port 445, maps drive, and launches Explorer. |
+| File                          | Type            | Purpose                                                                                                          |
+| :---------------------------- | :-------------- | :--------------------------------------------------------------------------------------------------------------- |
+| `ssd_config.json.example`     | Git Tracked     | Open-source JSON configuration template.                                                                         |
+| `ssd_config.json`             | Gitignored      | Active workstation configuration (credentials, hardware filters).                                                |
+| `ssd_common.ps1`              | Helper Script   | Shared module providing `Get-SSDConfig` and `Find-TargetSSD`.                                                    |
+| `mount_wsl_ssd.ps1`           | Orchestrator    | Attaches disk, suppresses RAW drive letter, probes port 445, maps drive, and launches Explorer.                  |
 | `unmount_wsl_ssd.ps1`         | Teardown        | Redirects open Explorer tabs to "This PC", unmaps drive, flushes WSL attachments, and executes PnP safe removal. |
-| `wsl_mount_elevated.ps1`      | Elevated Action | Helper executed by `WSL_Mount_PixelSSD` Task Scheduler action.                                  |
-| `wsl_unmount_elevated.ps1`    | Elevated Action | Helper executed by `WSL_Unmount_PixelSSD` Task Scheduler action (signals completion via flag).  |
-| `setup_scheduled_tasks.ps1`   | Installer       | Registers elevated tasks in Task Scheduler without quote bugs.                                  |
-| `Install_WSL_Mount_Tasks.bat` | Batch Helper    | Self-elevating batch installer for one-click setup.                                             |
-| `mount_pixel_ssd.sh`          | Bash Script     | Guest mount helper (`noatime,nodiratime,errors=remount-ro`) with `fsck.ext4 -p`.                |
-| `run_silent.exe`              | GUI Launcher    | Native Windows GUI runner (`CREATE_NO_WINDOW`) for zero-focus background PowerShell execution.  |
-| `SilentLauncher.cs`           | C# Source       | Source code for `run_silent.exe` preserving raw command line quotes.                            |
-| `ARCH_AND_GOTCHAS.md`         | Architecture    | Deep-dive documentation on UASP SCSI, kernel SMB hangs, UTF-16LE, Hyper-V faults, and safe eject. |
+| `wsl_mount_elevated.ps1`      | Elevated Action | Helper executed by `WSL_Mount_PixelSSD` Task Scheduler action.                                                   |
+| `wsl_unmount_elevated.ps1`    | Elevated Action | Helper executed by `WSL_Unmount_PixelSSD` Task Scheduler action (signals completion via flag).                   |
+| `setup_scheduled_tasks.ps1`   | Installer       | Registers elevated tasks in Task Scheduler without quote bugs.                                                   |
+| `Install_WSL_Mount_Tasks.bat` | Batch Helper    | Self-elevating batch installer for one-click setup.                                                              |
+| `mount_pixel_ssd.sh`          | Bash Script     | Guest mount helper (`noatime,nodiratime,errors=remount-ro`) with `fsck.ext4 -p`.                                 |
+| `run_silent.exe`              | GUI Launcher    | Native Windows GUI runner (`CREATE_NO_WINDOW`) for zero-focus background PowerShell execution.                   |
+| `SilentLauncher.cs`           | C# Source       | Source code for `run_silent.exe` preserving raw command line quotes.                                             |
+| `ARCH_AND_GOTCHAS.md`         | Architecture    | Deep-dive documentation on UASP SCSI, kernel SMB hangs, UTF-16LE, Hyper-V faults, and safe eject.                |
 
 ---
 
@@ -237,8 +238,8 @@ When you press `Win+Alt+U` (or right-click the tray icon and choose "Eject Pixel
 
 When clicking the Windows taskbar "Safely Remove Hardware" icon instead of using the hotkey:
 
-1. Windows initially attempts removal, finds Hyper-V's open SCSI handle, and begins to display the modal: *"Problem Ejecting USB Attached SCSI (UAS) Mass Storage Device: This device is currently in use."*
+1. Windows initially attempts removal, finds Hyper-V's open SCSI handle, and begins to display the modal: _"Problem Ejecting USB Attached SCSI (UAS) Mass Storage Device: This device is currently in use."_
 2. The `AutoResolveEjectConflict` routine in `BackgroundAutomations.ahk` intercepts the `#32770` dialog within 400ms and closes it via `WinClose`.
-3. Displays a non-intrusive status tooltip: *"<Drive Label> in use by WSL. Safely unmounting and ejecting..."* (default: *"Linux Backup SSD in use by WSL..."*).
+3. Displays a non-intrusive status tooltip: _"<Drive Label> in use by WSL. Safely unmounting and ejecting..."_ (default: _"Linux Backup SSD in use by WSL..."_).
 4. Invokes `unmount_wsl_ssd.ps1`, which unmounts Ubuntu, detaches from WSL, synchronizes via completion flag, and invokes `CM_Request_Device_EjectW`.
 5. Safe removal completes on that **single action**, and Windows displays its native "Safe to Remove Hardware" toast.
