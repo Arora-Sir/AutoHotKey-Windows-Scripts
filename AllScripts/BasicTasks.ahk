@@ -34,8 +34,9 @@
 ; Ctr+G --> Search the selected/clipboard text
 ; Ctr+C --> OneNote copy text instead of SS of some text
 ; Ctr+T+T --> Open new Tab from anywhere (In browser)
-; Ctr+J+J --> Close downloads bar at bottom (In browser)
+; Ctr+J+J --> (Chrome) Close downloads bar at bottom
 ; Ctr+Y+T --> Open Youtube (In browser: maximum 0.15s second gap between Y & T)
+; Win+X+X --> Sleep Laptop
 ; Ctr+Shift+V --> Browser to go to previous tab when taking a screenshot
 ; MouseLButton --> Double Click Functions (Taskbar Show/Hide; ) -->> Doing this with WindHawk Now
 ; Ctr+Shift+WheelUp --> (VS Code) Increase Whole UI Zoom (+0.05)
@@ -192,6 +193,7 @@ DoubleTapCapsLock()
     return
 }
 
+; Close legacy bottom downloads shelf in Chrome (Brave uses a modern top toolbar popup, so this issue only applies to Chrome)
 CloseBrowserBottomDownloadsBar()
 {
     if (WinActive("ahk_exe chrome.exe") || WinActive("ahk_exe brave.exe"))
@@ -216,6 +218,28 @@ ClearNotificaitons()
     if WinActive("ahk_exe Shellexperiencehost.exe")
     {
         Send {Tab} {Space} {Esc}
+    }
+    return
+}
+
+SleepLaptop()
+{
+    KeyWait, x
+    KeyWait, x, D T0.30
+    if (ErrorLevel)
+    {
+        ; Single tap Win+X: Open standard Windows Quick Link menu
+        SendInput, {LWin down}x{LWin up}
+    }
+    else
+    {
+        ; Double tap Win+X+X: Open menu and invoke Sleep (Win+X -> u -> s)
+        SendInput, {LWin down}x{LWin up}
+        Sleep, 150
+        SendInput, {LWin up}{RWin up}
+        SendInput, u
+        Sleep, 100
+        SendInput, s
     }
     return
 }
@@ -835,8 +859,8 @@ $!D:: OpenChatGPT() ;{ <-- Open ChatGPT
 *CapsLock::DoubleTapCapsLock() ;{ <-- Double Tap To Activate/Deactivate
 
 ; #IfWinActive ahk_class Shell_TrayWnd
-; Ctr+J+J in browser to close downloads bar at bottom
-$^J::CloseBrowserBottomDownloadsBar() ;{ <-- Close browser downloads bar at bottom
+; Ctr+J+J (Chrome) Close downloads bar at bottom
+$^J::CloseBrowserBottomDownloadsBar() ;{ <-- (Chrome) Close browser downloads bar at bottom
 ; #IfWinActive
 
 ; Ctr+Y+T in browser to open Youtube
@@ -847,6 +871,9 @@ $^J::CloseBrowserBottomDownloadsBar() ;{ <-- Close browser downloads bar at bott
 
 ; Win+Alt+X --> (Script) Reconnect Cloudfare Network
 #!x::Run "%PATH_IP_ROTATOR%" ;{ <-- Reconnect Cloudfare Network
+
+; Win+X+X --> Sleep Laptop
+$#x:: SleepLaptop() ;{ <-- Sleep Laptop (Win+X+X)
 
 ;Turn Caps Lock into a Shift key
 ; Capslock::Shift
@@ -910,4 +937,93 @@ RemoveVsCodeZoomToolTip:
 return
 ; [END: VS Code Fine-Grained Whole UI Zoom Hook]
 
+; [START: WSL ext4 Backup SSD Management Hotkeys]
+; Manual hotkeys for mounting and unmounting the ext4 backup SSD
+; Unattended background auto-mount on boot/plug lives in BackgroundAutomations.ahk
+; Hotkeys:
+;   Win+Alt+M -> Mount ext4 SSD & Open in Explorer
+;   Win+Alt+U -> Unmount ext4 SSD safely
 
+#!m::MountExt4Ssd(true)   ; Win+Alt+M -> Manual Mount & Open
+#!u::UnmountExt4Ssd(true) ; Win+Alt+U -> Manual Unmount
+
+MountExt4Ssd(openExplorer := false) {
+    global EXT4_SSD_LABEL
+    if FileExist(A_Temp "\mount_wsl_ssd.lock") || FileExist(A_Temp "\unmount_wsl_ssd.lock")
+        return
+
+    ejectedFlag := A_Temp "\pixel_ssd_ejected.flag"
+    if FileExist(ejectedFlag)
+        FileDelete, %ejectedFlag%
+
+    static lastMountTick := 0
+    now := A_TickCount
+    if (now - lastMountTick < 6000)
+        return
+    lastMountTick := now
+
+    psScript := A_ScriptDir "\PowerShell\mount_wsl_ssd.ps1"
+    if !FileExist(psScript)
+        return
+    args := openExplorer ? "-OpenExplorer" : ""
+    RunSilentPowerShell(psScript, args)
+
+    if (openExplorer) {
+        label := EXT4_SSD_LABEL ? EXT4_SSD_LABEL : "Linux Backup SSD"
+        ToolTip, % "Opening " label "..."
+        SetTimer, RemoveSsdToolTip, -1500
+    }
+}
+
+UnmountExt4Ssd(showFeedback := false, onlyIfDisconnected := false) {
+    global EXT4_SSD_LABEL
+    if FileExist(A_Temp "\unmount_wsl_ssd.lock")
+        return
+
+    if (!onlyIfDisconnected) {
+        ejectedFlag := A_Temp "\pixel_ssd_ejected.flag"
+        FileDelete, %ejectedFlag%
+        FileAppend, %A_Now%, %ejectedFlag%
+    }
+
+    static lastUnmountTick := 0
+    now := A_TickCount
+    if (now - lastUnmountTick < 4000)
+        return
+    lastUnmountTick := now
+
+    psScript := A_ScriptDir "\PowerShell\unmount_wsl_ssd.ps1"
+    if !FileExist(psScript)
+        return
+    args := onlyIfDisconnected ? "-OnlyIfDisconnected" : ""
+    RunSilentPowerShell(psScript, args)
+
+    if (showFeedback) {
+        label := EXT4_SSD_LABEL ? EXT4_SSD_LABEL : "Linux Backup SSD"
+        ToolTip, % label " is now safe to unplug."
+        SetTimer, RemoveSsdToolTip, -2500
+    }
+}
+
+RunSilentPowerShell(scriptPath, args := "") {
+    runSilentExe := A_ScriptDir "\PowerShell\run_silent.exe"
+    if FileExist(runSilentExe) {
+        cmd := """" runSilentExe """ powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ scriptPath """" (args != "" ? " " args : "")
+        Run, %cmd%,, Hide
+        return true
+    }
+    cmd := "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ scriptPath """" (args != "" ? " " args : "")
+    try {
+        shell := ComObjCreate("WScript.Shell")
+        shell.Run(cmd, 0, false)
+        return true
+    } catch {
+        Run, %cmd%,, Hide
+        return false
+    }
+}
+
+RemoveSsdToolTip:
+    ToolTip
+return
+; [END: WSL ext4 Backup SSD Management Hotkeys]

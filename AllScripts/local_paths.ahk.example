@@ -31,9 +31,22 @@ WATCHDOG_APPS := [ {name: "TrafficMonitor.exe", path: "D:\Path\To\TrafficMonitor
 				 , {name: "GravityBridge_Python.exe", path: """D:\Path\To\Your\AllScripts\PythonExes\GravityBridge_Python.exe"" ""D:\Path\To\Your\Gravity-Bridge\proxy.py"""}
 				 , {name: "CopyClip_Python.exe",      path: """D:\Path\To\Your\AllScripts\PythonExes\CopyClip_Python.exe"" ""D:\Path\To\Your\CopyClip\copyclip.py"""} ]
 
+; SunshineMouseWatchdog: Sunshine scripts directory & tablet's Tailscale IP
+; (force normal mouse speed if tablet drops offline while fast mode is active)
+PATH_SUNSHINE_SCRIPTS := "D:\Path\To\Your\Sunshine\Scripts"
+SUNSHINE_TABLET_TAILSCALE_IP := "100.x.y.z"
+
 ; Sefirah (Phone Link alternative) Sleep Auto-Reconnect + Phone Priority
 ; SEFIRAH_ADB_TARGETS     - space-separated "ip:port" of every device to reconnect on wake
-; SEFIRAH_PRIORITY_TARGET - the one device that should win Sefirah's ActiveDevice slot whenever it's reachable -- must exactly match one entry in SEFIRAH_ADB_TARGETS above
+; SEFIRAH_PRIORITY_TARGET - the one device that should win Sefirah's ActiveDevice slot whenever it's reachable - must exactly match one entry in SEFIRAH_ADB_TARGETS above
 PATH_ADB_EXE := "D:\Path\To\Your\adb.exe"
 SEFIRAH_ADB_TARGETS := "192.168.1.50:5555 192.168.1.60:5555"
 SEFIRAH_PRIORITY_TARGET := "192.168.1.50:5555"
+
+; WSL ext4 Backup SSD (Optional Overrides)
+; If omitted, BackgroundAutomations.ahk and BasicTasks.ahk use generic defaults.
+; Full details and PowerShell engine configuration live in AllScripts\PowerShell\ssd_config.json.
+EXT4_SSD_MODEL_SUBSTRINGS := "YourDiskModel,VendorName" ; Comma-separated model substrings to match on USB bus (e.g. "Samsung,SanDisk")
+EXT4_SSD_DRIVE_LETTER     := "P:"
+EXT4_SSD_LABEL            := "Linux Backup SSD"
+EXT4_SSD_TARGET_PATH      := "backup_volume\Photos\Camera" ; Optional subfolder to open in Explorer

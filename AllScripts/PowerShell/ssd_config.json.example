@@ -1,0 +1,27 @@
+{
+  "disk": {
+    "modelFilter": ["YourDiskModel", "VendorName"],
+    "busType": "USB",
+    "minSizeGB": 200,
+    "maxSizeGB": 300
+  },
+  "wsl": {
+    "distro": "Ubuntu",
+    "mountPoint": "/mnt/pixel_ssd",
+    "volumeLabel": ""
+  },
+  "smb": {
+    "shareName": "PixelSSD",
+    "driveLetter": "P:",
+    "driveLabel": "Linux Backup SSD",
+    "username": "wsluser",
+    "password": "wslpassword123"
+  },
+  "explorer": {
+    "openFolder": ""
+  },
+  "tasks": {
+    "mountTask": "WSL_Mount_PixelSSD",
+    "unmountTask": "WSL_Unmount_PixelSSD"
+  }
+}
