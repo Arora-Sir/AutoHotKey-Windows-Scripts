@@ -33,3 +33,8 @@ if ($ssd) {
     }
 }
 
+# Signal completion to caller so it does not race ahead to hardware ejection
+$doneFlag = [System.IO.Path]::Combine($env:TEMP, 'wsl_unmount_done.flag')
+Set-Content -Path $doneFlag -Value (Get-Date).ToString() -Force -ErrorAction SilentlyContinue
+Log-ElevatedUnmount "Signaled completion flag ($doneFlag)."
+

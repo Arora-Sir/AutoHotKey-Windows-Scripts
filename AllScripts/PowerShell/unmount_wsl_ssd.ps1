@@ -133,12 +133,29 @@ try {
 
     # 3. Detach from WSL host
     $schDone = $false
+    $doneFlag = [System.IO.Path]::Combine($env:TEMP, 'wsl_unmount_done.flag')
+    if (Test-Path $doneFlag) {
+        Remove-Item $doneFlag -Force -ErrorAction SilentlyContinue
+    }
     try {
         $queryTask = schtasks /Query /TN $unmountTask 2>$null
         if ($LASTEXITCODE -eq 0) {
             Log-Unmount "Triggering elevated Scheduled Task: $unmountTask" "INFO"
             schtasks /run /tn $unmountTask | Out-Null
-            $schDone = $true
+            
+            # Wait for elevated Scheduled Task to finish detaching the physical drive
+            for ($i = 0; $i -lt 24; $i++) {
+                Start-Sleep -Milliseconds 250
+                if (Test-Path $doneFlag) {
+                    Log-Unmount "WSL detach confirmed complete via completion flag (attempt #$($i + 1))." "INFO"
+                    $schDone = $true
+                    break
+                }
+            }
+            Remove-Item $doneFlag -Force -ErrorAction SilentlyContinue
+            if (-not $schDone) {
+                Log-Unmount "WSL detach flag not seen within 6s. Checking task state..." "WARN"
+            }
         }
     } catch {}
 
@@ -222,6 +239,57 @@ try {
         Stop-Process -Id $kp.ProcessId -Force -ErrorAction SilentlyContinue
     }
     Log-Unmount "Terminated WSL keep-alive process." "INFO"
+
+    # 6. Safely eject USB hardware device from Windows (Eliminates 'Device in Use' dialogs)
+    if ($ssd -and -not $OnlyIfDisconnected) {
+        try {
+            $drive = Get-CimInstance Win32_DiskDrive | Where-Object { $_.Index -eq $ssd.Number }
+            if ($drive -and $drive.PNPDeviceID) {
+                $parentProp = Get-PnpDeviceProperty -InstanceId $drive.PNPDeviceID -KeyName 'DEVPKEY_Device_Parent' -ErrorAction SilentlyContinue
+                if ($parentProp -and $parentProp.Data) {
+                    $usbParentId = $parentProp.Data
+                    Log-Unmount "Requesting Windows hardware safe ejection for $usbParentId..." "INFO"
+                    
+                    Add-Type -TypeDefinition @"
+                    using System;
+                    using System.Text;
+                    using System.Runtime.InteropServices;
+                    public class UsbHardwareEjectV2 {
+                        [DllImport("cfgmgr32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+                        public static extern int CM_Locate_DevNodeW(ref int pdnDevInst, string pDeviceID, int ulFlags);
+                        [DllImport("cfgmgr32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+                        public static extern int CM_Request_Device_EjectW(int dnDevInst, out int pVetoType, StringBuilder pszVetoName, int ulNameLength, int ulFlags);
+                        public static int Eject(string pnpId, out int vetoType, StringBuilder vetoName) {
+                            int devInst = 0;
+                            vetoType = 0;
+                            if (CM_Locate_DevNodeW(ref devInst, pnpId, 0) != 0) return -1;
+                            return CM_Request_Device_EjectW(devInst, out vetoType, vetoName, vetoName.Capacity, 0);
+                        }
+                    }
+"@ -ErrorAction SilentlyContinue
+                    $ejected = $false
+                    for ($attempt = 1; $attempt -le 6; $attempt++) {
+                        $vType = 0
+                        $vName = New-Object System.Text.StringBuilder 512
+                        $res = [UsbHardwareEjectV2]::Eject($usbParentId, [ref]$vType, $vName)
+                        if ($res -eq 0) {
+                            Log-Unmount "Windows hardware safe ejection succeeded on attempt #$attempt (CR_SUCCESS). Drive is safely removed." "INFO"
+                            $ejected = $true
+                            break
+                        } else {
+                            Log-Unmount "Eject attempt #$attempt vetoed (CR=$res, VetoType=$vType, VetoName='$($vName.ToString())'). Retrying in 350ms..." "WARN"
+                            Start-Sleep -Milliseconds 350
+                        }
+                    }
+                    if (-not $ejected) {
+                        Log-Unmount "Windows hardware safe ejection was vetoed after all retry attempts." "WARN"
+                    }
+                }
+            }
+        } catch {
+            Log-Unmount "Hardware ejection exception: $_" "WARN"
+        }
+    }
 
     Log-Unmount "Unmount operation completed cleanly." "INFO"
 }

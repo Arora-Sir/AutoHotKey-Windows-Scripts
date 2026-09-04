@@ -174,15 +174,15 @@ sudo service smbd restart
 | `ssd_config.json`             | Gitignored      | Active workstation configuration (credentials, hardware filters).                               |
 | `ssd_common.ps1`              | Helper Script   | Shared module providing `Get-SSDConfig` and `Find-TargetSSD`.                                   |
 | `mount_wsl_ssd.ps1`           | Orchestrator    | Attaches disk, suppresses RAW drive letter, probes port 445, maps drive, and launches Explorer. |
-| `unmount_wsl_ssd.ps1`         | Teardown        | Redirects open Explorer tabs to "This PC", unmaps drive, and flushes attachments.               |
+| `unmount_wsl_ssd.ps1`         | Teardown        | Redirects open Explorer tabs to "This PC", unmaps drive, flushes WSL attachments, and executes PnP safe removal. |
 | `wsl_mount_elevated.ps1`      | Elevated Action | Helper executed by `WSL_Mount_PixelSSD` Task Scheduler action.                                  |
-| `wsl_unmount_elevated.ps1`    | Elevated Action | Helper executed by `WSL_Unmount_PixelSSD` Task Scheduler action.                                |
+| `wsl_unmount_elevated.ps1`    | Elevated Action | Helper executed by `WSL_Unmount_PixelSSD` Task Scheduler action (signals completion via flag).  |
 | `setup_scheduled_tasks.ps1`   | Installer       | Registers elevated tasks in Task Scheduler without quote bugs.                                  |
 | `Install_WSL_Mount_Tasks.bat` | Batch Helper    | Self-elevating batch installer for one-click setup.                                             |
 | `mount_pixel_ssd.sh`          | Bash Script     | Guest mount helper (`noatime,nodiratime,errors=remount-ro`) with `fsck.ext4 -p`.                |
 | `run_silent.exe`              | GUI Launcher    | Native Windows GUI runner (`CREATE_NO_WINDOW`) for zero-focus background PowerShell execution.  |
 | `SilentLauncher.cs`           | C# Source       | Source code for `run_silent.exe` preserving raw command line quotes.                            |
-| `ARCH_AND_GOTCHAS.md`         | Architecture    | Deep-dive documentation on UASP SCSI, kernel SMB hangs, UTF-16LE, and Hyper-V faults.           |
+| `ARCH_AND_GOTCHAS.md`         | Architecture    | Deep-dive documentation on UASP SCSI, kernel SMB hangs, UTF-16LE, Hyper-V faults, and safe eject. |
 
 ---
 
@@ -221,10 +221,24 @@ When the drive is plugged back in later:
 5. **Direct SMB Mapping**: Direct SMB 445 connects, maps `P:`, and launches Explorer directly to your target directory.
 6. **Zero Manual Action Required**: No keypresses or commands are needed. The system mounts automatically.
 
-### Scenario C: Manual Software Ejection (`Win+Alt+U`)
+### Scenario C: Proactive Safe Software Ejection (`Win+Alt+U` or Tray Menu)
 
 When you press `Win+Alt+U` (or right-click the tray icon and choose "Eject Pixel SSD Safely"):
 
-1. The script safely unmounts the drive and places an ejection marker (`%TEMP%\pixel_ssd_ejected.flag`).
-2. This marker instructs the background watcher **not to immediately re-mount the drive while the cable remains plugged in**.
-3. Once you physically pull the cable, the marker is deleted, preparing the watcher to automatically mount the drive the next time it is inserted.
+1. Open Explorer tabs are safely navigated to "This PC".
+2. `net use P: /delete` unmaps the drive letter immediately.
+3. Guest helper `/usr/local/bin/unmount_pixel_ssd.sh` runs lazy-unmount and stops Samba.
+4. Elevated Task Scheduler action `WSL_Unmount_PixelSSD` detaches `\\.\PHYSICALDRIVE*` from Hyper-V and writes `%TEMP%\wsl_unmount_done.flag`.
+5. `unmount_wsl_ssd.ps1` waits for the flag barrier, then invokes native Win32 `CM_Request_Device_EjectW` (`cfgmgr32.dll`) on the parent USB device node with adaptive retry backoff.
+6. Windows cuts power to the USB device and displays the native "Safe to Remove Hardware" notification.
+7. An ejection marker (`%TEMP%\pixel_ssd_ejected.flag`) prevents the watchdog from re-mounting the drive until physically re-plugged.
+
+### Scenario D: Reactive Taskbar Ejection (Single-Click Conflict Auto-Resolution)
+
+When clicking the Windows taskbar "Safely Remove Hardware" icon instead of using the hotkey:
+
+1. Windows initially attempts removal, finds Hyper-V's open SCSI handle, and begins to display the modal: *"Problem Ejecting USB Attached SCSI (UAS) Mass Storage Device: This device is currently in use."*
+2. The `AutoResolveEjectConflict` routine in `BackgroundAutomations.ahk` intercepts the `#32770` dialog within 400ms and closes it via `WinClose`.
+3. Displays a non-intrusive status tooltip: *"<Drive Label> in use by WSL. Safely unmounting and ejecting..."* (default: *"Linux Backup SSD in use by WSL..."*).
+4. Invokes `unmount_wsl_ssd.ps1`, which unmounts Ubuntu, detaches from WSL, synchronizes via completion flag, and invokes `CM_Request_Device_EjectW`.
+5. Safe removal completes on that **single action**, and Windows displays its native "Safe to Remove Hardware" toast.
