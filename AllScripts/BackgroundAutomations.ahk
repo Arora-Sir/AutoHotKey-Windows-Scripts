@@ -11,6 +11,7 @@ DetectHiddenWindows, On
 OnMessage(0x0219, "WM_DEVICECHANGE_SSD")
 SetTimer, ReconcileExt4SsdState, 5000
 SetTimer, ReconcileExt4SsdState, -500 ; Fast initial check on boot/reload
+SetTimer, AutoResolveEjectConflict, 400 ; Auto-intercept Windows 'Problem Ejecting' dialog
 global g_Ext4SsdMounted := false
 
 ; System Tray menu integration for Pixel SSD
@@ -331,6 +332,23 @@ return
 
 TrayEjectPixelSsd:
     UnmountExt4Ssd(true, false)
+return
+
+; Auto-intercept Windows 'Problem Ejecting USB Attached SCSI (UAS) Mass Storage Device' dialog.
+; When the user clicks Windows 'Safely Remove Hardware' on the taskbar while WSL has the drive open,
+; Windows displays this #32770 dialog. This watcher catches the dialog within 400ms, closes it immediately,
+; and runs our clean unmount + hardware safe ejection pipeline so the user is never stuck with the error!
+AutoResolveEjectConflict:
+    if WinExist("Problem Ejecting ahk_class #32770") {
+        WinGetTitle, eTitle, Problem Ejecting ahk_class #32770
+        if (InStr(eTitle, "USB Attached SCSI") || InStr(eTitle, "Mass Storage")) {
+            WinClose, Problem Ejecting ahk_class #32770
+            label := EXT4_SSD_LABEL ? EXT4_SSD_LABEL : "Linux Backup SSD"
+            ToolTip, % label " in use by WSL. Safely unmounting and ejecting..."
+            SetTimer, RemoveSsdToolTip, -4500
+            UnmountExt4Ssd(false, false)
+        }
+    }
 return
 
 TrayRegisterAdminTasks:

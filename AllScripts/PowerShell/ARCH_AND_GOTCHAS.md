@@ -99,3 +99,45 @@ This document serves as the permanent engineering reference for the ext4 externa
      - File Explorer is launched ONLY after all background operations (attach, fsck, mount, Samba check, and drive mapping) have fully completed and verified.
   4. **Silent Shell Change Notifications**:
      - Broadcasts native Win32 `SHChangeNotify` messages (`SHCNE_DRIVEADD` 0x00000008, `SHCNE_DRIVEREMOVED` 0x00000020) to update "This PC" silently in the background without stealing user focus.
+
+---
+
+## 6. Device Ejection & Hardware Safe Removal
+
+### Gotcha 10: Safe Hardware Ejection Veto (PNP_VetoOutstandingOpen) & Programmatic PnP Safe Removal
+
+- **The Problem**: Clicking the Windows taskbar "Safely Remove Hardware and Eject Media" icon for the USB SSD resulted in an error dialog: *"Problem Ejecting USB Attached SCSI (UAS) Mass Storage Device: This device is currently in use. Close any programs or windows that might be using the device, and then try again."*
+- **Root Cause**:
+  1. WSL2 attaches external drives as raw Hyper-V SCSI pass-through disks (`\\.\PHYSICALDRIVE*`). The Hyper-V storage virtualization stack holds exclusive kernel-mode handles to the physical disk.
+  2. When the user initiates a safe removal in Windows, the PnP Configuration Manager issues a query-remove request. Because Hyper-V holds open handles, PnP returns `CR_REMOVE_VETOED (23)` with `VetoType = 6 (PNP_VetoOutstandingOpen)` naming the SCSI disk PDO.
+  3. Standard Windows Explorer does not know how to tell WSL to unmount; it simply displays the modal error dialog.
+- **Architectural Solution**:
+  1. **Clean Dismount Pipeline in `unmount_wsl_ssd.ps1`**:
+     - Deletes the SMB network drive mapping (`net use P: /delete`).
+     - Invokes guest helper `/usr/local/bin/unmount_pixel_ssd.sh` to lazy-unmount `/mnt/pixel_ssd` and stop Samba.
+     - Detaches the disk from WSL host (`wsl --unmount \\.\PHYSICALDRIVE*`).
+     - Resolves the USB parent device ID dynamically via `DEVPKEY_Device_Parent`.
+     - Invokes Win32 Configuration Manager API `CM_Request_Device_EjectW` (`cfgmgr32.dll`) to programmatically cut power and notify Windows that the hardware is safely removable.
+  2. **Reactive Auto-Resolution in `BackgroundAutomations.ahk`**:
+     - A 400ms polling timer monitors for `#32770` error windows titled "Problem Ejecting USB Attached SCSI...".
+     - When detected, the AHK script immediately closes the error dialog via `WinClose`, displays a status tooltip, and triggers `UnmountExt4Ssd(true, false)`.
+     - This guarantees that even if the user forgets the `Win+Alt+U` hotkey and uses the Windows taskbar tray icon, the conflict is automatically intercepted and resolved within milliseconds.
+
+### Gotcha 11: Asynchronous Scheduled Task Race Condition & Double-Click Eject Bug
+
+- **The Symptom**: When clicking Windows taskbar eject or the unmount hotkey, the first click would unmount the filesystem but fail to power down the hardware. The user was forced to click eject a second time for Windows to actually complete the safe removal.
+- **Deep Diagnostic Analysis**:
+  - The diagnostic log revealed:
+    - `[18:54:40.189] Triggering elevated Scheduled Task: WSL_Unmount_PixelSSD`
+    - `[18:54:42.746] Requesting Windows hardware safe ejection for USB\...`
+    - `[18:54:43.127] [ELEVATED_UNMOUNT] Detaching PHYSICALDRIVE2...`
+    - `[18:54:43.244] [WARN] Windows hardware safe ejection returned non-zero (vetoed).`
+    - `[18:54:43.408] [ELEVATED_UNMOUNT] wsl.exe --unmount exit: 0`
+  - `schtasks /run` is non-blocking. It merely queues the task in Windows Task Scheduler and returns immediately.
+  - `unmount_wsl_ssd.ps1` immediately proceeded to Step 6 and called `CM_Request_Device_EjectW` 164 milliseconds BEFORE `wsl.exe --unmount` finished detaching `PHYSICALDRIVE2`.
+  - Because Hyper-V was still in the middle of closing its SCSI handle, Windows PnP vetoed the first eject call. Then 164ms later, `wsl.exe --unmount` finished. When the user clicked eject a second time, the disk was already free, so the second click succeeded.
+- **The Resolution**:
+  1. **Cross-Process Synchronization Flag**: `wsl_unmount_elevated.ps1` writes a temporary completion flag (`%TEMP%\wsl_unmount_done.flag`) upon completing the detach.
+  2. **Synchronous Barrier**: `unmount_wsl_ssd.ps1` polls for this flag (up to 6 seconds at 250ms intervals), ensuring `wsl.exe --unmount` has 100% finished and released all handles before Step 6 begins.
+  3. **Multi-Attempt Retry Loop**: Step 6 now executes up to 6 retry attempts (spaced 350ms apart) for `CM_Request_Device_EjectW`, gracefully accommodating any brief driver-stack teardown latency.
+  4. **Single-Action Guarantee**: Safe removal now completes reliably on the very first click, displaying Windows native "Safe to Remove Hardware" toast.
