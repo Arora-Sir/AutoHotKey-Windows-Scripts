@@ -7,13 +7,27 @@ SetWorkingDir %A_ScriptDir%
 #SingleInstance force
 DetectHiddenWindows, On
 
+; Auto-mount & Watchdog for ext4 Backup SSD (Registered first for immediate responsiveness)
+OnMessage(0x0219, "WM_DEVICECHANGE_SSD")
+SetTimer, ReconcileExt4SsdState, 5000
+SetTimer, ReconcileExt4SsdState, -500 ; Fast initial check on boot/reload
+global g_Ext4SsdMounted := false
+
+; System Tray menu integration for Pixel SSD
+Menu, Tray, Add
+Menu, Tray, Add, Mount Pixel SSD (P:), TrayMountPixelSsd
+Menu, Tray, Add, Eject Pixel SSD Safely, TrayEjectPixelSsd
+Menu, Tray, Add, Register Zero-UAC Tasks, TrayRegisterAdminTasks
+
 ; Always-on background automation with no hotkey trigger: things that should just be running, not things a keypress does. BasicTasks.ahk stays hotkey-only;
 ; everything here starts at boot (via StartupScript.ahk) and keeps running unattended for the rest of the session.
 ;
 ; OVERVIEW (detail lives in each section below):
 ;   Tailscale                - launches its tray app in the same startup burst as the other scripts, skips it if already running
+;   Google Drive             - launches it silently (--startup_mode), independent of Task Manager's Startup Apps toggle
 ;   GravityBridge / CopyClip - launches both Python servers under renamed pythonw.exe copies; ForceRestart=true here so an edited .py picks up on boot/reload
 ;   Sefirah                  - reconnects after sleep/wake and keeps SEFIRAH_PRIORITY_TARGET as the active device whenever it's reachable
+;   WSL ext4 Backup SSD      - auto-mounts ext4 SSD on boot and on USB plug (DBT_DEVICEARRIVAL), cleans up on unplug
 
 ; Auto-start Tailscale's tray app in the same burst as the other scripts, deterministically, instead of racing 14+ other Startup-folder apps through Explorer with no ordering guarantee.
 ; tailscaled itself (the actual VPN backend CopyClip depends on) is a Windows service and starts independently of this either way, this only affects how soon the tray icon shows up. Guarded so a plain AHK reload doesn't relaunch an already-running copy.
@@ -22,10 +36,21 @@ Process, Exist, tailscale-ipn.exe
 if (!ErrorLevel && FileExist(TailscaleExe))
     Run, %TailscaleExe%
 
+; Auto-start Google Drive in the same burst, silently. Its own native Run-key entry keeps
+; getting toggled off in Task Manager's Startup Apps behind our backs (found disabled twice
+; now), so this no longer depends on that staying on. GoogleDrivePath (local_paths.ahk) is
+; the exact same registry-resolved, --startup_mode-flagged command the Run key itself uses,
+; self-healing against Drive version bumps -- launching it here just stops relying on a
+; Windows toggle that doesn't reliably stay where we leave it. Guarded the same way as
+; Tailscale above, so a plain AHK reload doesn't relaunch an already-running copy.
+Process, Exist, GoogleDriveFS.exe
+if (!ErrorLevel && GoogleDrivePath)
+    Run, %GoogleDrivePath%
+
 ; Auto-start / reload GravityBridge Proxy Server & CopyClip. Named per-project so Task Manager's Name column shows "CopyClip_Python.exe" / "GravityBridge_Python.exe" instead of an anonymous "pythonw.exe" you can't tell apart.
 ; ForceRestart=true here on purpose: this call only runs at boot or when you hit the global reload hotkey, both are moments you'd want an edited proxy.py/copyclip.py picked up, so it always kills and relaunches rather than skipping an already-healthy instance.
 RestartNamedPythonServer("GravityBridge", PATH_GRAVITY_BRIDGE "\proxy.py",,, true)
-RestartNamedPythonServer("CopyClip", PATH_COPYCLIP "\copyclip.py",,, true) ; Can also use "Safirah"
+RestartNamedPythonServer("CopyClip", PATH_COPYCLIP "\windows_app\tray.py",,, true) ; Can also use "Safirah"
 
 ; =============================================================================
 ; SEFIRAH - Phone Link Alternative (Sleep Auto-Reconnect + Phone Priority)
@@ -46,13 +71,26 @@ RestartNamedPythonServer("CopyClip", PATH_COPYCLIP "\copyclip.py",,, true) ; Can
 
 OnMessage(0x0218, "Sefirah_WM_POWERBROADCAST")
 
+; Independent of laptop sleep/wake: catches the priority device (phone) reconnecting for any other reason (e.g. it left/rejoined Wi-Fi on its own, with the laptop never sleeping at all).
+; Edge-triggered on the unreachable -> reachable transition only, so steady state costs two quick local `adb` calls per tick (one RunWait, see Sefirah_IsReachable) and nothing more: no busy loop (SetTimer is the same native, ~0%-idle-CPU mechanism Watchdog.ahk already uses at a 10s interval), no repeated re-authentication churn while nothing has changed.
+; Also handles the reverse edge: the moment the priority target drops, hand ActiveDevice to whatever else is still reachable in SEFIRAH_ADB_TARGETS, so it doesn't sit "Selected" but unreachable.
+SefirahPriorityWasReachable := false
+SetTimer, Sefirah_PollPriorityTarget, 30000
+return ; End of auto-execute section
+
 ; WM_POWERBROADCAST handler - must stay lightweight; called on the AHK message pump.
 ;   wParam 18 (0x12) = PBT_APMRESUMEAUTOMATIC  (any system wake, incl. Modern Standby)
 ;   wParam  7 (0x07) = PBT_APMRESUMESUSPEND    (user-initiated resume after suspend)
 Sefirah_WM_POWERBROADCAST(wParam, lParam) {
-    if (wParam = 18 || wParam = 7)
-        SetTimer, Sefirah_DoReconnect, -4000  ; one-shot, 4 s after wake
+    if (wParam = 18 || wParam = 7) {
+        SetTimer, Sefirah_DoReconnect, -4000      ; one-shot, 4s after wake
+        SetTimer, ResumeExt4SsdOnWake, -4500     ; check/restore ext4 SSD mount 4.5s after wake
+    }
 }
+
+ResumeExt4SsdOnWake:
+    MountExt4Ssd(false) ; Silent reconnect check after laptop sleep/wake
+return
 
 ; Fires once, ~4 s after wake. Reconnects every non-priority target first (order doesn't matter, fire-and-forget), then the priority target last and BLOCKING so it is guaranteed to be the last one to finish authenticating, that's what wins it ActiveDevice.
 ; Do not "simplify" this back into one parallel loop; the ordering is the entire point (see the block comment above).
@@ -99,8 +137,7 @@ Sefirah_ClaimActive(target, wait) {
 ; Independent of laptop sleep/wake: catches the priority device (phone) reconnecting for any other reason (e.g. it left/rejoined Wi-Fi on its own, with the laptop never sleeping at all).
 ; Edge-triggered on the unreachable -> reachable transition only, so steady state costs two quick local `adb` calls per tick (one RunWait, see Sefirah_IsReachable) and nothing more: no busy loop (SetTimer is the same native, ~0%-idle-CPU mechanism Watchdog.ahk already uses at a 10s interval), no repeated re-authentication churn while nothing has changed.
 ; Also handles the reverse edge: the moment the priority target drops, hand ActiveDevice to whatever else is still reachable in SEFIRAH_ADB_TARGETS, so it doesn't sit "Selected" but unreachable.
-SefirahPriorityWasReachable := false
-SetTimer, Sefirah_PollPriorityTarget, 30000
+
 
 Sefirah_PollPriorityTarget() {
     global SEFIRAH_PRIORITY_TARGET, SefirahPriorityWasReachable
@@ -129,6 +166,178 @@ Sefirah_ClaimFallback() {
 }
 
 ; [END: Sefirah WM_POWERBROADCAST hook + priority poll]
+
+; =============================================================================
+; WSL EXT4 BACKUP SSD AUTO-MOUNT & MANAGEMENT
+; [START: WSL ext4 Backup SSD Auto-Mount]
+;
+; Automates mounting and unmounting of the ext4 backup SSD
+;   - Auto-mounts on boot / AHK reload if the SSD is already connected
+;   - Auto-mounts when plugged in (DBT_DEVICEARRIVAL 0x8000 via WM_DEVICECHANGE)
+;   - Cleans up shortcut and unmounts on unplug (DBT_DEVICEREMOVECOMPLETE 0x8004)
+;   - Two-tier recovery: mounts attached VM block device as guest root, or elevates wsl --mount
+;   - Resolves PhysicalDrive number dynamically and creates Network Shortcut
+; =============================================================================
+
+WM_DEVICECHANGE_SSD(wParam, lParam, msg, hwnd) {
+    ; Intercept DBT_DEVNODES_CHANGED (0x0007), DBT_DEVICEARRIVAL (0x8000), DBT_DEVICEREMOVECOMPLETE (0x8004)
+    if (wParam = 0x0007 || wParam = 0x8000 || wParam = 0x8004) {
+        ; Reconcile state after brief bus enumeration delay
+        SetTimer, ReconcileExt4SsdState, -1000
+    }
+    return true
+}
+
+ReconcileExt4SsdState:
+    connected := IsPixelSsdConnected()
+    ejectedFlag := A_Temp "\pixel_ssd_ejected.flag"
+    isManuallyEjected := FileExist(ejectedFlag)
+
+    driveLetter := EXT4_SSD_DRIVE_LETTER ? EXT4_SSD_DRIVE_LETTER : "P:"
+    targetDrive := SubStr(driveLetter, 1, 1) ":"
+    DriveGet, pType, Type, %targetDrive%
+    isDriveMapped := (pType = "Network")
+
+    if (!connected) {
+        ; Physical absence: hardware removed
+        if (isManuallyEjected)
+            FileDelete, %ejectedFlag%
+        if (isDriveMapped || g_Ext4SsdMounted) {
+            g_Ext4SsdMounted := false
+            UnmountExt4Ssd(false, true)
+        }
+    }
+    else {
+        ; Physical presence: hardware plugged in
+        ; CRITICAL: NEVER call FileExist() or any file I/O on a network path (P:\...) directly
+        ; from the main AHK thread! If the network connection was severed or stalled, the Windows
+        ; kernel SMB redirector (mrxsmb.sys) blocks the thread for up to 60 seconds waiting for
+        ; timeout, completely freezing AutoHotkey!
+        ; Drive mapping state is queried non-blockingly via DriveGet above.
+        if (!isDriveMapped && !isManuallyEjected) {
+            g_Ext4SsdMounted := true
+            MountExt4Ssd(true) ; Runs 100% silently in background, opens Explorer only when fully finished
+        }
+        else if (isDriveMapped) {
+            g_Ext4SsdMounted := true
+        }
+    }
+return
+
+IsPixelSsdConnected() {
+    global EXT4_SSD_MODEL_SUBSTRINGS
+    filter := EXT4_SSD_MODEL_SUBSTRINGS
+    if (!filter)
+        return false ; Not configured in local_paths.ahk
+    try {
+        for disk in ComObjGet("winmgmts:").ExecQuery("SELECT Model FROM Win32_DiskDrive") {
+            m := disk.Model
+            Loop, Parse, filter, `,
+            {
+                sub := Trim(A_LoopField)
+                if (sub != "" && InStr(m, sub))
+                    return true
+            }
+        }
+    }
+    return false
+}
+
+MountExt4Ssd(openExplorer := false) {
+    global g_Ext4SsdMounted, EXT4_SSD_LABEL
+    ; Guard: do not spawn if mount or unmount is actively in progress
+    if FileExist(A_Temp "\mount_wsl_ssd.lock") || FileExist(A_Temp "\unmount_wsl_ssd.lock")
+        return
+
+    ; Clear manual ejection flag so state reconciler tracks active drive
+    ejectedFlag := A_Temp "\pixel_ssd_ejected.flag"
+    if FileExist(ejectedFlag)
+        FileDelete, %ejectedFlag%
+
+    static lastMountTick := 0
+    now := A_TickCount
+    if (now - lastMountTick < 5000)
+        return
+    lastMountTick := now
+    g_Ext4SsdMounted := true
+
+    psScript := A_ScriptDir "\PowerShell\mount_wsl_ssd.ps1"
+    if !FileExist(psScript)
+        return
+    args := openExplorer ? "-OpenExplorer" : ""
+    ; Run 100% silent with CREATE_NO_WINDOW via WScript.Shell to prevent conhost window flashing and focus theft
+    RunSilentPowerShell(psScript, args)
+}
+
+UnmountExt4Ssd(showFeedback := false, onlyIfDisconnected := false) {
+    global g_Ext4SsdMounted, EXT4_SSD_LABEL
+    ; Guard: do not spawn if unmount is actively in progress
+    if FileExist(A_Temp "\unmount_wsl_ssd.lock")
+        return
+
+    ; If manual unmount while SSD is still plugged in, set flag to prevent watchdog re-mount
+    if (!onlyIfDisconnected) {
+        ejectedFlag := A_Temp "\pixel_ssd_ejected.flag"
+        FileDelete, %ejectedFlag%
+        FileAppend, %A_Now%, %ejectedFlag%
+    }
+
+    static lastUnmountTick := 0
+    now := A_TickCount
+    if (now - lastUnmountTick < 6000)
+        return
+    lastUnmountTick := now
+    g_Ext4SsdMounted := false
+
+    psScript := A_ScriptDir "\PowerShell\unmount_wsl_ssd.ps1"
+    if !FileExist(psScript)
+        return
+    args := onlyIfDisconnected ? "-OnlyIfDisconnected" : ""
+    ; Run 100% silent with CREATE_NO_WINDOW via WScript.Shell to prevent conhost window flashing and focus theft
+    RunSilentPowerShell(psScript, args)
+
+    if (showFeedback) {
+        label := EXT4_SSD_LABEL ? EXT4_SSD_LABEL : "Linux Backup SSD"
+        ToolTip, % label " is now safe to unplug."
+        SetTimer, RemoveSsdToolTip, -2500
+    }
+}
+
+RunSilentPowerShell(scriptPath, args := "") {
+    runSilentExe := A_ScriptDir "\PowerShell\run_silent.exe"
+    if FileExist(runSilentExe) {
+        cmd := """" runSilentExe """ powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ scriptPath """" (args != "" ? " " args : "")
+        Run, %cmd%,, Hide
+        return true
+    }
+    cmd := "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ scriptPath """" (args != "" ? " " args : "")
+    try {
+        shell := ComObjCreate("WScript.Shell")
+        shell.Run(cmd, 0, false)
+        return true
+    } catch {
+        Run, %cmd%,, Hide
+        return false
+    }
+}
+
+RemoveSsdToolTip:
+    ToolTip
+return
+
+TrayMountPixelSsd:
+    MountExt4Ssd(true)
+return
+
+TrayEjectPixelSsd:
+    UnmountExt4Ssd(true, false)
+return
+
+TrayRegisterAdminTasks:
+    batScript := A_ScriptDir "\PowerShell\Install_WSL_Mount_Tasks.bat"
+    Run, *RunAs "%batScript%"
+return
+; [END: WSL ext4 Backup SSD Auto-Mount]
 
 ; =============================================================================
 ; PYTHON SERVER LAUNCH HELPER

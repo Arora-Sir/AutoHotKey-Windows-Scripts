@@ -57,6 +57,7 @@ Script_6=%a_scriptdir%\VolumeOsd.ahk
 Script_7=%a_scriptdir%\Watchdog.ahk
 Script_8=%a_scriptdir%\BackgroundAutomations.ahk
 Script_9=%a_scriptdir%\local_paths.ahk
+Script_10=%a_scriptdir%\SunshineMouseWatchdog.ahk
 
 Files := []
 Files.Push(Script_1)
@@ -68,6 +69,7 @@ Files.Push(Script_6)
 Files.Push(Script_7)
 Files.Push(Script_8)
 Files.Push(Script_9)
+Files.Push(Script_10)
 
 ; Loop, 1
 ; {

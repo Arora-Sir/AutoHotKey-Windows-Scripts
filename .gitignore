@@ -6,4 +6,7 @@ local_paths.ahk
 .vscode/
 *.log
 *.exe
+Logs/
+AllScripts/Logs/
+AllScripts/PowerShell/ssd_config.json
 
