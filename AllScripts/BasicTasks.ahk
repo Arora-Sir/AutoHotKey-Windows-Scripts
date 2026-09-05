@@ -20,6 +20,7 @@
 ; Win+Alt+Ctr+K --> Click Center of Screen (Disabled)
 ; Win+Alt+X --> (Script) Reconnect Cloudflare Network
 ; Win+Alt+N --> Clear Notification center
+; Win+Alt+L --> (Script) Lock/Unlock Personal Skills (Org Safe Mode Toggle)
 ; Alt+X --> Open Today Calendar
 ; Alt+D --> Open ChatGPT
 ; Alt+Shift+T --> Active window Always on Top (Disabled -> Using PowerToys)
@@ -872,6 +873,9 @@ $^J::CloseBrowserBottomDownloadsBar() ;{ <-- (Chrome) Close browser downloads ba
 ; Win+Alt+X --> (Script) Reconnect Cloudfare Network
 #!x::Run "%PATH_IP_ROTATOR%" ;{ <-- Reconnect Cloudfare Network
 
+; Win+Alt+L --> (Script) Lock/Unlock Personal Skills (Org Safe Mode Toggle)
+#!l:: TogglePersonalSkillsLock() ;{ <-- Toggle Personal Skills Lock
+
 ; Win+X+X --> Sleep Laptop
 $#x:: SleepLaptop() ;{ <-- Sleep Laptop (Win+X+X)
 
@@ -1027,3 +1031,40 @@ RemoveSsdToolTip:
     ToolTip
 return
 ; [END: WSL ext4 Backup SSD Management Hotkeys]
+
+
+; [START: Personal Skills Lock/Unlock Toggle]
+TogglePersonalSkillsLock() {
+    global PATH_SKILLS_LOCK_SCRIPT, PATH_SKILLS_UNLOCK_SCRIPT, PATH_SKILLS_TEST_FILE, PATH_PWSH_EXE
+
+    if (!PATH_SKILLS_LOCK_SCRIPT || !PATH_SKILLS_UNLOCK_SCRIPT || !PATH_SKILLS_TEST_FILE) {
+        text("Skills paths not configured in local_paths.ahk", 1)
+        return
+    }
+
+    testFile := PATH_SKILLS_TEST_FILE
+    pwsh := PATH_PWSH_EXE ? PATH_PWSH_EXE : (FileExist("C:\Program Files\PowerShell\7\pwsh.exe") ? "C:\Program Files\PowerShell\7\pwsh.exe" : "powershell.exe")
+    shell := ComObjCreate("WScript.Shell")
+
+    handle := FileOpen(testFile, "r")
+    if (handle) {
+        handle.Close()
+        if (!FileExist(PATH_SKILLS_LOCK_SCRIPT)) {
+            text("Lock script not found", 1)
+            return
+        }
+        cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_LOCK_SCRIPT . """ -Silent"
+        shell.Run(cmd, 0, true)
+        text("Skills Locked (Org Safe)", 1)
+    } else {
+        if (!FileExist(PATH_SKILLS_UNLOCK_SCRIPT)) {
+            text("Unlock script not found", 1)
+            return
+        }
+        cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_UNLOCK_SCRIPT . """ -Silent"
+        shell.Run(cmd, 0, true)
+        text("Skills Unlocked (Antigravity)", 1)
+    }
+    return
+}
+; [END: Personal Skills Lock/Unlock Toggle]

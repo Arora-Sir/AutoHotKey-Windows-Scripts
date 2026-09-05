@@ -77,6 +77,16 @@ OnMessage(0x0218, "Sefirah_WM_POWERBROADCAST")
 ; Also handles the reverse edge: the moment the priority target drops, hand ActiveDevice to whatever else is still reachable in SEFIRAH_ADB_TARGETS, so it doesn't sit "Selected" but unreachable.
 SefirahPriorityWasReachable := false
 SetTimer, Sefirah_PollPriorityTarget, 30000
+
+; Skills Vault Auto-Focus Watcher
+; claude.exe focus -> lock personal vaults (org safe); Antigravity.exe focus -> unlock.
+; All other apps leave vault state unchanged. Silent: no popup, no console window.
+; Debounce: app must appear on two consecutive 1500ms ticks (~3s) before PS1 fires.
+; Dedup: skips if the same app was already the last to trigger (state-transition only).
+global g_SkillsLastTriggered := ""   ; "claude" | "antigravity" | ""
+global g_SkillsCandidate     := ""   ; debounce accumulator
+if (PATH_SKILLS_LOCK_SCRIPT && PATH_SKILLS_UNLOCK_SCRIPT)
+    SetTimer, WatchSkillsLock, 1500
 return ; End of auto-execute section
 
 ; WM_POWERBROADCAST handler - must stay lightweight; called on the AHK message pump.
@@ -423,3 +433,60 @@ RestartNamedPythonServer(ProjectName, ScriptPath, WorkingDir:="", PythonExe:="",
     Run, "%NamedExePath%" "%ScriptPath%", %WorkingDir%, Hide
     return true
 }
+
+; =============================================================================
+; [START: Skills Vault Auto-Focus Watcher]
+; Fires every 1500ms via SetTimer (registered in auto-execute above).
+; WinGet ProcessName is one Win32 call with no I/O - CPU cost is negligible.
+; PS1 is launched fire-and-forget (shell.Run flag 0=hidden, false=async) so
+; this subroutine returns in under a millisecond when it fires.
+; =============================================================================
+WatchSkillsLock:
+    global PATH_SKILLS_LOCK_SCRIPT, PATH_SKILLS_UNLOCK_SCRIPT, PATH_PWSH_EXE
+    if (!PATH_SKILLS_LOCK_SCRIPT || !PATH_SKILLS_UNLOCK_SCRIPT)
+        return
+
+    WinGet, g_SkillsCurExe, ProcessName, A
+
+    ; Map exe -> app token. Anything else = neutral, reset debounce and exit.
+    if (g_SkillsCurExe = "claude.exe")
+        newApp := "claude"
+    else if (g_SkillsCurExe = "Antigravity.exe" || g_SkillsCurExe = "agy.exe")
+        newApp := "antigravity"
+    else {
+        g_SkillsCandidate := ""      ; reset debounce - neutral window broke the run
+        return
+    }
+
+    ; Debounce: must see the same app on two back-to-back ticks (~3s) before acting.
+    if (g_SkillsCandidate != newApp) {
+        g_SkillsCandidate := newApp  ; first sighting - just store and wait
+        return
+    }
+
+    ; Dedup: already triggered for this app, nothing changed - skip the PS1 entirely.
+    if (g_SkillsLastTriggered = newApp)
+        return
+
+    ; Transition confirmed - update state and fire PS1 asynchronously.
+    g_SkillsLastTriggered := newApp
+    g_SkillsCandidate     := ""
+
+    targetScript := (newApp = "claude") ? PATH_SKILLS_LOCK_SCRIPT : PATH_SKILLS_UNLOCK_SCRIPT
+    if (!FileExist(targetScript))
+        return
+
+    pwsh := PATH_PWSH_EXE ? PATH_PWSH_EXE : (FileExist("C:\Program Files\PowerShell\7\pwsh.exe") ? "C:\Program Files\PowerShell\7\pwsh.exe" : "powershell.exe")
+    shell := ComObjCreate("WScript.Shell")
+    shell.Run("""" pwsh """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ targetScript """ -Silent", 0, false)
+
+    ; [Visual HUD: ToolTip near mouse pointer - uncomment if visual cue needed]
+    ; if (newApp = "claude")
+    ;     ToolTip, [Skills Locked - Org Safe]
+    ; else
+    ;     ToolTip, [Skills Unlocked - Antigravity]
+    ; SetTimer, RemoveSkillsToolTip, -1800
+; RemoveSkillsToolTip:
+;     ToolTip
+return
+; [END: Skills Vault Auto-Focus Watcher]

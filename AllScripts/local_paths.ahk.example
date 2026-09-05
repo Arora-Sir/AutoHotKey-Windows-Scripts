@@ -50,3 +50,14 @@ EXT4_SSD_MODEL_SUBSTRINGS := "YourDiskModel,VendorName" ; Comma-separated model 
 EXT4_SSD_DRIVE_LETTER     := "P:"
 EXT4_SSD_LABEL            := "Linux Backup SSD"
 EXT4_SSD_TARGET_PATH      := "backup_volume\Photos\Camera" ; Optional subfolder to open in Explorer
+
+; Skills Vault Auto-Lock & Org Safe Mode Configuration
+; Used by BackgroundAutomations.ahk (auto-lock on Claude focus) and BasicTasks.ahk (Win+Alt+L manual toggle).
+; When configured, focusing claude.exe automatically locks personal vaults (org safe mode),
+; while focusing Antigravity.exe / agy.exe automatically restores access.
+; If omitted or files are not found, the watcher and toggle exit gracefully without error.
+PATH_PWSH_EXE             := "C:\Program Files\PowerShell\7\pwsh.exe"
+PATH_SKILLS_LOCK_SCRIPT   := "C:\Users\YourUsername\.claude\scripts\lock-personal-skills.ps1"
+PATH_SKILLS_UNLOCK_SCRIPT := "C:\Users\YourUsername\.claude\scripts\unlock-personal-skills.ps1"
+PATH_SKILLS_TEST_FILE     := "C:\Users\YourUsername\.gemini\skills\Global-Developer-Skills\00-user-context\SKILL.md"
+
