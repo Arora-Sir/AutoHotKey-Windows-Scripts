@@ -21,6 +21,7 @@
 ; Win+Alt+X --> (Script) Reconnect Cloudflare Network
 ; Win+Alt+N --> Clear Notification center
 ; Win+Alt+L --> (Script) Lock/Unlock Personal Skills (Org Safe Mode Toggle)
+; Win+Alt+L --> (Script) Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)
 ; Alt+X --> Open Today Calendar
 ; Alt+D --> Open ChatGPT
 ; Alt+Shift+T --> Active window Always on Top (Disabled -> Using PowerToys)
@@ -873,8 +874,8 @@ $^J::CloseBrowserBottomDownloadsBar() ;{ <-- (Chrome) Close browser downloads ba
 ; Win+Alt+X --> (Script) Reconnect Cloudfare Network
 #!x::Run "%PATH_IP_ROTATOR%" ;{ <-- Reconnect Cloudfare Network
 
-; Win+Alt+L --> (Script) Lock/Unlock Personal Skills (Org Safe Mode Toggle)
-#!l:: TogglePersonalSkillsLock() ;{ <-- Toggle Personal Skills Lock
+; Win+Alt+L --> (Script) Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)
+#!l:: TogglePersonalSkillsLock() ;{ <-- Cycle Skills Vault Mode
 
 ; Win+X+X --> Sleep Laptop
 $#x:: SleepLaptop() ;{ <-- Sleep Laptop (Win+X+X)
@@ -1033,38 +1034,82 @@ return
 ; [END: WSL ext4 Backup SSD Management Hotkeys]
 
 
-; [START: Personal Skills Lock/Unlock Toggle]
+; [START: Personal Skills Lock/Unlock 3-Way Toggle]
 TogglePersonalSkillsLock() {
-    global PATH_SKILLS_LOCK_SCRIPT, PATH_SKILLS_UNLOCK_SCRIPT, PATH_SKILLS_TEST_FILE, PATH_PWSH_EXE
+    global PATH_SKILLS_LOCK_SCRIPT, PATH_SKILLS_UNLOCK_SCRIPT, PATH_PWSH_EXE
 
-    if (!PATH_SKILLS_LOCK_SCRIPT || !PATH_SKILLS_UNLOCK_SCRIPT || !PATH_SKILLS_TEST_FILE) {
-        text("Skills paths not configured in local_paths.ahk", 1)
+    if (!PATH_SKILLS_LOCK_SCRIPT || !PATH_SKILLS_UNLOCK_SCRIPT) {
+        ShowSkillsStatusBadge("Skills paths not configured in local_paths.ahk")
         return
     }
 
-    testFile := PATH_SKILLS_TEST_FILE
+    modeFile := A_Temp "\skills_vault_mode.flag"
+    curMode := "auto"
+    if FileExist(modeFile) {
+        FileRead, curMode, %modeFile%
+        curMode := Trim(curMode)
+        if (curMode != "locked" && curMode != "unlocked" && curMode != "auto")
+            curMode := "auto"
+    }
+
     pwsh := PATH_PWSH_EXE ? PATH_PWSH_EXE : (FileExist("C:\Program Files\PowerShell\7\pwsh.exe") ? "C:\Program Files\PowerShell\7\pwsh.exe" : "powershell.exe")
     shell := ComObjCreate("WScript.Shell")
 
-    handle := FileOpen(testFile, "r")
-    if (handle) {
-        handle.Close()
+    if (curMode = "auto") {
+        nextMode := "locked"
         if (!FileExist(PATH_SKILLS_LOCK_SCRIPT)) {
-            text("Lock script not found", 1)
+            ShowSkillsStatusBadge("Lock script not found")
             return
         }
         cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_LOCK_SCRIPT . """ -Silent"
         shell.Run(cmd, 0, true)
-        text("Skills Locked (Org Safe)", 1)
-    } else {
+        ShowSkillsStatusBadge("🔒 Skills: Force Locked")
+    } else if (curMode = "locked") {
+        nextMode := "unlocked"
         if (!FileExist(PATH_SKILLS_UNLOCK_SCRIPT)) {
-            text("Unlock script not found", 1)
+            ShowSkillsStatusBadge("Unlock script not found")
             return
         }
         cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_UNLOCK_SCRIPT . """ -Silent"
         shell.Run(cmd, 0, true)
-        text("Skills Unlocked (Antigravity)", 1)
+        ShowSkillsStatusBadge("🔓 Skills: Force Unlocked")
+    } else {
+        nextMode := "auto"
+        ; Immediate active window check upon returning to auto mode
+        WinGet, curExe, ProcessName, A
+        if (curExe = "claude.exe") {
+            if (FileExist(PATH_SKILLS_LOCK_SCRIPT)) {
+                cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_LOCK_SCRIPT . """ -Silent"
+                shell.Run(cmd, 0, false)
+            }
+        } else if (curExe = "Antigravity.exe" || curExe = "agy.exe") {
+            if (FileExist(PATH_SKILLS_UNLOCK_SCRIPT)) {
+                cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_UNLOCK_SCRIPT . """ -Silent"
+                shell.Run(cmd, 0, false)
+            }
+        }
+        ShowSkillsStatusBadge("⚡ Skills: Auto Mode")
+    }
+
+    try {
+        f := FileOpen(modeFile, "w")
+        if (f) {
+            f.Write(nextMode)
+            f.Close()
+        }
     }
     return
 }
-; [END: Personal Skills Lock/Unlock Toggle]
+; [END: Personal Skills Lock/Unlock 3-Way Toggle]
+
+ShowSkillsStatusBadge(msg) {
+    SysGet, mon, MonitorWorkArea
+    CoordMode, ToolTip, Screen
+    ToolTip, % msg, monRight - 230, monBottom - 45, 2
+    SetTimer, RemoveSkillsStatusBadge, -1200
+}
+
+RemoveSkillsStatusBadge:
+    ToolTip,,,, 2
+return
+; [END: Personal Skills Lock/Unlock 3-Way Toggle]

@@ -446,6 +446,19 @@ WatchSkillsLock:
     if (!PATH_SKILLS_LOCK_SCRIPT || !PATH_SKILLS_UNLOCK_SCRIPT)
         return
 
+    ; Check if Skills Vault is in manual override mode (locked / unlocked).
+    ; If forced, pause auto-watcher focus detection until user switches back to Auto.
+    modeFile := A_Temp "\skills_vault_mode.flag"
+    if FileExist(modeFile) {
+        FileRead, curSkillsMode, %modeFile%
+        curSkillsMode := Trim(curSkillsMode)
+        if (curSkillsMode = "locked" || curSkillsMode = "unlocked") {
+            g_SkillsCandidate := ""
+            g_SkillsLastTriggered := ""
+            return
+        }
+    }
+
     WinGet, g_SkillsCurExe, ProcessName, A
 
     ; Map exe -> app token. Anything else = neutral, reset debounce and exit.

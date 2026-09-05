@@ -71,7 +71,11 @@ CheckIntervalMs         := 15000
 MaxFastHours            := 8
 MinFastAgeSec           := 20 ; grace period after marker creation before disconnect-checks may act (see RACE FIX above)
 RequiredLogStreak       := 1 ; log event is authoritative -- act on first confirmed read
-RequiredOfflineStreak   := 2 ; Tailscale is a weaker signal -- require ~30s of continuous offline
+RequiredOfflineStreak   := 8 ; Tailscale is a weaker signal -- require ~2min of continuous offline
+                             ; (was 2/~30s until 2026-09-06: empirically, Tailscale flaps this
+                             ; tablet "offline" for 30-45s roughly every 45-90s even mid-session,
+                             ; so 30s was firing on pure noise -- see the LastEvent != "CONNECTED"
+                             ; gate below, which is the primary fix; this bump is defense-in-depth)
 RequiredConnectStreak   := 1 ; symmetric with RequiredLogStreak -- CLIENT CONNECTED is equally authoritative
 
 LogDisconnectedStreak := 0
@@ -120,18 +124,32 @@ Loop
         else
             LogDisconnectedStreak := 0
 
-        ; Secondary: tablet's Tailscale reachability (independent path, weaker signal)
-        if SunshineWatchdog_TabletReachable()
-            OfflineStreak := 0
-        else
+        ; Secondary: tablet's Tailscale reachability (independent path, weaker signal).
+        ; Only consulted when the log itself has no authoritative answer this tick -- skip
+        ; entirely when the log's latest event is CONNECTED, since that stronger signal must
+        ; never be overridden by the flappier Tailscale read (empirically confirmed
+        ; 2026-09-06: Tailscale reads this tablet offline for 30-45s roughly every 45-90s
+        ; even while the session never actually disconnects per sunshine.log -- see
+        ; SunshineMouseWatchdog.log, which flapped forced-normal/forced-FAST over 100 times
+        ; in a row across several hours, entirely on this signal while CONNECTED held the
+        ; whole time). This restores the ORIGINAL intent above (secondary path is only for
+        ; when the log is unreadable/rotated), not a new behavior.
+        if (LastEvent != "CONNECTED")
         {
-            OfflineStreak++
-            if (OfflineStreak >= RequiredOfflineStreak)
+            if SunshineWatchdog_TabletReachable()
+                OfflineStreak := 0
+            else
             {
-                SunshineWatchdog_ForceNormal("tablet unreachable on Tailscale for " (OfflineStreak * CheckIntervalMs / 1000) "s+")
-                LogDisconnectedStreak := 0, OfflineStreak := 0
+                OfflineStreak++
+                if (OfflineStreak >= RequiredOfflineStreak)
+                {
+                    SunshineWatchdog_ForceNormal("tablet unreachable on Tailscale for " (OfflineStreak * CheckIntervalMs / 1000) "s+")
+                    LogDisconnectedStreak := 0, OfflineStreak := 0
+                }
             }
         }
+        else
+            OfflineStreak := 0
         ConnectStreak := 0 ; not relevant while marker is present
     }
     else
