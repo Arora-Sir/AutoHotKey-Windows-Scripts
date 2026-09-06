@@ -53,7 +53,7 @@ EXT4_SSD_TARGET_PATH      := "backup_volume\Photos\Camera" ; Optional subfolder 
 
 ; Skills Vault Auto-Lock & Org Safe Mode Configuration
 ; Used by BackgroundAutomations.ahk (auto-lock on Claude focus) and BasicTasks.ahk (Win+Alt+L manual toggle).
-; When configured, focusing claude.exe automatically locks personal vaults (org safe mode),
+; When configured, focusing claude.exe automatically locks personal vaults and sensitive data directories (org safe mode),
 ; while focusing Antigravity.exe / agy.exe automatically restores access.
 ; If omitted or files are not found, the watcher and toggle exit gracefully without error.
 PATH_PWSH_EXE             := "C:\Program Files\PowerShell\7\pwsh.exe"

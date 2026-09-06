@@ -1082,7 +1082,7 @@ TogglePersonalSkillsLock() {
                 cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_LOCK_SCRIPT . """ -Silent"
                 shell.Run(cmd, 0, false)
             }
-        } else if (curExe = "Antigravity.exe" || curExe = "agy.exe") {
+        } else if (curExe = "Antigravity.exe" || curExe = "agy.exe" || curExe = "Antigravity IDE.exe") {
             if (FileExist(PATH_SKILLS_UNLOCK_SCRIPT)) {
                 cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_UNLOCK_SCRIPT . """ -Silent"
                 shell.Run(cmd, 0, false)

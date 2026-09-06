@@ -34,6 +34,19 @@ SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
 DetectHiddenWindows, On
 ;}
 
+; Enable dark-mode support for the native tray popup menu (follows Windows' current theme).
+; Undocumented but stable/widely-used uxtheme.dll ordinals: 135=SetPreferredAppMode,
+; 136=FlushMenuThemes. Must run before the menu is ever shown for the first time.
+hUxtheme := DllCall("GetModuleHandle", "str", "uxtheme.dll", "ptr")
+if (hUxtheme) {
+	pSetPreferredAppMode := DllCall("GetProcAddress", "ptr", hUxtheme, "ptr", 135, "ptr")
+	pFlushMenuThemes     := DllCall("GetProcAddress", "ptr", hUxtheme, "ptr", 136, "ptr")
+	if (pSetPreferredAppMode && pFlushMenuThemes) {
+		DllCall(pSetPreferredAppMode, "int", 1) ; 1 = AllowDark (follow system, not force)
+		DllCall(pFlushMenuThemes)
+	}
+}
+
 ; INITIALIZATION - VARIABLES
 ;{-----------------------------------------------
 ; Folder: all files in that folder and subfolders
@@ -272,6 +285,22 @@ MenuBuild:
 			Menu, SubMenu_%PID%, Add, &Suspend, ScriptCommand
 			Menu, SubMenu_%PID%, Add, &Reload, ScriptCommand
 			Menu, SubMenu_%PID%, Add, &Exit, ScriptCommand
+
+			; Mirror any custom tray items this script has published for itself (generic --
+			; no per-script names/IDs hardcoded here; see BackgroundAutomations.ahk for the
+			; publishing side of this). Scripts that don't publish a manifest are unaffected.
+			CustomManifest := A_Temp "\ahk_traymenu_" Script_Name ".txt"
+			if FileExist(CustomManifest)
+			{
+				Menu, SubMenu_%PID%, Add
+				Loop, Read, %CustomManifest%
+				{
+					StringSplit, CustomItem, A_LoopReadLine, |
+					if (CustomItem0 >= 1 && CustomItem1 != "")
+						Menu, SubMenu_%PID%, Add, % CustomItem1, RemoteMenuCommand
+				}
+			}
+
 			Menu, Tray, Add, %Script_Name%, :SubMenu_%PID%
 		}
 		else
@@ -280,6 +309,8 @@ MenuBuild:
 	Menu, Tray, NoStandard
 	Menu, Tray, Add
 	try Menu, Tray, Add, Load, :SubMenu_Load ; SubMenu_Load does not always exist
+	Menu, Tray, Add
+	Menu, Tray, Add, Reload All, ReloadAll
 	Menu, Tray, Standard
 	try Menu, Tray, Default, Load ; SubMenu_Load does not always exist
 
@@ -337,6 +368,33 @@ ScriptCommand:
 		; Rebuild Menu and TrayTip
 		gosub MenuBuild
 		gosub TrayTipBuild
+	}
+return
+
+; Handles clicks on custom items mirrored in from a script's published manifest (see
+; MenuBuild above and BackgroundAutomations.ahk's publishing side). Generic -- doesn't know
+; or care which script or which items; just re-reads that PID's manifest to find which line
+; matches the clicked text, then posts that line's 1-based number to the script's own
+; registered remote-trigger message so it can Gosub the right label itself.
+RemoteMenuCommand:
+	Pid := RegExReplace(A_ThisMenu,"SubMenu_(\d*)$","$1")
+	for Script_Name, Script in Scripts
+		if (Script.Pid = Pid)
+			break
+	CustomManifest := A_Temp "\ahk_traymenu_" Script_Name ".txt"
+	if !FileExist(CustomManifest)
+		return
+	LineNum := 0
+	Loop, Read, %CustomManifest%
+	{
+		LineNum++
+		StringSplit, CustomItem, A_LoopReadLine, |
+		if (CustomItem1 = A_ThisMenuItem)
+		{
+			RemoteTrayTriggerMsg := DllCall("RegisterWindowMessage", "str", "AHK_RemoteTrayMenuTrigger_v1")
+			PostMessage, %RemoteTrayTriggerMsg%, %LineNum%,,,ahk_pid %Pid%
+			break
+		}
 	}
 return
 

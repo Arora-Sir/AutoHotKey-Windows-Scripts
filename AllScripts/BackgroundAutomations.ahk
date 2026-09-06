@@ -20,6 +20,19 @@ Menu, Tray, Add, Mount Pixel SSD (P:), TrayMountPixelSsd
 Menu, Tray, Add, Eject Pixel SSD Safely, TrayEjectPixelSsd
 Menu, Tray, Add, Register Zero-UAC Tasks, TrayRegisterAdminTasks
 
+; Publish the 3 custom items above so StartupScript.ahk's master submenu can mirror them
+; generically (it just reads this file -- no item names/IDs hardcoded on that side). If the
+; Menu,Add lines above ever change, update this list to match; nothing else needs touching.
+SplitPath, A_ScriptFullPath,,,, ScriptNameNoExt
+TrayMenuManifest := A_Temp "\ahk_traymenu_" ScriptNameNoExt ".txt"
+FileDelete, %TrayMenuManifest%
+FileAppend, % "Mount Pixel SSD (P:)|TrayMountPixelSsd`nEject Pixel SSD Safely|TrayEjectPixelSsd`nRegister Zero-UAC Tasks|TrayRegisterAdminTasks`n", %TrayMenuManifest%
+
+; Generic remote-trigger responder: any process can PostMessage this registered message
+; (same string -> same number for every process, no coordination needed) with wParam = the
+; manifest's 1-based line number, and we Gosub whichever label is on that line.
+OnMessage(DllCall("RegisterWindowMessage", "str", "AHK_RemoteTrayMenuTrigger_v1"), "HandleRemoteTrayMenuTrigger")
+
 ; Always-on background automation with no hotkey trigger: things that should just be running, not things a keypress does. BasicTasks.ahk stays hotkey-only;
 ; everything here starts at boot (via StartupScript.ahk) and keeps running unattended for the rest of the session.
 ;
@@ -367,6 +380,20 @@ TrayRegisterAdminTasks:
 return
 ; [END: WSL ext4 Backup SSD Auto-Mount]
 
+; Responder for StartupScript.ahk's mirrored custom menu items (see the manifest publish
+; + OnMessage registration near the top of this file). wParam is the manifest's 1-based
+; line number; we just re-read our own manifest and Gosub whichever label is on that line.
+HandleRemoteTrayMenuTrigger(wParam, lParam) {
+    SplitPath, A_ScriptFullPath,,,, ScriptNameNoExt
+    TrayMenuManifest := A_Temp "\ahk_traymenu_" ScriptNameNoExt ".txt"
+    FileReadLine, line, %TrayMenuManifest%, %wParam%
+    if ErrorLevel
+        return
+    StringSplit, parts, line, |
+    if (parts0 >= 2 && parts2 != "")
+        Gosub, %parts2%
+}
+
 ; =============================================================================
 ; PYTHON SERVER LAUNCH HELPER
 ;
@@ -464,7 +491,7 @@ WatchSkillsLock:
     ; Map exe -> app token. Anything else = neutral, reset debounce and exit.
     if (g_SkillsCurExe = "claude.exe")
         newApp := "claude"
-    else if (g_SkillsCurExe = "Antigravity.exe" || g_SkillsCurExe = "agy.exe")
+    else if (g_SkillsCurExe = "Antigravity.exe" || g_SkillsCurExe = "agy.exe" || g_SkillsCurExe = "Antigravity IDE.exe")
         newApp := "antigravity"
     else {
         g_SkillsCandidate := ""      ; reset debounce - neutral window broke the run
