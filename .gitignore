@@ -1,12 +1,47 @@
+# Third-party tools kept locally for occasional use - not project source.
+# Wildcarded so a future version bump (upx-4.0-win64/, bfg-1.15.0.jar) still matches.
 upx*/
-PersonalKeywords.ahk
-*Dialog*
 bfg*
-local_paths.ahk
+
+# Editor/OS noise
 .vscode/
 *.log
 *.exe
+# Except third-party utility binaries this repo deliberately tracks (see README's Setup section).
+!AHK Setup/*.exe
+!AutoHotkey Companion Files/*.exe
+*Dialog*
+
+# Log output directories
 Logs/
 AllScripts/Logs/
+
+# Claude Code's own local session/tool state - not project content.
+.claude/
+
+# --- Personal/machine-specific config -------------------------------------
+# These 3 files carry this machine's real paths/credentials and must NEVER be
+# tracked - each has a tracked `.example` counterpart with generic
+# placeholders instead. See ARCHITECTURE.md's "Path-leak prevention" section
+# and .githooks/pre-commit, which both depend on these three lines staying
+# exactly as they are. Do not remove or narrow them.
+PersonalKeywords.ahk
+LocalPaths.ahk
 AllScripts/PowerShell/ssd_config.json
 
+# AI-assistant instructions - local-only, per this repo's own (gitignored)
+# CLAUDE.md convention: project rules stay private even though they contain
+# nothing sensitive by themselves.
+CLAUDE.md
+
+# Auto-generated HotkeyHelp.ahk runtime state (window-docking position,
+# personal hotkey/file exclusion list) - regenerates itself on first use,
+# meaningless on another machine's screen layout.
+AllScripts/Hotkey Help.ini
+
+# Local knowledge cache - condensed AHK reference notes, bug log, and
+# community-solution pointers built up during AI-assisted work on this repo.
+# Personal reference material, not project source - never pushed publicly.
+Official Documentation/
+Bugs/
+Community-Solution/

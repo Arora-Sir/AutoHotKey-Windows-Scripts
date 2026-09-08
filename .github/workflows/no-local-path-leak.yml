@@ -1,0 +1,29 @@
+name: No local path leak
+
+# Server-side backstop for the local .githooks/pre-commit hook, since a local hook alone is bypassable (git commit --no-verify, or core.hooksPath simply never configured on a fresh clone).
+# This can only check for a GENERIC pattern, not this machine's specific username/computer name the way the local hook can - a workflow file is tracked/public, so embedding an actual username here would itself be exactly the leak this exists to catch.
+# See ARCHITECTURE.md for the full design rationale.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check-no-local-path-leak:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for hardcoded per-user Windows profile paths
+        shell: bash
+        run: |
+          MATCHES=$(grep -rIlE 'C:\\Users\\[^\\/"]+\\' . --exclude-dir=.git || true)
+          if [ -n "$MATCHES" ]; then
+            echo "Found hardcoded C:\\Users\\<name>\\ paths in the following tracked file(s):"
+            echo "$MATCHES"
+            echo ""
+            echo "Route real per-user paths through AllScripts/LocalPaths.ahk (gitignored)"
+            echo "instead, with a generic placeholder mirrored into LocalPaths.ahk.example."
+            exit 1
+          fi
+          echo "No hardcoded per-user Windows paths found."
