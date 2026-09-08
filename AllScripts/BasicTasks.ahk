@@ -6,6 +6,7 @@
 ; NumLock AlwaysOn && ScrollLock Always Off
 ; Double tap Caps lock to activate/deactivate Caps lock
 ; Taskbar Mouse Scroll to Increase/Decrease volume
+; Volume_Up / Volume_Down --> Adjust system volume
 
 ; Win+F --> Run FireFox
 ; Win+C --> Run Calculator
@@ -15,12 +16,14 @@
 ; Win+Shift+A --> Open Notification center
 ; Win+Shift+E --> (Folder) Open Downloads (My Screenshots) folder
 ; Win+Shift+J --> (Folder) Open Java Course
+; Win+Shift+P --> Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)
+; Ctrl+Shift+P --> Same, alternate keybind (manual PC-side use, doesn't help from tablet - see ARCHITECTURE.md)
+; Win+Alt+P --> Same, third keybind (manual PC-side use)
 ; Win+Alt+C --> Run Alarm Clock
 ; Win+Alt+Ctr+C --> Open PowerShell
 ; Win+Alt+Ctr+K --> Click Center of Screen (Disabled)
 ; Win+Alt+X --> (Script) Reconnect Cloudflare Network
 ; Win+Alt+N --> Clear Notification center
-; Win+Alt+L --> (Script) Lock/Unlock Personal Skills (Org Safe Mode Toggle)
 ; Win+Alt+L --> (Script) Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)
 ; Alt+X --> Open Today Calendar
 ; Alt+D --> Open ChatGPT
@@ -47,8 +50,8 @@
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
-#Include *i local_paths.ahk ; Include local custom paths if present (ignored by Git)
-EnvGet, UserProfile, USERPROFILE ; Get Windows UserProfile directory (AHK v1 compatibility)
+#Include *i %A_ScriptDir%\LocalPaths.ahk ; Include local custom paths if present (ignored by Git)
+#Include %A_ScriptDir%\SharedHelpers.ahk ; Functions shared across scripts - see ARCHITECTURE.md
 #SingleInstance force ; Ensures that only the last executed instance of script is running
 DetectHiddenWindows, On
 
@@ -56,12 +59,50 @@ SetNumlockState, AlwaysOn ; Set Lock keys permanently
 ; SetScrollLockState, AlwaysOff ;Commented this as scrollLock key is now being used to suspend & terminate AHK Scripts
 ; SetCapsLockState, AlwaysOff
 
+; System Tray menu integration for Skills Vault (owned by BasicTasks)
+global g_SkillsTrayStatusLabel := "Skills Vault: [AUTO] (focus-driven)"
+
+; --- Manual toggle debounce state (Win+Alt+L) --------------------------------
+; Single source of truth for the settle window - referenced everywhere instead
+; of a repeated literal.
+global g_SkillsDebounceMs := 2000
+; In-memory "next mode if committed right now" - the ONLY thing the fast path
+; (TogglePersonalSkillsLock) cycles. Distinct from the on-disk modeFile, which
+; remains the cross-process state of record and is touched only by the commit
+; phase. "" is a one-time sentinel meaning "not yet seeded this process" -
+; seeded from modeFile on first use, and reset back to "" once a commit
+; settles with nothing newer pending (see CommitPersonalSkillsLock's tail).
+global g_SkillsPendingMode := ""
+; Defense-in-depth reentrancy guard for the COMMIT phase only. AHK's own timer
+; engine already guarantees at most one concurrently-running instance of a
+; given timer target, so this should never actually read true in practice.
+global g_SkillsCommitBusy := false
+Menu, Tray, Add
+Menu, Tray, Add, %g_SkillsTrayStatusLabel%, TraySkillsVaultStatus
+Menu, Tray, Disable, %g_SkillsTrayStatusLabel%
+Menu, Tray, Add, Cycle Skills Vault Mode (Win+Alt+L), TraySkillsVaultCycle
+Menu, Tray, Add, Toggle Display Mode (Win+Shift+P), TrayToggleDisplayMode
+Menu, Tray, Add, Duplicate Only, TrayDuplicateDisplayMode
+
+; Publish for StartupScript.ahk's master submenu mirroring (see SharedHelpers.ahk)
+PublishTrayMenuManifest([["Skills Vault Status (Show Toast)", "TraySkillsVaultStatus"], ["Cycle Skills Vault Mode (Win+Alt+L)", "TraySkillsVaultCycle"], ["Toggle Display Mode (Win+Shift+P)", "TrayToggleDisplayMode"], ["Duplicate Only", "TrayDuplicateDisplayMode"]])
+
+SetTimer, UpdateSkillsTrayStatus, 2000
+SetTimer, UpdateSkillsTrayStatus, -100 ; Fast initial update
+
+; Win32 WM_DISPLAYCHANGE (0x007E) - auto-recovery on laptop lid open
+global g_LastManualDisplaySwitch := 0
+OnMessage(0x007E, "OnDisplayChange_LidRecovery")
+
 #If MouseIsOver("ahk_class Shell_TrayWnd")
     ;   WheelUp::SoundSet +1   ;Hide OSD
     ;   WheelDown::SoundSet -1 ;Hide OSD
     WheelUp::Send {Volume_Up}
     WheelDown::Send {Volume_Down}
 #If
+
+Volume_Up::SoundSet, +10 ;{ <-- Volume Up
+Volume_Down::SoundSet, -10 ;{ <-- Volume Down
 
 ; Text box created (UI) see in ToggleFileExt or HideFiles
 text(a,t:="",x:="",y:="")
@@ -451,40 +492,23 @@ OpenCalculator()
 
 RunPowerShellAsAdministrator()
 {
-    ; --- OLD implementation, kept commented until the new one below is confirmed working ---
-    ; Send, #x ;Window Start Menu
-    ; Sleep, 1000
-    ; Send, a ;a as Admin
-    ;
-    ; ; Run, powershell
-    ; ; Run, "C:\Program Files\PowerShell\7\pwsh.exe"
-    ; ; WinWait, ahk_class CASCADIA_HOSTING_WINDOW_CLASS
-    ; ; Sleep, 1100
-    ; ; Send, ^+2 ;Open as Admin
-    ;
-    ; ; Sleep, 1000
-    ; ; WinActivate, ahk_class CASCADIA_HOSTING_WINDOW_CLASS
-    ; ; Sleep, 100
-    ; ; Send, !{Tab} ;Previous Instance without admin rights
-    ; ; Sleep, 100
-    ; ; Send, !{F4}
-
-    ; --- Also tried and rejected: *RunAs on pwsh.exe or wt.exe directly, Shell.Application
-    ; ShellExecute, shell:AppsFolder package identity, and a Highest-run-level Task
-    ; Scheduler task. wt.exe is a packaged/MSIX app and none of those reliably elevate it --
-    ; each either spawns and exits within a second or two, or silently no-ops. This is a
-    ; genuine Windows limitation (packaged apps generally can't be launched pre-elevated by
-    ; external automation), not fixable by trying yet another external-elevation variant.
-    ; *RunAs "...pwsh.exe" DOES elevate reliably on its own, but opens a plain console host
-    ; window, not Windows Terminal's tabbed UI.
+    ; *RunAs on pwsh.exe or wt.exe directly, Shell.Application ShellExecute on
+    ; shell:AppsFolder package identity, and a Highest-run-level Task Scheduler
+    ; task were all tried and rejected: wt.exe is a packaged/MSIX app and none
+    ; of those reliably elevate it -- each either spawns and exits within a
+    ; second or two, or silently no-ops. This is a genuine Windows limitation
+    ; (packaged apps generally can't be launched pre-elevated by external
+    ; automation), not fixable by trying yet another external-elevation
+    ; variant. *RunAs "...pwsh.exe" DOES elevate reliably on its own, but
+    ; opens a plain console host window, not Windows Terminal's tabbed UI.
 
     ; Launch a Windows Terminal PROFILE that is itself configured to elevate ("PowerShell
     ; (Admin)" in this Terminal install's profile list, normally reached via the dropdown
     ; next to the + tab button, or Ctrl+Shift+6 on this machine's current profile order --
     ; that keybinding is NOT stable across installs/reorders, which is why this targets the
     ; profile by name instead). Terminal handles the elevation internally for a
-    ; profile marked this way, the same mechanism the dropdown and Win+X use -- confirmed
-    ; live via the resulting window title reading "Administrator: PowerShell (Admin)".
+    ; profile marked this way, the same mechanism the dropdown and Win+X use -- the
+    ; resulting window's title reads "Administrator: PowerShell (Admin)".
     ;
     ; SETUP REQUIRED: none, on a reasonably current Windows Terminal -- "<Profile> (Admin)"
     ; entries in that + dropdown are auto-generated by Terminal itself for every detected
@@ -827,6 +851,16 @@ $^c::CopyToClipboard() ;{ <-- OneNote Copy Mechanism Handeling (instead of SS)
 ; Win+Shift+A Open Notification center
 #+A::OpenActionCenter() ;{ <-- Open Notification center
 
+; Win+Shift+P Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)
+#+p::ToggleTabletDisplayMode() ;{ <-- Toggle Display Mode
+
+; Ctrl+Shift+P - same toggle, alternate keybind.
+; Turned out Android intercepts modifier combos before Moonlight ever forwards them, regardless of which combo, so this doesn't reliably help from the tablet either - kept as a manual PC-side option.
+^+p::ToggleTabletDisplayMode() ;{ <-- Toggle Display Mode (Alt keybind)
+
+; Win+Alt+P - same toggle, third keybind, manual PC-side option (no binding existed on this combo yet).
+#!p::ToggleTabletDisplayMode() ;{ <-- Toggle Display Mode (Alt keybind 2)
+
 ; Win+Alt+N Clear Notification center
 #!N::ClearNotificaitons() ;{ <-- Clear Notifications (Win 11)
 
@@ -875,7 +909,19 @@ $^J::CloseBrowserBottomDownloadsBar() ;{ <-- (Chrome) Close browser downloads ba
 #!x::Run "%PATH_IP_ROTATOR%" ;{ <-- Reconnect Cloudfare Network
 
 ; Win+Alt+L --> (Script) Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)
+; Scoped MaxThreads override: the handler makes a BLOCKING shell.Run() across 14
+; folders (tens-hundreds of ms, more under disk/AV contention). Without this,
+; AHK's default (MaxThreadsPerHotkey=1, Buffer=Off) means a second press while
+; the first is still running is SILENTLY DISCARDED - not queued, no error.
+; Buffer On + PerHotkey 1 coalesces rapid re-presses into exactly one extra
+; run, queued (never concurrent - two icacls sweeps racing the same ACLs is
+; unacceptable). Reset back to defaults right after, or every hotkey below
+; would inherit this (positional, forward-applying).
+#MaxThreadsBuffer On
+#MaxThreadsPerHotkey 1
 #!l:: TogglePersonalSkillsLock() ;{ <-- Cycle Skills Vault Mode
+#MaxThreadsBuffer Off
+#MaxThreadsPerHotkey 1
 
 ; Win+X+X --> Sleep Laptop
 $#x:: SleepLaptop() ;{ <-- Sleep Laptop (Win+X+X)
@@ -924,7 +970,7 @@ AdjustVsCodeZoom(delta) {
 
         rep := q . "window.zoomLevel" . q . ": " . currentZoom
         newContent := RegExReplace(sContent, pattern, rep)
-        
+
         File := FileOpen(settingsFile, "w", "UTF-8")
         if IsObject(File) {
             File.Write(newContent)
@@ -942,174 +988,351 @@ RemoveVsCodeZoomToolTip:
 return
 ; [END: VS Code Fine-Grained Whole UI Zoom Hook]
 
-; [START: WSL ext4 Backup SSD Management Hotkeys]
-; Manual hotkeys for mounting and unmounting the ext4 backup SSD
-; Unattended background auto-mount on boot/plug lives in BackgroundAutomations.ahk
-; Hotkeys:
-;   Win+Alt+M -> Mount ext4 SSD & Open in Explorer
-;   Win+Alt+U -> Unmount ext4 SSD safely
-
-#!m::MountExt4Ssd(true)   ; Win+Alt+M -> Manual Mount & Open
-#!u::UnmountExt4Ssd(true) ; Win+Alt+U -> Manual Unmount
-
-MountExt4Ssd(openExplorer := false) {
-    global EXT4_SSD_LABEL
-    if FileExist(A_Temp "\mount_wsl_ssd.lock") || FileExist(A_Temp "\unmount_wsl_ssd.lock")
-        return
-
-    ejectedFlag := A_Temp "\pixel_ssd_ejected.flag"
-    if FileExist(ejectedFlag)
-        FileDelete, %ejectedFlag%
-
-    static lastMountTick := 0
-    now := A_TickCount
-    if (now - lastMountTick < 6000)
-        return
-    lastMountTick := now
-
-    psScript := A_ScriptDir "\PowerShell\mount_wsl_ssd.ps1"
-    if !FileExist(psScript)
-        return
-    args := openExplorer ? "-OpenExplorer" : ""
-    RunSilentPowerShell(psScript, args)
-
-    if (openExplorer) {
-        label := EXT4_SSD_LABEL ? EXT4_SSD_LABEL : "Linux Backup SSD"
-        ToolTip, % "Opening " label "..."
-        SetTimer, RemoveSsdToolTip, -1500
-    }
-}
-
-UnmountExt4Ssd(showFeedback := false, onlyIfDisconnected := false) {
-    global EXT4_SSD_LABEL
-    if FileExist(A_Temp "\unmount_wsl_ssd.lock")
-        return
-
-    if (!onlyIfDisconnected) {
-        ejectedFlag := A_Temp "\pixel_ssd_ejected.flag"
-        FileDelete, %ejectedFlag%
-        FileAppend, %A_Now%, %ejectedFlag%
-    }
-
-    static lastUnmountTick := 0
-    now := A_TickCount
-    if (now - lastUnmountTick < 4000)
-        return
-    lastUnmountTick := now
-
-    psScript := A_ScriptDir "\PowerShell\unmount_wsl_ssd.ps1"
-    if !FileExist(psScript)
-        return
-    args := onlyIfDisconnected ? "-OnlyIfDisconnected" : ""
-    RunSilentPowerShell(psScript, args)
-
-    if (showFeedback) {
-        label := EXT4_SSD_LABEL ? EXT4_SSD_LABEL : "Linux Backup SSD"
-        ToolTip, % label " is now safe to unplug."
-        SetTimer, RemoveSsdToolTip, -2500
-    }
-}
-
-RunSilentPowerShell(scriptPath, args := "") {
-    runSilentExe := A_ScriptDir "\PowerShell\run_silent.exe"
-    if FileExist(runSilentExe) {
-        cmd := """" runSilentExe """ powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ scriptPath """" (args != "" ? " " args : "")
-        Run, %cmd%,, Hide
-        return true
-    }
-    cmd := "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ scriptPath """" (args != "" ? " " args : "")
-    try {
-        shell := ComObjCreate("WScript.Shell")
-        shell.Run(cmd, 0, false)
-        return true
-    } catch {
-        Run, %cmd%,, Hide
-        return false
-    }
-}
-
-RemoveSsdToolTip:
-    ToolTip
-return
-; [END: WSL ext4 Backup SSD Management Hotkeys]
-
+; Win+Alt+M/U (mount/unmount the ext4 backup SSD) now live in
+; AllScripts/Ext4SsdManager.ahk, along with the rest of that feature.
 
 ; [START: Personal Skills Lock/Unlock 3-Way Toggle]
+; Fast phase - the hotkey/tray target. Cycles the in-memory pending mode, shows instant feedback, and arms the settle timer.
+; Nothing here blocks: no mutex, no shell.Run, no filesystem check for the lock/unlock scripts - all of that belongs exclusively to CommitPersonalSkillsLock below.
+; A blocking icacls sweep across 14 folders (3-4 icacls calls each) takes ~2.3-3.5s, so this split keeps the toast instant on every press; only the LAST press in a rapid run (g_SkillsDebounceMs of quiet, 2000ms by default) actually triggers the real work.
 TogglePersonalSkillsLock() {
-    global PATH_SKILLS_LOCK_SCRIPT, PATH_SKILLS_UNLOCK_SCRIPT, PATH_PWSH_EXE
+    global g_SkillsPendingMode, g_SkillsDebounceMs, g_SkillsCommitBusy
+    global PATH_SKILLS_LOCK_SCRIPT, PATH_SKILLS_UNLOCK_SCRIPT
+
+    ; While a commit is actively applying (the amber badge is on screen), the hotkey is a silent no-op.
+    ; A fresh press here would otherwise clobber the in-flight commit's own badge and then get its OWN commit rejected by DebounceTryBeginCommit anyway, producing a scrambled badge sequence.
+    ; Cancelling the in-flight commit instead was considered and rejected: it's a blocking shell.Run of icacls across all 14 real vault folders, and killing it mid-sweep could leave the vault partially locked/unlocked - an inconsistent security state this project cannot risk.
+    ; See ARCHITECTURE.md.
+    if (g_SkillsCommitBusy)
+        return
 
     if (!PATH_SKILLS_LOCK_SCRIPT || !PATH_SKILLS_UNLOCK_SCRIPT) {
-        ShowSkillsStatusBadge("Skills paths not configured in local_paths.ahk")
+        ShowSkillsStatusBadge("[ERROR] Skills paths not configured")
         return
     }
 
-    modeFile := A_Temp "\skills_vault_mode.flag"
-    curMode := "auto"
-    if FileExist(modeFile) {
-        FileRead, curMode, %modeFile%
-        curMode := Trim(curMode)
-        if (curMode != "locked" && curMode != "unlocked" && curMode != "auto")
-            curMode := "auto"
+    ; Seed from the real on-disk mode file only on the first press since this process started (or the first press after a settled commit reset this back to "").
+    ; Every press after that cycles purely off the in-memory value, so a rapid burst always advances from what the user just SAW, never from stale disk state a pending/in-flight commit hasn't written yet.
+    if (g_SkillsPendingMode = "") {
+        modeFile := A_Temp "\skills_vault_mode.flag"
+        seedMode := "auto"
+        if FileExist(modeFile) {
+            FileRead, seedMode, %modeFile%
+            seedMode := Trim(seedMode)
+            if (seedMode != "locked" && seedMode != "unlocked" && seedMode != "auto")
+                seedMode := "auto"
+        }
+        g_SkillsPendingMode := seedMode
     }
 
-    pwsh := PATH_PWSH_EXE ? PATH_PWSH_EXE : (FileExist("C:\Program Files\PowerShell\7\pwsh.exe") ? "C:\Program Files\PowerShell\7\pwsh.exe" : "powershell.exe")
-    shell := ComObjCreate("WScript.Shell")
+    ; Cycle purely in-memory: auto -> locked -> unlocked -> auto -> ...
+    if (g_SkillsPendingMode = "auto")
+        g_SkillsPendingMode := "locked"
+    else if (g_SkillsPendingMode = "locked")
+        g_SkillsPendingMode := "unlocked"
+    else
+        g_SkillsPendingMode := "auto"
 
-    if (curMode = "auto") {
-        nextMode := "locked"
-        if (!FileExist(PATH_SKILLS_LOCK_SCRIPT)) {
-            ShowSkillsStatusBadge("Lock script not found")
-            return
-        }
-        cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_LOCK_SCRIPT . """ -Silent"
-        shell.Run(cmd, 0, true)
-        ShowSkillsStatusBadge("🔒 Skills: Force Locked")
-    } else if (curMode = "locked") {
-        nextMode := "unlocked"
-        if (!FileExist(PATH_SKILLS_UNLOCK_SCRIPT)) {
-            ShowSkillsStatusBadge("Unlock script not found")
-            return
-        }
-        cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_UNLOCK_SCRIPT . """ -Silent"
-        shell.Run(cmd, 0, true)
-        ShowSkillsStatusBadge("🔓 Skills: Force Unlocked")
-    } else {
-        nextMode := "auto"
-        ; Immediate active window check upon returning to auto mode
-        WinGet, curExe, ProcessName, A
-        if (curExe = "claude.exe") {
-            if (FileExist(PATH_SKILLS_LOCK_SCRIPT)) {
-                cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_LOCK_SCRIPT . """ -Silent"
-                shell.Run(cmd, 0, false)
-            }
-        } else if (curExe = "Antigravity.exe" || curExe = "agy.exe" || curExe = "Antigravity IDE.exe") {
-            if (FileExist(PATH_SKILLS_UNLOCK_SCRIPT)) {
-                cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_UNLOCK_SCRIPT . """ -Silent"
-                shell.Run(cmd, 0, false)
-            }
-        }
-        ShowSkillsStatusBadge("⚡ Skills: Auto Mode")
-    }
+    ; Instant feedback for THIS press's resulting state.
+    if (g_SkillsPendingMode = "locked")
+        ShowSkillsStatusBadge("[LOCKED] Skills Vault (manual)")
+    else if (g_SkillsPendingMode = "unlocked")
+        ShowSkillsStatusBadge("[UNLOCKED] Skills Vault (manual)")
+    else
+        ShowSkillsStatusBadge("[AUTO] Skills Vault (focus-driven)")
 
-    try {
-        f := FileOpen(modeFile, "w")
-        if (f) {
-            f.Write(nextMode)
-            f.Close()
-        }
-    }
+    ; Arm/re-arm the settle timer (shared helper - see SharedHelpers.ahk for the Reset-timer mechanics).
+    ; Only the LAST press in any rapid run ever reaches CommitPersonalSkillsLock, and only once g_SkillsDebounceMs elapses with zero further presses.
+    DebounceArmTimer("CommitPersonalSkillsLock", g_SkillsDebounceMs)
     return
 }
+
+; Slow "commit" phase - the ONLY place that touches the mutex, the lock/unlock scripts, or the on-disk mode file.
+; Reached exclusively via the settle timer armed above; nothing else Gosubs this label.
+CommitPersonalSkillsLock:
+    global g_SkillsPendingMode, g_SkillsCommitBusy, g_SkillsDebounceMs
+    global PATH_SKILLS_LOCK_SCRIPT, PATH_SKILLS_UNLOCK_SCRIPT, PATH_PWSH_EXE
+
+    ; Defense-in-depth only (see g_SkillsCommitBusy's declaration and DebounceTryBeginCommit in SharedHelpers.ahk).
+    ; AHK's timer engine already guarantees at most one concurrently-running instance of a given timer's target, so this should never actually read true.
+    if !DebounceTryBeginCommit(g_SkillsCommitBusy, "CommitPersonalSkillsLock", g_SkillsDebounceMs)
+        return
+
+    ; Snapshot now, before the mutex wait and the blocking work below.
+    ; The tail compares the LIVE g_SkillsPendingMode against this snapshot to detect whether a press landed during this invocation, so that press is guaranteed a turn instead of silently lost - see the tail comment.
+    targetMode := g_SkillsPendingMode
+
+    ; Cross-process mutex: guards against WatchSkillsLock (a separate OS process in BackgroundAutomations.ahk) reading/acting on the same mode file and running the same lock/unlock scripts concurrently with this commit.
+    ; Same patient 10s timeout the hotkey path always used.
+    hMutex := AcquireNamedMutex("SkillsVaultLock_AHK_v1", 10000)
+    if (!hMutex) {
+        ShowSkillsStatusBadge("[ERROR] Vault busy, try again")
+    } else {
+        pwsh := PATH_PWSH_EXE ? PATH_PWSH_EXE : (FileExist("C:\Program Files\PowerShell\7\pwsh.exe") ? "C:\Program Files\PowerShell\7\pwsh.exe" : "powershell.exe")
+        shell := ComObjCreate("WScript.Shell")
+        scriptOk := true ; false only if a required script vanished since press time
+
+        if (targetMode = "locked") {
+            if (FileExist(PATH_SKILLS_LOCK_SCRIPT)) {
+                cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_LOCK_SCRIPT . """ -Silent"
+                ; Amber "applying" badge closes the silent gap between settle and completion (real work takes ~2.3-3.5s).
+                ; No third "done" badge afterward - it would just repeat the [LOCKED] badge already shown at press time, conveying nothing new, so the applying badge is explicitly hidden the moment the real work finishes instead.
+                ; 15000ms is a safety-net ceiling only, in case the explicit hide below is ever skipped.
+                ShowBottomRightBadge("[APPLYING...] Locking Skills Vault", "6E5A00", 15000)
+                shell.Run(cmd, 0, true)
+                HideBottomRightBadge()
+            } else {
+                ShowSkillsStatusBadge("[ERROR] Lock script not found")
+                scriptOk := false
+            }
+        } else if (targetMode = "unlocked") {
+            if (FileExist(PATH_SKILLS_UNLOCK_SCRIPT)) {
+                cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_UNLOCK_SCRIPT . """ -Silent"
+                ShowBottomRightBadge("[APPLYING...] Unlocking Skills Vault", "6E5A00", 15000)
+                shell.Run(cmd, 0, true)
+                HideBottomRightBadge()
+            } else {
+                ShowSkillsStatusBadge("[ERROR] Unlock script not found")
+                scriptOk := false
+            }
+        } else { ; targetMode = "auto"
+            ; Focus check happens HERE, at commit time, not at press time - "auto" has always meant "whatever's focused NOW" elsewhere in this codebase (WatchSkillsLock's own logic), and the toast shown at press time never promised which script would run, just [AUTO].
+            ; modeFile is written to "auto" regardless of which (if any) branch below actually runs - unconditional, matching the pre-debounce behavior.
+            WinGet, curExe, ProcessName, A
+            if (curExe = "claude.exe") {
+                if (FileExist(PATH_SKILLS_LOCK_SCRIPT)) {
+                    cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_LOCK_SCRIPT . """ -Silent"
+                    ShowBottomRightBadge("[APPLYING...] Locking Skills Vault (Auto)", "6E5A00", 15000)
+                    shell.Run(cmd, 0, true) ; blocking - keep inside the mutex's critical section
+                    HideBottomRightBadge()
+                }
+            } else if (curExe = "Antigravity.exe" || curExe = "agy.exe" || curExe = "Antigravity IDE.exe") {
+                if (FileExist(PATH_SKILLS_UNLOCK_SCRIPT)) {
+                    cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_UNLOCK_SCRIPT . """ -Silent"
+                    ShowBottomRightBadge("[APPLYING...] Unlocking Skills Vault (Auto)", "6E5A00", 15000)
+                    shell.Run(cmd, 0, true) ; blocking - keep inside the mutex's critical section
+                    HideBottomRightBadge()
+                }
+            }
+            ; Neither app focused (or its script is missing): fall through silently - no error, no script, but the mode-file write below still happens.
+        }
+
+        if (scriptOk) {
+            try {
+                f := FileOpen(A_Temp "\skills_vault_mode.flag", "w")
+                if (f) {
+                    f.Write(targetMode)
+                    f.Close()
+                }
+            }
+        }
+        ReleaseNamedMutex(hMutex)
+    }
+
+    ; Reconciliation (shared helper - see SharedHelpers.ahk): if the live pending value still equals what we just pursued, nothing newer happened - drop back to the "" sentinel so the next press re-seeds from disk instead of trusting this value forever.
+    ; If it no longer matches, at least one more press landed while this invocation ran (most commonly: while the blocking shell.Run above was still mid-flight, seconds in).
+    ; That intent can't safely cancel an already-dispatched icacls sweep, so it waits and gets its own turn immediately after instead of being dropped - re-armed once more so it still gets applied. Also clears g_SkillsCommitBusy.
+    DebounceEndCommit(g_SkillsPendingMode, targetMode, g_SkillsCommitBusy, "CommitPersonalSkillsLock", g_SkillsDebounceMs)
+    return
+
+; AcquireSkillsVaultLock/ReleaseSkillsVaultLock now live in SharedHelpers.ahk as the generalized AcquireNamedMutex/ReleaseNamedMutex.
+
+TraySkillsVaultStatus:
+    modeFile := A_Temp "\skills_vault_mode.flag"
+    sMode := "auto"
+    if FileExist(modeFile) {
+        FileRead, sMode, %modeFile%
+        sMode := Trim(sMode)
+    }
+    if (sMode = "locked")
+        ShowSkillsStatusBadge("[LOCKED] Skills Vault (manual)")
+    else if (sMode = "unlocked")
+        ShowSkillsStatusBadge("[UNLOCKED] Skills Vault (manual)")
+    else
+        ShowSkillsStatusBadge("[AUTO] Skills Vault (focus-driven)")
+return
+
+TraySkillsVaultCycle:
+    TogglePersonalSkillsLock()
+return
+
+TrayToggleDisplayMode:
+    ToggleTabletDisplayMode()
+return
+
+TrayDuplicateDisplayMode:
+    SwitchToDuplicateDisplayMode()
+return
+
+UpdateSkillsTrayStatus:
+    global g_SkillsTrayStatusLabel
+    modeFile := A_Temp "\skills_vault_mode.flag"
+    sMode := "auto"
+    if FileExist(modeFile) {
+        FileRead, sMode, %modeFile%
+        sMode := Trim(sMode)
+    }
+    if (sMode = "locked")
+        newLabel := "Skills Vault: [LOCKED] (manual)"
+    else if (sMode = "unlocked")
+        newLabel := "Skills Vault: [UNLOCKED] (manual)"
+    else
+        newLabel := "Skills Vault: [AUTO] (focus-driven)"
+
+    if (newLabel != g_SkillsTrayStatusLabel) {
+        try {
+            Menu, Tray, Rename, %g_SkillsTrayStatusLabel%, %newLabel%
+            g_SkillsTrayStatusLabel := newLabel
+            Menu, Tray, Disable, %newLabel%
+        }
+    }
+return
+
+; HandleRemoteTrayMenuTriggerBT replaced by the shared HandleRemoteTrayMenuTrigger
+; in SharedHelpers.ahk (the BT suffix existed only to avoid a name collision
+; between two file-local copies - no longer needed with one shared function).
+
+; ShowSkillsStatusBadge itself now lives in SharedHelpers.ahk - both this
+; file and BackgroundAutomations.ahk's WatchSkillsLock call it, so the
+; [LOCKED]/[UNLOCKED]/[AUTO]/error color mapping is defined exactly once.
 ; [END: Personal Skills Lock/Unlock 3-Way Toggle]
 
-ShowSkillsStatusBadge(msg) {
-    SysGet, mon, MonitorWorkArea
-    CoordMode, ToolTip, Screen
-    ToolTip, % msg, monRight - 230, monBottom - 45, 2
-    SetTimer, RemoveSkillsStatusBadge, -1200
+; [START: Tablet Headless Display & Mouse Speed Toggle (Win+Shift+P)]
+; Toggles cleanly between PC Screen Only (laptop 1080p @ 144Hz, mouse speed 10) and
+; Second Screen Only (tablet dummy plug 2560x1600 @ 120Hz, mouse speed 20).
+; Uses native Windows 11 numeric switches (1 vs 4) with zero GUI menus, zero delays,
+; and no misplaced toast overlays.
+ToggleTabletDisplayMode() {
+    global PATH_SUNSHINE_SCRIPTS, g_LastManualDisplaySwitch
+    g_LastManualDisplaySwitch := A_TickCount
+    markerFile := PATH_SUNSHINE_SCRIPTS ? (PATH_SUNSHINE_SCRIPTS "\.fast_since") : ""
+
+    SysGet, primIndex, MonitorPrimary
+    SysGet, monName, MonitorName, %primIndex%
+
+    ; If marker exists OR primary monitor is DISPLAY4 (HDMI dummy plug), we are currently in Tablet Mode
+    isTablet := FileExist(markerFile) || InStr(monName, "DISPLAY4")
+
+    if (isTablet) {
+        ; --- SWITCH TO LAPTOP MODE ---
+        ; 1. Reset mouse speed to 10 (normal) and acceleration to 1 (Enhance pointer precision ON)
+        DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
+        VarSetCapacity(accel, 12, 0)
+        NumPut(6, accel, 0, "Int")
+        NumPut(10, accel, 4, "Int")
+        NumPut(1, accel, 8, "Int")
+        DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
+
+        ; 2. Clear marker file for SunshineMouseWatchdog
+        FileDelete, %markerFile%
+
+        ; 3. Native silent switch to PC Screen Only (1 = Internal)
+        Run, DisplaySwitch.exe 1,, Hide
+    } else {
+        ; --- SWITCH TO TABLET MODE ---
+        ; Bail out if there's no second display at all. Confirmed (Windows forum reports): DisplaySwitch.exe 4 (Second screen only) with only one monitor connected blanks the screen entirely, recoverable only by a blind Win+P keypress sequence with zero visual feedback.
+        SysGet, monCount, MonitorCount
+        if (monCount < 2) {
+            ShowTimedToolTip("No second display detected - staying on current display.", 2000)
+            return
+        }
+
+        ; 1. Boost mouse speed to 20 (fast) and acceleration to 0 (Enhance pointer precision OFF)
+        DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 20, "UInt", 3)
+        VarSetCapacity(accel, 12, 0)
+        NumPut(6, accel, 0, "Int")
+        NumPut(10, accel, 4, "Int")
+        NumPut(0, accel, 8, "Int")
+        DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
+
+        ; 2. Create marker file for SunshineMouseWatchdog - content "manual" (rather than the
+        ; empty file set_fast.ps1 creates) lets it tell a deliberate manual toggle apart from a
+        ; real Sunshine session, so it never overrides this because of a stale sunshine.log or
+        ; Tailscale reading (see SunshineMouseWatchdog.ahk's own comment on this).
+        FileAppend, manual, %markerFile%
+
+        ; 3. Native silent switch to Second Screen Only (4 = External)
+        Run, DisplaySwitch.exe 4,, Hide
+    }
 }
 
-RemoveSkillsStatusBadge:
-    ToolTip,,,, 2
-return
-; [END: Personal Skills Lock/Unlock 3-Way Toggle]
+; Switches to Duplicate display mode (mirrors the laptop screen onto the tablet's dummy plug).
+; Treated the same as ToggleTabletDisplayMode()'s Tablet/Second-screen-only branch for mouse speed and the SunshineMouseWatchdog marker, since the tablet's dummy-plug display is still active while duplicated.
+; Self-contained rather than sharing code with that function, so its own behavior stays untouched.
+SwitchToDuplicateDisplayMode() {
+    global PATH_SUNSHINE_SCRIPTS, g_LastManualDisplaySwitch
+
+    ; Bail out if there's no second display at all - same reasoning as ToggleTabletDisplayMode()'s tablet branch (see that function's own comment on this).
+    SysGet, monCount, MonitorCount
+    if (monCount < 2) {
+        ShowTimedToolTip("No second display detected - staying on current display.", 2000)
+        return
+    }
+
+    g_LastManualDisplaySwitch := A_TickCount
+    markerFile := PATH_SUNSHINE_SCRIPTS ? (PATH_SUNSHINE_SCRIPTS "\.fast_since") : ""
+
+    ; Boost mouse speed to 20 (fast) and acceleration to 0 (Enhance pointer precision OFF) - same treatment as ToggleTabletDisplayMode()'s tablet branch.
+    DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 20, "UInt", 3)
+    VarSetCapacity(accel, 12, 0)
+    NumPut(6, accel, 0, "Int")
+    NumPut(10, accel, 4, "Int")
+    NumPut(0, accel, 8, "Int")
+    DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
+
+    ; Create marker file for SunshineMouseWatchdog - same "manual" convention as ToggleTabletDisplayMode()'s tablet branch (see that function's own comment for why).
+    FileAppend, manual, %markerFile%
+
+    ; Native silent switch to Duplicate (2 = Duplicate, matching the existing 1/4 convention ToggleTabletDisplayMode() already uses for PC-only/Second-screen-only).
+    Run, DisplaySwitch.exe 2,, Hide
+}
+
+; Hardware lid-open auto-recovery handler:
+; Fires instantaneously on Win32 WM_DISPLAYCHANGE (0x007E) whenever displays change.
+; Detects when the laptop lid opens (DISPLAY1 returns) while in tablet streaming mode, restoring mouse speed to 10 and resetting display to PC Screen Only silently.
+OnDisplayChange_LidRecovery(wParam, lParam, msg, hwnd) {
+    global PATH_SUNSHINE_SCRIPTS, g_LastManualDisplaySwitch
+    markerFile := PATH_SUNSHINE_SCRIPTS ? (PATH_SUNSHINE_SCRIPTS "\.fast_since") : ""
+
+    ; Guard 1: Ignore display events triggered by manual Win+Shift+P toggles (within 4s)
+    if (g_LastManualDisplaySwitch && (A_TickCount - g_LastManualDisplaySwitch < 4000))
+        return
+
+    ; Guard 2: Only act if tablet streaming mode was active (fast marker present)
+    if (!markerFile || !FileExist(markerFile))
+        return
+
+    ; Check if DISPLAY1 (internal laptop panel) has returned
+    SysGet, monCount, MonitorCount
+    hasInternal := false
+    Loop, %monCount%
+    {
+        SysGet, mName, MonitorName, %A_Index%
+        if InStr(mName, "DISPLAY1")
+        {
+            hasInternal := true
+            break
+        }
+    }
+
+    ; If internal panel is present while marker exists, the laptop lid was opened
+    if (hasInternal)
+    {
+        g_LastManualDisplaySwitch := A_TickCount ; Prevent loop re-entry
+
+        ; 1. Reset mouse speed to 10 (normal) and acceleration to 1 (Enhance pointer precision ON)
+        DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
+        VarSetCapacity(accel, 12, 0)
+        NumPut(6, accel, 0, "Int")
+        NumPut(10, accel, 4, "Int")
+        NumPut(1, accel, 8, "Int")
+        DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
+
+        ; 2. Clear marker file for SunshineMouseWatchdog
+        FileDelete, %markerFile%
+
+        ; 3. Native silent switch to PC Screen Only (1 = Internal 1080p @ 144Hz)
+        Run, DisplaySwitch.exe 1,, Hide
+    }
+}
+; [END: Tablet Headless Display & Mouse Speed Toggle]
