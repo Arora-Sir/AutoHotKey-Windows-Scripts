@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-This document serves as the permanent engineering reference for the ext4 external SSD automation suite on Windows 11 using WSL2 and Samba. It details the underlying hardware protocols, kernel traps, failure modes encountered, and the exact production solutions implemented to guarantee 100% reliable, zero-focus operation.
+This document is the engineering reference for the ext4 external SSD automation suite on Windows 11 using WSL2 and Samba. It covers the underlying hardware protocols, kernel traps, failure modes encountered, and the solutions implemented to keep mount/unmount reliable and free of focus-stealing console windows.
 
 ---
 
@@ -27,7 +27,10 @@ This document serves as the permanent engineering reference for the ext4 externa
 ### Gotcha 3: Windows SMB Redirector Kernel Hang in Single-Threaded Runtimes
 
 - **Symptom**: When the external SSD is abruptly unplugged, AutoHotkey freezes completely. Subsequent USB plug events and hotkeys fail to respond for 30 to 60 seconds.
-- **Root Cause**: If code executes `FileExist("P:\...")` or `Test-Path P:\` while the physical drive is disconnected, the Windows SMB redirector (`mrxsmb.sys` / `rdbss.sys`) sends SMB2 requests across TCP port 445 to Samba. Because the physical hardware was yanked, the Linux kernel blocks I/O operations in uninterruptible sleep (D-state). The Windows kernel blocks the calling thread waiting for the full network timeout (30-60 seconds). Because AutoHotkey v1.1 is single-threaded, the entire AHK process freezes.
+- **Root Cause**: If code executes `FileExist("P:\...")` or `Test-Path P:\` while the physical drive is disconnected, the Windows SMB redirector (`mrxsmb.sys` / `rdbss.sys`) sends SMB2 requests across TCP port 445 to Samba.
+  - Because the physical hardware was yanked, the Linux kernel blocks I/O operations in uninterruptible sleep (D-state).
+  - The Windows kernel blocks the calling thread waiting for the full network timeout (30-60 seconds).
+  - Because AutoHotkey v1.1 is single-threaded, the entire AHK process freezes.
 - **Resolution**: NEVER execute blocking filesystem I/O on network drive paths inside AutoHotkey. State presence must be determined via non-blocking local API checks (`DriveGet, pType, Type, P:` and in-memory WMI disk queries).
 
 ### Gotcha 4: WSL2 UTF-16LE Pipe Encoding Trap in PowerShell
@@ -43,7 +46,13 @@ This document serves as the permanent engineering reference for the ext4 externa
 
 - **Symptom**: When a USB SSD is abruptly yanked while attached to WSL2, subsequent `wsl --mount` commands fail with `WSL_E_DISK_ALREADY_ATTACHED` and `Operation not permitted`.
 - **Root Cause**: An abrupt physical disconnection tears down the underlying USB PDO while Hyper-V still holds an open kernel channel to the virtual SCSI controller. In `dmesg`, this logs as `hv 0xc0000001`. The virtual SCSI bus driver locks up and rejects detach requests.
-- **Resolution**: Detect known faulted attachment conditions (`WSL_E_DISK_ALREADY_ATTACHED`, `Operation not permitted`, or any non-zero unmount exit code like `-1073741819`). Instead of waiting 15 seconds for a hung detach to time out, immediately trigger `wsl.exe --shutdown`. A VM shutdown terminates the virtual SCSI bus cleanly in 1.2 seconds, allowing the subsequent `--bare` attach to succeed immediately in 2.6 seconds.
+- **Resolution**: Detect known faulted attachment conditions
+  (`WSL_E_DISK_ALREADY_ATTACHED`, `Operation not permitted`, or any non-zero
+  unmount exit code like `-1073741819`).
+  - Instead of waiting 15 seconds for a hung detach to time out, immediately
+    trigger `wsl.exe --shutdown`.
+  - A VM shutdown terminates the virtual SCSI bus cleanly in 1.2 seconds,
+    allowing the subsequent `--bare` attach to succeed immediately in 2.6 seconds.
 
 ### Gotcha 6: Ghost Partitions in Linux lsblk Table
 
@@ -82,8 +91,11 @@ This document serves as the permanent engineering reference for the ext4 externa
 ### Gotcha 9: Focus Theft from Console Window Creation & Task Scheduler Execution
 
 - **The Problem**: Whenever the SSD was connected or disconnected, a console window blipped onto the screen for 50 to 100 milliseconds, and whatever the user was typing lost focus.
-- **Deep Root Cause Analysis**:
-  1. **Task Scheduler Subsystem Trap**: `WSL_Mount_PixelSSD` and `WSL_Unmount_PixelSSD` were registered in Windows Task Scheduler with `Execute: powershell.exe`. Because `powershell.exe` is a CUI (Console User Interface) application, Windows Task Scheduler invokes `CreateProcessAsUser` in the interactive desktop session. Even with `-WindowStyle Hidden`, Windows Console Subsystem (`conhost.exe` or Windows Terminal) initializes and maps a top-level window onto the desktop before PowerShell can parse its parameters and hide itself. Windows Window Manager immediately grants this new window input focus, stealing focus from the user's active application.
+- **Root Cause**:
+  1. **Task Scheduler Subsystem Trap**: `WSL_Mount_PixelSSD` and `WSL_Unmount_PixelSSD` were registered in Windows Task Scheduler with `Execute: powershell.exe`.
+     - Because `powershell.exe` is a CUI (Console User Interface) application, Windows Task Scheduler invokes `CreateProcessAsUser` in the interactive desktop session.
+     - Even with `-WindowStyle Hidden`, Windows Console Subsystem (`conhost.exe` or Windows Terminal) initializes and maps a top-level window onto the desktop before PowerShell can parse its parameters and hide itself.
+     - Windows Window Manager immediately grants this new window input focus, stealing focus from the user's active application.
   2. **AutoHotkey Process Spawning**: AutoHotkey v1's native `Run, powershell.exe ...,, Hide` sets `SW_HIDE` in `STARTUPINFO`, but does not pass `CREATE_NO_WINDOW (0x08000000)` to the kernel. In Windows 11, console hosts can still intercept the new console allocation.
   3. **PowerShell `Start-Job` Overhead**: In `unmount_wsl_ssd.ps1`, `Start-Job` was used to run the Ubuntu unmount script with a timeout. In PowerShell 5.1, `Start-Job` spawns an entire secondary `powershell.exe` background worker process, introducing 1.5s latency and console allocation risks.
 - **Production Architecture & Solutions**:
@@ -92,7 +104,7 @@ This document serves as the permanent engineering reference for the ext4 externa
      - Marked as `IMAGE_SUBSYSTEM_WINDOWS_GUI` in its PE header. When Task Scheduler or AutoHotkey executes `run_silent.exe`, Windows NEVER creates a console window or conhost process.
      - Extracts the raw target command from `Environment.CommandLine` (preserving quotes, spaces, and arguments exactly as passed, bypassing CLR argument stripping).
      - Launches `powershell.exe` via `ProcessStartInfo` with `CreateNoWindow = true` (`CREATE_NO_WINDOW = 0x08000000`), `UseShellExecute = false`, and `WindowStyle = ProcessWindowStyle.Hidden`.
-     - Guarantees 0.0ms window blip, zero DWM notifications, and 0% focus theft.
+     - Because no console window is ever created, there is no window blip, no DWM notification, and no focus theft to begin with.
   2. **Replacement of `Start-Job` with `Invoke-SilentProcess`**:
      - Converted `Start-Job` in `unmount_wsl_ssd.ps1` to direct `System.Diagnostics.Process` with `CreateNoWindow = true` and precise millisecond timeout watchdog.
   3. **Deferred Explorer Opening**:
@@ -118,7 +130,7 @@ This document serves as the permanent engineering reference for the ext4 externa
      - Detaches the disk from WSL host (`wsl --unmount \\.\PHYSICALDRIVE*`).
      - Resolves the USB parent device ID dynamically via `DEVPKEY_Device_Parent`.
      - Invokes Win32 Configuration Manager API `CM_Request_Device_EjectW` (`cfgmgr32.dll`) to programmatically cut power and notify Windows that the hardware is safely removable.
-  2. **Reactive Auto-Resolution in `BackgroundAutomations.ahk`**:
+  2. **Reactive Auto-Resolution in `Ext4SsdManager.ahk`**:
      - A 400ms polling timer monitors for `#32770` error windows titled "Problem Ejecting USB Attached SCSI...".
      - When detected, the AHK script immediately closes the error dialog via `WinClose`, displays a status tooltip, and triggers `UnmountExt4Ssd(true, false)`.
      - This guarantees that even if the user forgets the `Win+Alt+U` hotkey and uses the Windows taskbar tray icon, the conflict is automatically intercepted and resolved within milliseconds.
@@ -126,18 +138,12 @@ This document serves as the permanent engineering reference for the ext4 externa
 ### Gotcha 11: Asynchronous Scheduled Task Race Condition & Double-Click Eject Bug
 
 - **The Symptom**: When clicking Windows taskbar eject or the unmount hotkey, the first click would unmount the filesystem but fail to power down the hardware. The user was forced to click eject a second time for Windows to actually complete the safe removal.
-- **Deep Diagnostic Analysis**:
-  - The diagnostic log revealed:
-    - `[18:54:40.189] Triggering elevated Scheduled Task: WSL_Unmount_PixelSSD`
-    - `[18:54:42.746] Requesting Windows hardware safe ejection for USB\...`
-    - `[18:54:43.127] [ELEVATED_UNMOUNT] Detaching PHYSICALDRIVE2...`
-    - `[18:54:43.244] [WARN] Windows hardware safe ejection returned non-zero (vetoed).`
-    - `[18:54:43.408] [ELEVATED_UNMOUNT] wsl.exe --unmount exit: 0`
-  - `schtasks /run` is non-blocking. It merely queues the task in Windows Task Scheduler and returns immediately.
-  - `unmount_wsl_ssd.ps1` immediately proceeded to Step 6 and called `CM_Request_Device_EjectW` 164 milliseconds BEFORE `wsl.exe --unmount` finished detaching `PHYSICALDRIVE2`.
-  - Because Hyper-V was still in the middle of closing its SCSI handle, Windows PnP vetoed the first eject call. Then 164ms later, `wsl.exe --unmount` finished. When the user clicked eject a second time, the disk was already free, so the second click succeeded.
+- **Diagnosis**:
+  - `schtasks /run` is non-blocking - it merely queues the task in Windows Task Scheduler and returns immediately.
+  - `unmount_wsl_ssd.ps1` was proceeding to the eject step and calling `CM_Request_Device_EjectW` before `wsl.exe --unmount` had actually finished detaching the physical drive.
+  - Because Hyper-V was still in the middle of closing its SCSI handle, Windows PnP vetoed the first eject call. By the time `wsl.exe --unmount` finished a moment later, the user's second click found the disk already free, so only the second attempt succeeded.
 - **The Resolution**:
   1. **Cross-Process Synchronization Flag**: `wsl_unmount_elevated.ps1` writes a temporary completion flag (`%TEMP%\wsl_unmount_done.flag`) upon completing the detach.
-  2. **Synchronous Barrier**: `unmount_wsl_ssd.ps1` polls for this flag (up to 6 seconds at 250ms intervals), ensuring `wsl.exe --unmount` has 100% finished and released all handles before Step 6 begins.
+  2. **Synchronous Barrier**: `unmount_wsl_ssd.ps1` polls for this flag (up to 6 seconds at 250ms intervals), ensuring `wsl.exe --unmount` has fully finished and released all handles before Step 6 begins.
   3. **Multi-Attempt Retry Loop**: Step 6 now executes up to 6 retry attempts (spaced 350ms apart) for `CM_Request_Device_EjectW`, gracefully accommodating any brief driver-stack teardown latency.
   4. **Single-Action Guarantee**: Safe removal now completes reliably on the very first click, displaying Windows native "Safe to Remove Hardware" toast.

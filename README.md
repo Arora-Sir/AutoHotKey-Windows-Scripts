@@ -5,25 +5,29 @@ Personal AutoHotkey setup: global hotkeys plus always-on background automation (
 ## Setup
 
 - **Install AutoHotkey**: [installer](https://www.autohotkey.com/) or `winget install AutoHotkey.AutoHotkey` via the v2 dual-runtime installer. Scripts here stay on `#Requires AutoHotkey v1.1` regardless, a v2 script breaks `StartupScript.exe`'s tray submenu (see that file's comments for why).
-- **Local Custom Paths**: copy `AllScripts/local_paths.ahk.example` -> `AllScripts/local_paths.ahk` for your machine paths, app/device config, and skills vault lock scripts. Gitignored.
+- **Local Custom Paths**: copy `AllScripts/LocalPaths.ahk.example` -> `AllScripts/LocalPaths.ahk` for your machine paths, app/device config, and skills vault lock scripts. Gitignored.
 - **Personal Keywords**: copy `AllScripts/PersonalKeywords.ahk.example` -> `AllScripts/PersonalKeywords.ahk` for private hotstrings. Gitignored.
-- **Compiled Executables**: `.exe` files aren't tracked in Git, compile `StartupScript.ahk` locally when it changes (see below).
+- **Compiled Executables**: personally-compiled executables (e.g. `StartupScript.exe`) are never tracked in Git, since a compiled AHK exe can be decompiled back into readable script logic - compile `StartupScript.ahk` locally when it changes (see below). Third-party, publicly-distributed utility binaries (the AutoHotkey installers under `AHK Setup/`, NirCmd under `AutoHotkey Companion Files/`) are tracked deliberately, as a convenience bundle - they carry no personal information either way.
 
 ## Scripts Overview
 
 | Script                      | Purpose                                                                                                                                                                                                                                                         |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `StartupScript.ahk`         | Orchestrator. Launches everything below at boot with a tray submenu each. Runs as the compiled `StartupScript.exe`.                                                                                                                                             |
-| `BasicTasks.ahk`            | Hotkeys only, see tables below. Includes `Win+Alt+M` (mount & open ext4 SSD), `Win+Alt+U` (unmount ext4 SSD), and `Win+Alt+L` (3-way cycle: Auto Mode -> Force Locked -> Force Unlocked with bottom-right corner badge). |
-| `BackgroundAutomations.ahk` | Everything that runs with no keypress: Tailscale tray launch, Google Drive silent launch, GravityBridge/CopyClip servers, Sefirah reconnect + phone priority, WSL ext4 backup SSD auto-mount on boot/hotplug (`mount_wsl_ssd.ps1` / `unmount_wsl_ssd.ps1`), and Skills Vault auto-lock/unlock watcher (silent in Auto mode; paused in Force modes). |
+| `BasicTasks.ahk`            | Hotkeys only, see tables below. Includes `Win+Alt+L` (3-way cycle: Auto Mode -> Force Locked -> Force Unlocked with bottom-right corner badge) and its own tray submenu (mirrors `Win+Shift+P`'s Toggle Display Mode, plus a Duplicate Only switch with no dedicated hotkey). |
+| `BackgroundAutomations.ahk` | Everything that runs with no keypress: Tailscale tray launch, Google Drive silent launch, GravityBridge/CopyClip servers, Sefirah reconnect + phone priority, and Skills Vault auto-lock/unlock watcher (Claude focus locks, Antigravity focus unlocks, badge feedback shown by default, paused while a Force mode is active). |
+| `Ext4SsdManager.ahk`        | Everything for the WSL ext4 backup SSD: `Win+Alt+M`/`Win+Alt+U` (manual mount/unmount), auto-mount on boot/hotplug (`mount_wsl_ssd.ps1` / `unmount_wsl_ssd.ps1`), wake-from-sleep remount check, tray items, and the Windows "Problem Ejecting" dialog auto-resolver. |
 | `Watchdog.ahk`              | Generic crash-relaunch for whatever's listed in `WATCHDOG_APPS`.                                                                                                                                                                                                |
 | `Brightness.ahk`            | Brightness hotkeys.                                                                                                                                                                                                                                             |
 | `ClosePrograms.ahk`         | Force-close hotkeys for tray-minimizing apps.                                                                                                                                                                                                                   |
 | `HotkeyHelp.ahk`            | In-app hotkey reference / settings GUI.                                                                                                                                                                                                                         |
 | `PersonalKeywords.ahk`      | Private hotstrings (gitignored).                                                                                                                                                                                                                                |
-| `VolumeOsd.ahk`             | Volume on-screen display.                                                                                                                                                                                                                                       |
-| `SunshineMouseWatchdog.ahk` | Remote desktop mouse-speed watchdog: enforces normal pointer speed on tablet disconnect/timeout and fast speed during active sessions.                                                                                                                          |
-| `local_paths.ahk`           | Personal machine config (gitignored).                                                                                                                                                                                                                           |
+| `SunshineMouseWatchdog.ahk` | Remote desktop watchdog for Sunshine: automatically switches the display back to Laptop (PC screen only) on a real disconnect/pause, and manages pointer speed (fast during active sessions, normal on disconnect). Switching TO Tablet mode on connect stays manual (`Win+Shift+P` / `BasicTasks.ahk` tray items) - tried automatic once, but reverted after it raced with Sunshine's own connect-time Duplicate-mode transition and caused a hang. |
+| `LocalPaths.ahk`            | Personal machine config (gitignored).                                                                                                                                                                                                                           |
+| `SharedHelpers.ahk`         | Pure function library included by other scripts (see ARCHITECTURE.md) - also kept as its own tray entry for quick Edit access; has no hotkeys of its own.                                                                                                      |
+
+`GravityBridge`, `CopyClip`, and `Sefirah` above are separate personal projects/tools (Python servers and an Android companion app) launched or monitored by `BackgroundAutomations.ahk` - they aren't included in this repo.
+Their own paths are configured through the gitignored `LocalPaths.ahk`.
 
 ## Compiling StartupScript.exe
 
@@ -60,7 +64,7 @@ Plug-and-play auto-mount engine for external Linux ext4 SSDs on Windows 11 using
   2. **Configuring Your Own Drive**:
      - Copy `AllScripts\PowerShell\ssd_config.json.example` to `AllScripts\PowerShell\ssd_config.json` (gitignored).
      - Customize disk model filters, drive letter, WSL distro, and target folder.
-     - Optionally add matching `EXT4_SSD_*` overrides to `AllScripts\local_paths.ahk` (gitignored, template in `local_paths.ahk.example`).
+     - Optionally add matching `EXT4_SSD_*` overrides to `AllScripts\LocalPaths.ahk` (gitignored, template in `LocalPaths.ahk.example`).
   3. **Full Architecture & Setup Guide**:
      - See [AllScripts/PowerShell/README.md](AllScripts/PowerShell/README.md) for full Ubuntu Samba setup steps, `/etc/samba/smb.conf` template, and troubleshooting details.
 
@@ -79,17 +83,21 @@ Plug-and-play auto-mount engine for external Linux ext4 SSDs on Windows 11 using
 
   | Key                   | Usage                                                                                                                                                                                    |
   | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | Volume_Up              | Volume Up                                                                                                                                                                                |
+  | Volume_Down            | Volume Down                                                                                                                                                                              |
   | Win+Del               | Empty Recycle Bin                                                                                                                                                                        |
   | Win+C                 | Run Calculator                                                                                                                                                                           |
   | Win+M                 | Minimize Active Window                                                                                                                                                                   |
   | Win+F                 | Open FireFox                                                                                                                                                                             |
-  | Win+F8                | Bluetooth On/Off                                                                                                                                                                         |
+  | Win+F8                | Bluetooth On/Off (Disabled)                                                                                                                                                              |
+  | Win+X+X               | Sleep Laptop (single Win+X still passes through to the normal Quick Link menu)                                                                                                          |
   | Win+Shift+A           | Open Notification Center                                                                                                                                                                 |
   | Win+Shift+E           | (Folder) Open Downloads (Screenshots) Folder                                                                                                                                             |
   | Win+Shift+J           | (Folder) Open Java Course                                                                                                                                                                |
+  | Win+Shift+P           | Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)                                                                                                                 |
+  | Ctrl+Shift+P          | Same as above - alternate keybind, manual PC-side use only (see ARCHITECTURE.md for why it can't be triggered remotely from the tablet)                                                 |
+  | Win+Alt+P             | Same as above - third keybind, manual PC-side use only (see ARCHITECTURE.md)                                                                                                             |
   | Win+Alt+C             | Run Alarm Clock                                                                                                                                                                          |
-  | Win+Alt+M             | Mount ext4 Backup SSD & Open in Explorer                                                                                                                                                 |
-  | Win+Alt+U             | Safely Unmount ext4 Backup SSD                                                                                                                                                           |
   | Win+Alt+N             | Clear Notification Center                                                                                                                                                                |
   | Win+Alt+X             | (Script) Reconnect Cloudflare Network                                                                                                                                                    |
   | Win+Alt+L             | (Script) Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)                                                                                                                 |
@@ -97,7 +105,7 @@ Plug-and-play auto-mount engine for external Linux ext4 SSDs on Windows 11 using
   | Alt+D                 | Open ChatGPT                                                                                                                                                                             |
   | Alt+G                 | Monica AI Grammar Correction                                                                                                                                                             |
   | Alt+Shift+S           | Monica AI Content Summary                                                                                                                                                                |
-  | Alt+Shift+T           | This Window Always on Top                                                                                                                                                                |
+  | Alt+Shift+T           | This Window Always on Top (Disabled -> Using PowerToys)                                                                                                                                  |
   | Alt+Ctrl+D            | Sort Folder Content by Date                                                                                                                                                              |
   | Alt+Ctrl+E            | Enable/Disable File Extension                                                                                                                                                            |
   | Alt+Ctrl+H            | Enable/Disable Hidden Files                                                                                                                                                              |
@@ -110,7 +118,14 @@ Plug-and-play auto-mount engine for external Linux ext4 SSDs on Windows 11 using
   | Ctrl+Shift+WheelUp    | (VS Code) Increase Whole UI Zoom (+0.05), only while VS Code is focused                                                                                                                  |
   | Ctrl+Shift+WheelDown  | (VS Code) Decrease Whole UI Zoom (-0.05), only while VS Code is focused                                                                                                                  |
   | Capslock+Capslock     | Double Tap to Activate/Deactivate                                                                                                                                                        |
-  | MouseLButton          | Double Click Functions (Taskbar Show/Hide)                                                                                                                                               |
+  | MouseLButton          | Double Click Taskbar to Show/Hide it - handled by [WindHawk](https://windhawk.net/) (a separate third-party tool), not this repo's AHK code, which has its own version of this hotkey disabled |
+
+- ### EXT4 SSD MANAGER
+
+  | Key       | Usage                                     |
+  | --------- | ------------------------------------------ |
+  | Win+Alt+M | Mount ext4 Backup SSD & Open in Explorer    |
+  | Win+Alt+U | Safely Unmount ext4 Backup SSD              |
 
 - ### HOTKEYHELP
 
@@ -124,12 +139,17 @@ Plug-and-play auto-mount engine for external Linux ext4 SSDs on Windows 11 using
 
 - ### WINDOW STARTUP SCRIPT
 
-  | Key                     | Usage                 |
-  | ----------------------- | --------------------- |
-  | Win+ScrollLock          | Suspend All Scripts   |
-  | Win+Ctrl+Alt+ScrollLock | Terminate All Scripts |
-  | Win+Ctrl+Alt+R          | Reload All Scripts    |
-  | Win+Ctrl+Alt+W          | Run Window Spy Script |
+  | Key                     | Usage                                                              |
+  | ----------------------- | ------------------------------------------------------------------ |
+  | Win+ScrollLock          | Suspend All Scripts' Hotkeys (background timers/watchers keep running) |
+  | Win+Ctrl+Alt+ScrollLock | Terminate All Scripts                                              |
+  | Win+Ctrl+Alt+R          | Reload All Scripts                                                 |
+  | Win+Ctrl+Alt+W          | Run Window Spy Script                                              |
+
+  The tray icon's right-click menu mirrors these last three as "Suspend Hotkeys" / "Exit" / "Reload All" - same actions, same keys.
+
+  - These replace AutoHotkey's own native Suspend Hotkeys/Pause Script/Exit items (which only ever acted on the master script's own hotkeys, not the fleet). So there is exactly one of each, not two.
+  - Each managed script's own submenu is trimmed to View Key History/Edit/Restart/Exit for that one script, plus any of its own published quick-actions. "Restart" kills and relaunches just that one script without a full fleet reload.
 
 - ### PERSONAL KEYWORDS
   - It's a key-value pair. Type the key in the text field to get its corresponding value.
