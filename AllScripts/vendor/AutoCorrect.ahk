@@ -1,6 +1,9 @@
 #Requires AutoHotkey v1.1
 
 ;------------------------------------------------------------------------------
+; VENDORED THIRD-PARTY SCRIPT - not written for this repo, not wired into StartupScript.ahk's launch list or any other script here.
+; Kept for anyone who wants to run it manually; see the original attribution below.
+;------------------------------------------------------------------------------
 ; CHANGELOG:
 ; 
 ; Sep 13 2007: Added more misspellings.
