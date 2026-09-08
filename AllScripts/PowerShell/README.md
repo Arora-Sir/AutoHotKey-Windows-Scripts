@@ -1,10 +1,10 @@
 # WSL2 ext4 SSD Storage & Automation Engine
 
-Automated, commercial-grade storage engine for mounting, managing, and browsing Linux ext4 external SSDs natively on Windows 11 using WSL2, Direct SMB, and AutoHotkey.
+Automated storage engine for mounting, managing, and browsing Linux ext4 external SSDs natively on Windows 11 using WSL2, Direct SMB, and AutoHotkey.
 
 ---
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 Windows 11 cannot natively read or mount `ext4` filesystems without third-party drivers. This engine bridges the gap by leveraging Hyper-V block device attachment (`wsl --mount`), guest ext4 optimization (`noatime,nodiratime,errors=remount-ro`), and loopback Direct SMB (port 445), orchestrated by event-driven AutoHotkey monitoring.
 
@@ -24,7 +24,7 @@ Windows 11 cannot natively read or mount `ext4` filesystems without third-party 
 
 ---
 
-## 🛠️ Prerequisites
+## Prerequisites
 
 1. **Windows 11** with WSL2 installed (`wsl --install`).
 2. **Ubuntu** (or Debian) WSL2 guest distro.
@@ -32,7 +32,7 @@ Windows 11 cannot natively read or mount `ext4` filesystems without third-party 
 
 ---
 
-## 🚀 Setup Guide
+## Setup Guide
 
 ### Step 1: Ubuntu (WSL2) Configuration
 
@@ -157,7 +157,7 @@ sudo service smbd restart
    Approve the Windows UAC elevation prompt once. This registers `WSL_Mount_PixelSSD` and `WSL_Unmount_PixelSSD` in Windows Task Scheduler, allowing future automated mounts with zero UAC prompts.
 
 4. **Configure Local AutoHotkey Paths (Optional Overrides)**:
-   In `AllScripts/local_paths.ahk` (gitignored, see `local_paths.ahk.example`):
+   In `AllScripts/LocalPaths.ahk` (gitignored, see `LocalPaths.ahk.example`):
    ```ahk
    EXT4_SSD_MODEL_SUBSTRINGS := "YourDiskModel,VendorName"
    EXT4_SSD_DRIVE_LETTER     := "P:"
@@ -167,7 +167,7 @@ sudo service smbd restart
 
 ---
 
-## 📁 File Manifest
+## File Manifest
 
 | File                          | Type            | Purpose                                                                                                          |
 | :---------------------------- | :-------------- | :--------------------------------------------------------------------------------------------------------------- |
@@ -187,7 +187,7 @@ sudo service smbd restart
 
 ---
 
-## 🛡️ Reliability & Self-Healing Features
+## Reliability & Self-Healing Features
 
 - **Instant RAW Suppression**: Removes Windows RAW drive letter assignments before AutoPlay can suggest formatting the drive.
 - **Kernel MUP Hang Elimination**: Non-blocking DLL checks and fast port probing eliminate the 30-second Windows freeze on dead network shares.
@@ -197,7 +197,7 @@ sudo service smbd restart
 
 ---
 
-## ⚡ Abrupt Disconnect & Auto-Recovery Lifecycle
+## Abrupt Disconnect & Auto-Recovery Lifecycle
 
 ### Scenario A: Abrupt Physical Pull (Emergency Disconnect)
 
@@ -239,7 +239,7 @@ When you press `Win+Alt+U` (or right-click the tray icon and choose "Eject Pixel
 When clicking the Windows taskbar "Safely Remove Hardware" icon instead of using the hotkey:
 
 1. Windows initially attempts removal, finds Hyper-V's open SCSI handle, and begins to display the modal: _"Problem Ejecting USB Attached SCSI (UAS) Mass Storage Device: This device is currently in use."_
-2. The `AutoResolveEjectConflict` routine in `BackgroundAutomations.ahk` intercepts the `#32770` dialog within 400ms and closes it via `WinClose`.
+2. The `AutoResolveEjectConflict` routine in `Ext4SsdManager.ahk` intercepts the `#32770` dialog within 400ms and closes it via `WinClose`.
 3. Displays a non-intrusive status tooltip: _"<Drive Label> in use by WSL. Safely unmounting and ejecting..."_ (default: _"Linux Backup SSD in use by WSL..."_).
 4. Invokes `unmount_wsl_ssd.ps1`, which unmounts Ubuntu, detaches from WSL, synchronizes via completion flag, and invokes `CM_Request_Device_EjectW`.
 5. Safe removal completes on that **single action**, and Windows displays its native "Safe to Remove Hardware" toast.

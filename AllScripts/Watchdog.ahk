@@ -3,31 +3,23 @@
 #Persistent
 SendMode Input
 SetWorkingDir %A_ScriptDir%
-#Include *i %A_ScriptDir%\local_paths.ahk ; Include local custom paths if present (ignored by Git)
+#Include *i %A_ScriptDir%\LocalPaths.ahk ; Include local custom paths if present (ignored by Git)
 #SingleInstance force
 DetectHiddenWindows, On
 
-; Generic multi-app watchdog. Polls every CheckIntervalMs and relaunches any app configured
-; in WATCHDOG_APPS (defined in local_paths.ahk, gitignored -- keeps personal folder paths
-; out of git) that isn't currently running. One always-running process cheaply polls all
-; configured apps via Process,Exist, instead of one blocking Process,WaitClose sub-process
-; per app -- the latter would require N instances of this same script file, which collides
-; both with #SingleInstance's path-only dedup and with StartupScript.ahk's own WinClose
-; dedup (also path+class keyed), so it isn't a clean fit here. Lower CheckIntervalMs instead
-; of switching designs if faster reaction is ever needed.
+; Generic multi-app watchdog.
+; Polls every CheckIntervalMs and relaunches any app configured in WATCHDOG_APPS (defined in LocalPaths.ahk, gitignored -- keeps personal folder paths out of git) that isn't currently running.
+; One always-running process cheaply polls all configured apps via Process,Exist, instead of one blocking Process,WaitClose sub-process per app -- the latter would require N instances of this same script file, which collides both with #SingleInstance's path-only dedup and with StartupScript.ahk's own WinClose dedup (also path+class keyed), so it isn't a clean fit here.
+; Lower CheckIntervalMs instead of switching designs if faster reaction is ever needed.
 ;
-; Loop+Sleep rather than SetTimer deliberately: a SetTimer-based version was measured to
-; not stay resident reliably (process observed exiting right after auto-execute completed,
-; timer never fired) -- a real blocking loop, matching the pattern the original
-; TrafficMonitorWatchdog.ahk used, was confirmed to actually stay running.
+; Loop+Sleep rather than SetTimer deliberately: a SetTimer-based version does not stay resident reliably for a script this minimal (the process exits right after auto-execute completes, before the timer ever fires).
+; A real blocking loop, matching the pattern the original TrafficMonitorWatchdog.ahk used, stays running correctly.
 ;
-; This whole polling approach replaced an earlier attempt using Task Scheduler's own
-; RestartOnFailure action: it correctly detected a crash's failure exit code but never
-; actually queued the restart -- unreliable in practice, not just here.
+; This whole polling approach replaced an earlier attempt using Task Scheduler's own RestartOnFailure action: it correctly detected a crash's failure exit code but never actually queued the restart -- unreliable in practice, not just here.
 CheckIntervalMs := 10000
 
 if !IsObject(WATCHDOG_APPS)
-    WATCHDOG_APPS := [] ; no local_paths.ahk / nothing configured -> idle, watches nothing
+    WATCHDOG_APPS := [] ; no LocalPaths.ahk / nothing configured -> idle, watches nothing
 
 Loop
 {
@@ -49,7 +41,7 @@ Loop
 
             if (SubStr(cmd, 1, 1) != """" && InStr(cmd, " "))
                 cmd := """" cmd """"
-            try Run, % cmd, % appDir
+            try Run, % cmd, % appDir, Hide
         }
     }
     Sleep, % CheckIntervalMs

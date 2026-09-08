@@ -1,11 +1,11 @@
 ; Example Local Machine Paths Configuration
-; Copy or rename this file to "local_paths.ahk" in the AllScripts folder.
-; "local_paths.ahk" is automatically ignored by Git to protect your privacy and personal folder locations.
+; Copy or rename this file to "LocalPaths.ahk" in the AllScripts folder.
+; "LocalPaths.ahk" is automatically ignored by Git to protect your privacy and personal folder locations.
 ;
 ; OVERVIEW: PATH_* vars for personal folders/tools, WATCHDOG_APPS (apps Watchdog.ahk
 ; auto-relaunches), and the Sefirah section (SEFIRAH_ADB_TARGETS / SEFIRAH_PRIORITY_TARGET
 ; for phone/tablet reconnect + priority). Detail lives in the comment above each group below.
-#Persistent ; Lets this run standalone via StartupScript.ahk's tray entry -- View Variables/Edit/Reload all need a live process, not a script that auto-exits the instant it's loaded
+#Persistent ; Lets this run standalone via StartupScript.ahk's tray entry -- Edit, and the global Suspend/Reload/Exit actions, all need a live process, not a script that auto-exits the instant it's loaded
 
 PATH_JAVA_COURSE := "D:\Path\To\Your\Java\Course"
 PATH_IP_ROTATOR := "D:\Path\To\Your\Scripts\ROTATE.bat"
@@ -19,7 +19,9 @@ PATH_PYTHON_EXE := "C:\Python314\pythonw.exe"
 GoogleDrivePath := ""
 RegRead, GoogleDrivePath, HKCU, Software\Microsoft\Windows\CurrentVersion\Run, GoogleDriveFS
 if (ErrorLevel || !GoogleDrivePath)
-	GoogleDrivePath := """C:\Program Files\Google\Drive File Stream\<version>\GoogleDriveFS.exe"" --startup_mode" ; fallback only if the Run key is ever missing -- check your own installed version folder
+	GoogleDrivePath := """C:\Program Files\Google\Drive File Stream\<version>\GoogleDriveFS.exe""" ; fallback only if the Run key is ever missing -- check your own installed version folder
+else
+	GoogleDrivePath := Trim(RegExReplace(GoogleDrivePath, "i)\s*--startup_mode", ""))
 
 ; Watchdog: apps to auto-relaunch if they crash or close. Add one entry per app.
 ; Wrap path in quotes if arguments are included (e.g. """C:\Path\App.exe"" --arg").
