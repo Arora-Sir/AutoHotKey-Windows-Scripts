@@ -76,8 +76,8 @@ Protects personal skills vaults, private study roadmaps, and sensitive configura
 
 Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or handheld device via Moonlight and Sunshine without physical monitor constraints.
 
-- **Toggle Hotkeys**:
-  - Press **`Win+Shift+P`** (or **`Ctrl+Shift+P`**, **`Win+Alt+P`**, or click **"Project: Toggle Display Mode"** in the `BasicTasks` tray submenu).
+- **Toggle Hotkey**:
+  - Press **`Win+Shift+P`** (or click **"Project: Toggle Display Mode"** in the `BasicTasks` tray submenu).
   - **Laptop Screen Mode**: Sets internal display to 1080p @ 144Hz, mouse speed to 10 (normal), and pointer precision to ON.
   - **Tablet Streaming Mode**: Switches to headless virtual display (2560x1600 @ 120Hz), boosts mouse speed to 20 (fast), and turns pointer precision OFF for 1:1 tablet stylus/touch tracking.
 - **Duplicate Display Tray Action**:
@@ -196,8 +196,6 @@ Plug-and-play auto-mount engine for external Linux ext4 SSDs on Windows 11 using
   | `Win+Shift+E`           | Open Screenshots Folder (`%UserProfile%\Pictures\Screenshots`)                                       |
   | `Win+Shift+J`           | Open Java Course Folder (`%PATH_JAVA_COURSE%`)                                                       |
   | `Win+Shift+P`           | Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet Headless 2560x1600 @ 120Hz)                     |
-  | `Ctrl+Shift+P`          | Same as above (alternate keybind, manual PC-side use only)                                           |
-  | `Win+Alt+P`             | Same as above (third keybind, manual PC-side use only)                                               |
   | `Win+Alt+C`             | Run Windows Alarm Clock (`Microsoft.WindowsAlarms`)                                                  |
   | `Win+Alt+Ctrl+C`        | Open PowerShell 7 as Administrator                                                                   |
   | `Win+Alt+N`             | Clear All Notifications in Windows 11 Action Center                                                  |

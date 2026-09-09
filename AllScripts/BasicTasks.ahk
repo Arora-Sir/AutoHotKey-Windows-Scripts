@@ -17,8 +17,6 @@
 ; Win+Shift+E --> (Folder) Open Downloads (My Screenshots) folder
 ; Win+Shift+J --> (Folder) Open Java Course
 ; Win+Shift+P --> Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)
-; Ctrl+Shift+P --> Same, alternate keybind (manual PC-side use, doesn't help from tablet - see ARCHITECTURE.md)
-; Win+Alt+P --> Same, third keybind (manual PC-side use)
 ; Win+Alt+C --> Run Alarm Clock
 ; Win+Alt+Ctr+C --> Open PowerShell
 ; Win+Alt+Ctr+K --> Click Center of Screen (Disabled)
@@ -880,13 +878,6 @@ $^c::CopyToClipboard() ;{ <-- OneNote Copy Mechanism Handeling (instead of SS)
 
 ; Win+Shift+P Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)
 #+p::ToggleTabletDisplayMode() ;{ <-- Toggle Display Mode
-
-; Ctrl+Shift+P - same toggle, alternate keybind.
-; Turned out Android intercepts modifier combos before Moonlight ever forwards them, regardless of which combo, so this doesn't reliably help from the tablet either - kept as a manual PC-side option.
-^+p::ToggleTabletDisplayMode() ;{ <-- Toggle Display Mode (Alt keybind)
-
-; Win+Alt+P - same toggle, third keybind, manual PC-side option (no binding existed on this combo yet).
-#!p::ToggleTabletDisplayMode() ;{ <-- Toggle Display Mode (Alt keybind 2)
 
 ; Win+Alt+N Clear Notification center
 #!N::ClearNotificaitons() ;{ <-- Clear Notifications (Win 11)

@@ -216,14 +216,14 @@ Not every shared state goes through `SharedHelpers.ahk`. `AllScripts/SunshineMou
 - **`sunshine_manual_switch.flag`** (in `%A_Temp%`, separate from `.fast_since`) - a 20-second-bounded grace window armed by the manual toggle itself. `SunshineMouseWatchdog.ahk` skips its sunshine.log/Tailscale disconnect checks entirely while this flag is younger than 20s - those checks answer "did the old session end," not "has the user had time to open Moonlight yet," and would otherwise revert a deliberate toggle before the user even connects. Bounded rather than indefinite, so toggling to tablet mode and never actually streaming doesn't permanently disable the disconnect checks. See that file's own `MANUAL OVERRIDE` comments for the full reasoning.
 - **`.session_quit`** - written by `set_normal.ps1` only when Sunshine's own `undo` prep-cmd hook fires (an explicit Moonlight quit), never by the watchdog. Lets `SunshineMouseWatchdog.ahk` short-circuit straight to a ~1.5s display restore instead of waiting out the normal multi-poll debounce/settle window that exists to avoid reacting to a transient back-gesture/app-switch.
 
-## Why ToggleTabletDisplayMode() has three keybinds
+## Why ToggleTabletDisplayMode() is bound to Win+Shift+P
 
-`BasicTasks.ahk` binds `Win+Shift+P`, `Ctrl+Shift+P`, and `Win+Alt+P` to the same `ToggleTabletDisplayMode()` call. This isn't redundancy for its own sake - it's the result of researching whether any of them could be triggered remotely from the Galaxy Tab S10 Ultra during a Moonlight session, so the display could be toggled without walking over to the PC.
+`BasicTasks.ahk` binds `Win+Shift+P` to `ToggleTabletDisplayMode()`. Previously, alternate bindings (`Ctrl+Shift+P` and `Win+Alt+P`) were tested in an attempt to trigger the toggle remotely from the Galaxy Tab S10 Ultra during a Moonlight session without walking over to the PC.
 
 - Android intercepts recognized modifier-key combos (Alt+Tab, the Windows key, Ctrl+S, etc.) at the OS level before any app - Moonlight included - ever sees them, redirecting to Android's own system actions instead. This is a documented, still-open limitation in Moonlight Android (see its GitHub issues #840 and #975), not something fixable from this repo's side.
 - This applies to both a physical/case Bluetooth keyboard and the tablet's own on-screen Samsung Keyboard - the latter's own Ctrl+A/Ctrl+C-style "shortcuts" are local Android text-editing actions, not genuine key events that would traverse to a remote session at all.
-- Settings > General Management > Physical Keyboard > Keyboard Shortcuts on the tablet only affects an attached physical keyboard, not the on-screen one, and doesn't fix this either way.
-- All three keybinds are confirmed manual, PC-side-only options as a result - none of them are expected to work when sent from the tablet. The confirmed-working remote path is touching the PC's tray items (Toggle Display Mode, Duplicate Only, under `BasicTasks.ahk`'s tray submenu) directly through the Moonlight stream, since that involves no keyboard at all.
+- Alternate keybinds like `Ctrl+Shift+P` also collided with universal editor shortcuts (Command Palette in VS Code / Antigravity), while `Win+Alt+P` belongs to Chrome Passwords in `PersonalKeywords.ahk`. Both were retired, leaving `Win+Shift+P` as the sole PC shortcut.
+- The confirmed-working remote path remains touching the PC's tray items (Toggle Display Mode, Duplicate Only, under `BasicTasks.ahk`'s tray submenu) directly through the Moonlight stream, since that involves no keyboard at all.
 
 ## Windows Task Scheduler boot architecture
 
