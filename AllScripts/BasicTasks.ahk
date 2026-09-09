@@ -77,22 +77,45 @@ global g_SkillsPendingMode := ""
 ; engine already guarantees at most one concurrently-running instance of a
 ; given timer target, so this should never actually read true in practice.
 global g_SkillsCommitBusy := false
-Menu, Tray, Add
-Menu, Tray, Add, %g_SkillsTrayStatusLabel%, TraySkillsVaultStatus
-Menu, Tray, Disable, %g_SkillsTrayStatusLabel%
-Menu, Tray, Add, Cycle Skills Vault Mode (Win+Alt+L), TraySkillsVaultCycle
-Menu, Tray, Add, Toggle Display Mode (Win+Shift+P), TrayToggleDisplayMode
-Menu, Tray, Add, Duplicate Only, TrayDuplicateDisplayMode
+global g_DRMTrayStatusLabel := "DRM Streaming: [OFF] (HW Accel ON)"
 
-; Publish for StartupScript.ahk's master submenu mirroring (see SharedHelpers.ahk)
-PublishTrayMenuManifest([["Skills Vault Status (Show Toast)", "TraySkillsVaultStatus"], ["Cycle Skills Vault Mode (Win+Alt+L)", "TraySkillsVaultCycle"], ["Toggle Display Mode (Win+Shift+P)", "TrayToggleDisplayMode"], ["Duplicate Only", "TrayDuplicateDisplayMode"]])
+; -----------------------------------------------------------------------------
+; TRAY MENU INTEGRATION
+; Standalone tray items are commented out below because StartupScript.ahk manages the master tray icon for the fleet and hides individual script icons.
+; Published via PublishTrayMenuManifest below for master submenu mirroring.
+; -----------------------------------------------------------------------------
+; Menu, Tray, Add
+; Menu, Tray, Add, %g_SkillsTrayStatusLabel%, TraySkillsVaultStatus
+; Menu, Tray, Disable, %g_SkillsTrayStatusLabel%
+; Menu, Tray, Add, Cycle Skills Vault Mode (Win+Alt+L), TraySkillsVaultCycle
+; Menu, Tray, Add, Project: Toggle Display Mode (Win+Shift+P), TrayToggleDisplayMode
+; Menu, Tray, Add, Project: Duplicate Display Only, TrayDuplicateDisplayMode
+; Menu, Tray, Add, %g_DRMTrayStatusLabel%, TrayDRMStreamingModeToggle
+
+; Publish for StartupScript.ahk's master submenu mirroring (see SharedHelpers.ahk).
+; Logical feature groups are divided by horizontal separators (["-"]):
+;   Group 1: Skills Vault Status & Cycle Mode
+;   Group 2: Sunshine & Project Display Toggles
+;   Group 3: Browser DRM Streaming Mode
+PublishTrayMenuManifest([ ["Skills: Vault Status (Show Toast)", "TraySkillsVaultStatus"]
+                        , ["Skills: Cycle Skills Vault Mode (Win+Alt+L)", "TraySkillsVaultCycle"]
+                        , ["-"]
+                        , ["Project: Toggle Display Mode (Win+Shift+P)", "TrayToggleDisplayMode"]
+                        , ["Project: Duplicate Display Only", "TrayDuplicateDisplayMode"]
+                        , ["-"]
+                        , ["Browser: Toggle DRM Streaming Mode", "TrayDRMStreamingModeToggle"] ])
 
 SetTimer, UpdateSkillsTrayStatus, 2000
 SetTimer, UpdateSkillsTrayStatus, -100 ; Fast initial update
+SetTimer, UpdateDRMTrayStatus, 3000
+SetTimer, UpdateDRMTrayStatus, -100 ; Fast initial update
 
 ; Win32 WM_DISPLAYCHANGE (0x007E) - auto-recovery on laptop lid open
 global g_LastManualDisplaySwitch := 0
 OnMessage(0x007E, "OnDisplayChange_LidRecovery")
+
+; Automatically align Simple Sticky Notes to current display mode on startup
+AutoApplyStickyNotesLayout(1500)
 
 #If MouseIsOver("ahk_class Shell_TrayWnd")
     ;   WheelUp::SoundSet +1   ;Hide OSD

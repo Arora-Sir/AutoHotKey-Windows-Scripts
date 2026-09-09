@@ -153,7 +153,7 @@ sudo service smbd restart
    ```
 
 3. **Register Elevated Tasks (One-Time Setup)**:
-   Double-click `Install_WSL_Mount_Tasks.bat` (or right-click the AutoHotkey tray icon and select **"Register Zero-UAC Tasks"**).
+   Double-click `Install_WSL_Mount_Tasks.bat` (or open the AutoHotkey tray menu -> **"Additional Scripts"** -> **"Ext4SsdManager"** -> **"Register Zero-UAC Tasks"**).
    Approve the Windows UAC elevation prompt once. This registers `WSL_Mount_PixelSSD` and `WSL_Unmount_PixelSSD` in Windows Task Scheduler, allowing future automated mounts with zero UAC prompts.
 
 4. **Configure Local AutoHotkey Paths (Optional Overrides)**:
@@ -224,7 +224,7 @@ When the drive is plugged back in later:
 
 ### Scenario C: Proactive Safe Software Ejection (`Win+Alt+U` or Tray Menu)
 
-When you press `Win+Alt+U` (or right-click the tray icon and choose "Eject Pixel SSD Safely"):
+When you press `Win+Alt+U` (or open the AutoHotkey tray menu -> **"Additional Scripts"** -> **"Ext4SsdManager"** -> **"Eject Pixel SSD Safely"**):
 
 1. Open Explorer tabs are safely navigated to "This PC".
 2. `net use P: /delete` unmaps the drive letter immediately.

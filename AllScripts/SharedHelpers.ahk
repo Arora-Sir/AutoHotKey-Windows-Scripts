@@ -287,20 +287,30 @@ RemoveTimedToolTip() {
 ; -----------------------------------------------------------------------------
 ; TRAY MENU MANIFEST - publish/dispatch for StartupScript.ahk's master submenu
 ; -----------------------------------------------------------------------------
-; Call PublishTrayMenuManifest once from each script's auto-execute section,
-; right after that script's own Menu, Tray, Add lines, passing the same
-; label/Gosub-target pairs as a nested array:
-;   PublishTrayMenuManifest([["Display Label 1", "TrayLabel1"],
-;                             ["Display Label 2", "TrayLabel2"]])
-; This writes %A_Temp%\ahk_traymenu_<ScriptName>.txt (one file per script, keyed by that script's own filename) and registers this same shared HandleRemoteTrayMenuTrigger as the responder for "AHK_RemoteTrayMenuTrigger_v1".
-; StartupScript.ahk reads these manifest files to mirror every script's custom tray items into one master submenu, and PostMessages this registered ID with wParam = the manifest's 1-based line number when a mirrored item is clicked.
-; Each process reads only its own manifest file (via its own A_ScriptFullPath), so sharing this one function across multiple processes is safe - there is no cross-process state, only the convention of "one manifest file per script."
+; Call PublishTrayMenuManifest once from each script's auto-execute section right after its native tray setup, passing label/Gosub pairs as a nested array:
+;   PublishTrayMenuManifest([ ["Display Label 1", "TrayLabel1"]
+;                           , ["-"]
+;                           , ["Display Label 2", "TrayLabel2"] ])
+;
+; Architecture:
+; 1. Writes %A_Temp%\ahk_traymenu_<ScriptName>.txt (one file per script, keyed by that script's own filename).
+; 2. Supports ["-"] entries (serialized as "-|") to render native Win32 horizontal separator bars in StartupScript's mirrored submenu.
+; 3. Registers this shared HandleRemoteTrayMenuTrigger as the handler for the system-wide registered window message "AHK_RemoteTrayMenuTrigger_v1".
+; 4. StartupScript.ahk reads these manifest files to mirror every script's custom tray items into one master submenu, and PostMessages this registered ID with wParam = the manifest's 1-based line number when a mirrored item is clicked.
+; 5. Each process reads only its own manifest file (via its own A_ScriptFullPath), so sharing this function across multiple processes is safe without collision.
 PublishTrayMenuManifest(itemsArray) {
     SplitPath, A_ScriptFullPath,,,, scriptNameNoExt
     manifestPath := A_Temp "\ahk_traymenu_" scriptNameNoExt ".txt"
     FileDelete, %manifestPath%
     for idx, item in itemsArray
-        FileAppend, % item[1] "|" item[2] "`n", %manifestPath%
+    {
+        if (!IsObject(item) && (item = "-" || item = ""))
+            FileAppend, -|`n, %manifestPath%
+        else if (item[1] = "-" || item[1] = "")
+            FileAppend, -|`n, %manifestPath%
+        else
+            FileAppend, % item[1] . "|" . item[2] . "`n", %manifestPath%
+    }
     OnMessage(DllCall("RegisterWindowMessage", "str", "AHK_RemoteTrayMenuTrigger_v1"), "HandleRemoteTrayMenuTrigger")
 }
 

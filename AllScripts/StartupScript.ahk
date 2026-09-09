@@ -202,10 +202,11 @@ else
 
 ; Global hotkey-suspend state - see SuspendAllToggle: below.
 ; A plain single-process boolean is the source of truth; the PostMessage cascade to every child is a one-way toggle with no way to query a remote process's real suspend state, so this variable (not the children's own internal state) is what the tray checkmark reflects.
-GlobalHotkeysSuspended := false
-MenuText_SuspendAll    := "Suspend Hotkeys" ; must match byte-for-byte at every Check/UnCheck
-MenuText_ExitAll       := "Exit"
-Cmd_Suspend_Global     := 65404 ; ID_FILE_SUSPEND - AutoHotkey's own reserved tray-command ID
+GlobalHotkeysSuspended     := false
+MenuText_SuspendAll        := "Suspend Hotkeys" ; must match byte-for-byte at every Check/UnCheck
+MenuText_ExitAll           := "Exit"
+MenuText_AdditionalScripts := "Additional Scripts"
+Cmd_Suspend_Global         := 65404 ; ID_FILE_SUSPEND - AutoHotkey's own reserved tray-command ID
 
 ; Build Menu and TrayTip then Remove Tray Icons
 gosub TrayTipBuild
@@ -251,6 +252,13 @@ ReloadAll:
 	Reload
 return
 
+; Recompiles StartupScript.exe via build_startup_exe.ps1 in background.
+; Relaunches fresh binary via Task Scheduler to prevent self-locking.
+MenuRecompileStartup:
+	buildScript := A_ScriptDir "\..\build_startup_exe.ps1"
+	Run, powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "%buildScript%" -Relaunch,, Hide
+return
+
 ; Cascades a real Suspend-Hotkeys toggle to every managed CHILD script (never the master itself - this cascade never targets the master's own window, so its 4 hotkeys stay reachable regardless).
 ; Targets by path+class, not ahk_pid: a script that has ever shown a SharedHelpers.ahk badge Gui (Hide, not Destroy, after use) can own a second hidden top-level window, and ahk_pid would non-deterministically match either one - only the true main window actually handles this reserved command ID.
 ; Entry point for both the tray item and the hotkey.
@@ -266,8 +274,8 @@ SuspendAllToggle:
 		PostMessage, 0x111, %Cmd_Suspend_Global%,,, % Script.Path " ahk_class AutoHotkey"
 	}
 	gosub SuspendAllCheckSync
-	; Toast feedback for the actual toggle only (not the MenuBuild resync below, which would
-	; otherwise fire this on every unrelated per-script Exit/Load while suspend happens to be on)
+	; Toast feedback for the actual toggle only (not the MenuBuild resync below, which would otherwise
+	; fire this on every unrelated per-script Exit/Load while suspend happens to be on).
 	ToolTip, % GlobalHotkeysSuspended ? "All script hotkeys suspended" : "All script hotkeys resumed"
 	SetTimer, RemoveSuspendToggleToolTip, -1500
 return
@@ -325,6 +333,7 @@ return
 ;
 MenuBuild:
 	try Menu, SubMenu_Load, DeleteAll ; SubMenu_Load does not always exist
+	try Menu, SubMenu_AdditionalScripts, DeleteAll
 	Menu, Tray, DeleteAll
 	HasLoadSubmenu := false ; Tracks whether any script landed in SubMenu_Load below.
 	                        ; Keeps the separators around it from being added unpaired - this was the cause of the doubled blank separator seen when nothing is unloaded.
@@ -342,7 +351,8 @@ MenuBuild:
 			Menu, SubMenu_%PID%, Add, Restart, ScriptCommand
 			Menu, SubMenu_%PID%, Add, Exit, ScriptCommand
 
-			; Mirror any custom tray items this script has published for itself (generic -- no per-script names/IDs hardcoded here; see BackgroundAutomations.ahk for the publishing side of this).
+			; Mirror any custom tray items this script has published for itself (generic -- no per-script names/IDs hardcoded here; see SharedHelpers.ahk for the publishing side of this).
+			; Supports horizontal separator lines when "-" is published.
 			; Scripts that don't publish a manifest are unaffected.
 			CustomManifest := A_Temp "\ahk_traymenu_" Script_Name ".txt"
 			if FileExist(CustomManifest)
@@ -351,7 +361,9 @@ MenuBuild:
 				Loop, Read, %CustomManifest%
 				{
 					StringSplit, CustomItem, A_LoopReadLine, |
-					if (CustomItem0 >= 1 && CustomItem1 != "")
+					if (CustomItem1 = "-" || CustomItem1 = "")
+						Menu, SubMenu_%PID%, Add
+					else if (CustomItem0 >= 1 && CustomItem1 != "")
 						Menu, SubMenu_%PID%, Add, % CustomItem1, RemoteMenuCommand
 				}
 			}
@@ -373,16 +385,22 @@ MenuBuild:
 			Pinned[Script_Name] := true
 			HasPinned := true
 		}
-	if (HasPinned)
-		Menu, Tray, Add ; separator between pinned scripts and everything else
 
-	; Everything else, in whatever order Scripts naturally enumerates (unchanged from before).
+	; Additional (unpinned) scripts, bundled into a single expandable submenu
+	HasAdditionalScripts := false
 	for Script_Name, Script in Scripts
 		if (Script.Status && !Pinned[Script_Name])
 		{
 			PID := Script.PID
-			Menu, Tray, Add, %Script_Name%, :SubMenu_%PID%
+			Menu, SubMenu_AdditionalScripts, Add, %Script_Name%, :SubMenu_%PID%
+			HasAdditionalScripts := true
 		}
+
+	if (HasPinned && HasAdditionalScripts)
+		Menu, Tray, Add ; separator between pinned scripts and additional scripts
+
+	if (HasAdditionalScripts)
+		Menu, Tray, Add, %MenuText_AdditionalScripts%, :SubMenu_AdditionalScripts
 
 	Menu, Tray, NoStandard
 	if (HasLoadSubmenu)
@@ -392,6 +410,7 @@ MenuBuild:
 	}
 	Menu, Tray, Add
 	Menu, Tray, Add, Reload All, ReloadAll
+	Menu, Tray, Add, Recompile Startup, MenuRecompileStartup
 	Menu, Tray, Add, %MenuText_SuspendAll%, SuspendAllToggle
 	Menu, Tray, Add, %MenuText_ExitAll%, ExitAll
 	gosub SuspendAllCheckSync ; must come AFTER the Add above - Check on a not-yet-added item errors
@@ -415,9 +434,8 @@ ScriptCommand:
 	Pid := RegExReplace(A_ThisMenu,"SubMenu_(\d*)$","$1") ; each SubMenu name included Pid
 	cmd := RegExReplace(A_ThisMenuItem, "[^\w#@$?\[\]]") ; strip invalid chars
 
-	; Restart has no native reserved command ID (unlike Edit/Exit/ViewKeyHistory, which the
-	; child's own AHK runtime already understands) - the master has to do the kill+relaunch
-	; itself, so it's handled separately before the generic reserved-ID dispatch below.
+	; Restart has no native reserved command ID (unlike Edit/Exit/ViewKeyHistory, which the child runtime already understands).
+	; The master performs the kill and relaunch itself, handled separately before generic reserved-ID dispatch below.
 	if (cmd = "Restart")
 	{
 		gosub ScriptCommand_Restart
@@ -572,17 +590,10 @@ AHK_NOTIFYICON(wParam, lParam, uMsg, hWnd) ; OnMessage(0x404, "AHK_NOTIFYICON")
 	; Cleanup Tray Icons on MouseOver
 	if (lParam = 0x200) ; WM_MOUSEMOVE := 0x200
 		TrayIconRemove(1)
-	; Left click shows the tray menu - native default does nothing on a single left click, so no suppression needed here (Menu,Tray,Show is purely additive).
-	else if (lParam = 0x202) ; WM_LBUTTONUP
+	; Both left-click and right-click open the master tray context menu.
+	else if (lParam = 0x202 || lParam = 0x205) ; WM_LBUTTONUP or WM_RBUTTONUP
 	{
 		Menu, Tray, Show
-		return 0
-	}
-	; Right click reloads everything directly instead of the native default of showing the menu.
-	; return 0 suppresses that native default - confirmed via AutoHotkey community threads, since this interception isn't covered by the official Menu/OnMessage reference pages.
-	else if (lParam = 0x205) ; WM_RBUTTONUP
-	{
-		gosub ReloadAll
 		return 0
 	}
 }

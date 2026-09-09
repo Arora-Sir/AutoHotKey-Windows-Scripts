@@ -30,16 +30,23 @@ global g_Ext4SsdMounted := false
 ; Windows broadcasts this to every listener, not just one - BackgroundAutomations.ahk has its own separate listener for Sefirah's reconnect logic; no cross-process signaling is needed for two scripts to each react to the same system event.
 OnMessage(0x0218, "SsdManager_WM_POWERBROADCAST")
 
-; System Tray menu integration for Pixel SSD
-Menu, Tray, Add
-Menu, Tray, Add, Mount Pixel SSD (P:), TrayMountPixelSsd
-Menu, Tray, Add, Eject Pixel SSD Safely, TrayEjectPixelSsd
-Menu, Tray, Add, Register Zero-UAC Tasks, TrayRegisterAdminTasks
+; -----------------------------------------------------------------------------
+; TRAY MENU INTEGRATION FOR PIXEL SSD
+; Standalone tray items are commented out below because StartupScript.ahk manages the master tray icon for the fleet and hides individual script icons.
+; Actions are published to the master tray submenu via PublishTrayMenuManifest below.
+; -----------------------------------------------------------------------------
+; Menu, Tray, Add
+; Menu, Tray, Add, Mount Pixel SSD (P:), TrayMountPixelSsd
+; Menu, Tray, Add, Eject Pixel SSD Safely, TrayEjectPixelSsd
+; Menu, Tray, Add, Register Zero-UAC Tasks, TrayRegisterAdminTasks
 
-; Publish the 3 custom items above so StartupScript.ahk's master submenu can mirror them generically (it just reads this file -- no item names/IDs hardcoded on that side).
-; If the Menu,Add lines above ever change, update this list to match; nothing else needs touching.
-; (see SharedHelpers.ahk - this also registers the shared HandleRemoteTrayMenuTrigger)
-PublishTrayMenuManifest([["Mount Pixel SSD (P:)", "TrayMountPixelSsd"], ["Eject Pixel SSD Safely", "TrayEjectPixelSsd"], ["Register Zero-UAC Tasks", "TrayRegisterAdminTasks"]])
+; Publish items so StartupScript.ahk's master submenu can mirror them generically.
+; The master script reads this file dynamically without hardcoded item names or IDs.
+; Separator ["-"] groups Mount/Eject operations apart from one-time task registration.
+PublishTrayMenuManifest([ ["Mount Pixel SSD (P:)", "TrayMountPixelSsd"]
+                        , ["Eject Pixel SSD Safely", "TrayEjectPixelSsd"]
+                        , ["-"]
+                        , ["Register Zero-UAC Tasks", "TrayRegisterAdminTasks"] ])
 return ; End of auto-execute section
 
 ; -----------------------------------------------------------------------------
