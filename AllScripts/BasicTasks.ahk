@@ -1362,3 +1362,80 @@ OnDisplayChange_LidRecovery(wParam, lParam, msg, hwnd) {
     }
 }
 ; [END: Tablet Headless Display & Mouse Speed Toggle]
+
+; [START: DRM Video Streaming & Hardware Acceleration Toggle]
+; Toggles Chromium hardware acceleration so DRM video streams without black screen.
+; Browser-only modification; does not touch display resolution or monitor layout.
+
+ToggleDRMStreamingMode() {
+    flagFile := A_Temp "\ahk_drm_streaming_mode.flag"
+
+    ; Target: active focused browser, or running background instances (default: Brave)
+    targets := GetTargetBrowsersForDRM()
+
+    ; Toggle rule: if any target has HW acceleration ON -> turn OFF (DRM mode). Otherwise restore ON.
+    anyHwEnabled := false
+    for idx, bName in targets {
+        if (GetBrowserHardwareAcceleration(bName)) {
+            anyHwEnabled := true
+            break
+        }
+    }
+
+    targetListStr := ""
+    for idx, bName in targets
+        targetListStr .= (idx > 1 ? " & " : "") bName
+
+    if (anyHwEnabled) {
+        ; --- ACTIVATE DRM STREAMING MODE (Disable Hardware Acceleration) ---
+        FileDelete, %flagFile%
+        FileAppend, active, %flagFile%
+
+        for idx, bName in targets {
+            CloseBrowserGracefully(bName)
+            SetBrowserHardwareAcceleration(bName, false)
+            LaunchBrowserInstance(bName, "--disable-gpu --restore-last-session --disable-session-crashed-bubble")
+        }
+
+        ShowDRMStatusBadge("[ACTIVE] DRM Streaming: " targetListStr " (HW Accel OFF)")
+        SetTimer, UpdateDRMTrayStatus, -100
+    } else {
+        ; --- DEACTIVATE DRM STREAMING MODE (Restore Hardware Acceleration) ---
+        FileDelete, %flagFile%
+
+        for idx, bName in targets {
+            CloseBrowserGracefully(bName)
+            SetBrowserHardwareAcceleration(bName, true)
+            LaunchBrowserInstance(bName, "--restore-last-session --disable-session-crashed-bubble")
+        }
+
+        ShowDRMStatusBadge("[OFF] DRM Streaming: " targetListStr " (HW Accel ON)")
+        SetTimer, UpdateDRMTrayStatus, -100
+    }
+}
+
+TrayDRMStreamingModeToggle:
+    ToggleDRMStreamingMode()
+return
+
+UpdateDRMTrayStatus:
+    global g_DRMTrayStatusLabel
+    flagFile := A_Temp "\ahk_drm_streaming_mode.flag"
+    isBraveOff := !GetBrowserHardwareAcceleration("Brave")
+    isChromeOff := !GetBrowserHardwareAcceleration("Chrome")
+
+    if (FileExist(flagFile) || isBraveOff || isChromeOff)
+        newLabel := "DRM Streaming: [ACTIVE] (HW Accel OFF)"
+    else
+        newLabel := "DRM Streaming: [OFF] (HW Accel ON)"
+
+    if (newLabel != g_DRMTrayStatusLabel) {
+        try {
+            Menu, Tray, Rename, %g_DRMTrayStatusLabel%, %newLabel%
+            g_DRMTrayStatusLabel := newLabel
+        }
+    }
+return
+; [END: DRM Video Streaming & Hardware Acceleration Toggle]
+
+

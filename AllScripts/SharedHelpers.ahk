@@ -269,6 +269,19 @@ ShowSkillsStatusBadge(msg) {
 
 
 ; -----------------------------------------------------------------------------
+; DRM STREAMING STATUS BADGE - color-coded toast over ShowBottomRightBadge
+; -----------------------------------------------------------------------------
+ShowDRMStatusBadge(msg) {
+    if InStr(msg, "[ACTIVE]")
+        bgColor := "1A6E3C" ; Deep green for ACTIVE
+    else
+        bgColor := "3A3D40" ; Dark slate grey for OFF
+
+    ShowBottomRightBadge(msg, bgColor, 3000)
+}
+
+
+; -----------------------------------------------------------------------------
 ; TIMED TOOLTIP - native ToolTip, auto-dismissed after N ms
 ; -----------------------------------------------------------------------------
 ; Collapses the repeated inline "ToolTip -> SetTimer -Nms -> Label: ToolTip \ return" pattern that previously appeared independently at several call sites across BasicTasks.ahk and BackgroundAutomations.ahk (VS Code zoom HUD, SSD mount/unmount feedback).
@@ -352,3 +365,192 @@ RunSilentPowerShell(scriptPath, args := "") {
 }
 
 ; MountExt4Ssd/UnmountExt4Ssd now live in AllScripts/Ext4SsdManager.ahk - the ext4 SSD feature is single-owner (that one script), not shared across multiple consumers, so it no longer belongs in this shared-helpers file.
+
+
+; -----------------------------------------------------------------------------
+; CHROMIUM BROWSER OPERATIONS (Brave & Chrome)
+; -----------------------------------------------------------------------------
+; Manages graceful close, atomic Local State JSON edits, and zero-GPU launch.
+
+GetBrowserMeta(browserName) {
+    global PATH_BRAVE_EXE, PATH_CHROME_EXE
+    EnvGet, localAppData, LOCALAPPDATA
+    meta := {}
+    meta.name := browserName
+
+    if (browserName = "Brave") {
+        meta.exeName := "brave.exe"
+        meta.localStatePath := localAppData "\BraveSoftware\Brave-Browser\User Data\Local State"
+        if (PATH_BRAVE_EXE && FileExist(PATH_BRAVE_EXE)) {
+            meta.exePath := PATH_BRAVE_EXE
+        } else {
+            ; Query standard Windows App Paths registry before falling back to bare executable name
+            RegRead, regExe, HKLM, SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\brave.exe
+            if (!regExe)
+                RegRead, regExe, HKCU, SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\brave.exe
+            if (regExe && FileExist(regExe)) {
+                meta.exePath := regExe
+            } else {
+                localExe := localAppData "\BraveSoftware\Brave-Browser\Application\brave.exe"
+                meta.exePath := FileExist(localExe) ? localExe : "brave.exe"
+            }
+        }
+    } else if (browserName = "Chrome") {
+        meta.exeName := "chrome.exe"
+        meta.localStatePath := localAppData "\Google\Chrome\User Data\Local State"
+        if (PATH_CHROME_EXE && FileExist(PATH_CHROME_EXE)) {
+            meta.exePath := PATH_CHROME_EXE
+        } else {
+            ; Query standard Windows App Paths registry before falling back to bare executable name
+            RegRead, regExe, HKLM, SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe
+            if (!regExe)
+                RegRead, regExe, HKCU, SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe
+            if (regExe && FileExist(regExe)) {
+                meta.exePath := regExe
+            } else {
+                localExe := localAppData "\Google\Chrome\Application\chrome.exe"
+                meta.exePath := FileExist(localExe) ? localExe : "chrome.exe"
+            }
+        }
+    }
+    return meta
+}
+
+GetActiveBrowser() {
+    if WinActive("ahk_exe brave.exe")
+        return "Brave"
+    if WinActive("ahk_exe chrome.exe")
+        return "Chrome"
+    return ""
+}
+
+GetRunningBrowsers() {
+    running := []
+    Process, Exist, brave.exe
+    if (ErrorLevel)
+        running.Push("Brave")
+    Process, Exist, chrome.exe
+    if (ErrorLevel)
+        running.Push("Chrome")
+    return running
+}
+
+GetTargetBrowsersForDRM() {
+    active := GetActiveBrowser()
+    if (active != "")
+        return [active]
+
+    running := GetRunningBrowsers()
+    if (running.Length() > 0)
+        return running
+
+    return ["Brave"]
+}
+
+CloseBrowserGracefully(browserName, timeoutMs := 3000) {
+    meta := GetBrowserMeta(browserName)
+    exeName := meta.exeName
+    if (!exeName)
+        return false
+
+    Process, Exist, %exeName%
+    if (!ErrorLevel)
+        return true ; Already not running
+
+    ; Send WM_CLOSE to all top-level windows of this browser to flush session tabs
+    WinGet, idList, List, ahk_exe %exeName%
+    Loop, %idList%
+    {
+        this_id := idList%A_Index%
+        WinClose, ahk_id %this_id%
+    }
+    
+    timeoutSec := Ceil(timeoutMs / 1000)
+    WinWaitClose, ahk_exe %exeName%,, %timeoutSec%
+
+    ; Terminate lingering background tray watcher processes to release Local State file locks
+    Process, Exist, %exeName%
+    if (ErrorLevel) {
+        RunWait, taskkill /IM %exeName%,, Hide
+        Loop, 15 {
+            Process, Exist, %exeName%
+            if (!ErrorLevel)
+                break
+            Sleep, 100
+        }
+        ; Force terminate if still lingering to guarantee file lock release
+        Process, Exist, %exeName%
+        if (ErrorLevel) {
+            RunWait, taskkill /F /IM %exeName%,, Hide
+            Sleep, 300
+        }
+    }
+    Sleep, 200 ; Settle delay to ensure OS releases file handles on Local State
+    return true
+}
+
+GetBrowserHardwareAcceleration(browserName) {
+    meta := GetBrowserMeta(browserName)
+    localStatePath := meta.localStatePath
+    if (!localStatePath || !FileExist(localStatePath))
+        return true
+
+    FileEncoding, UTF-8
+    FileRead, content, %localStatePath%
+    if (ErrorLevel || !content)
+        return true
+
+    if RegExMatch(content, """hardware_acceleration_mode""\s*:\s*\{\s*""enabled""\s*:\s*false\s*\}")
+        return false
+
+    return true
+}
+
+SetBrowserHardwareAcceleration(browserName, enable) {
+    meta := GetBrowserMeta(browserName)
+    localStatePath := meta.localStatePath
+    if (!localStatePath || !FileExist(localStatePath))
+        return false
+
+    FileEncoding, UTF-8
+    FileRead, content, %localStatePath%
+    if (ErrorLevel || !content)
+        return false
+
+    targetEnabled := enable ? "true" : "false"
+
+    ; 1. Update or insert hardware_acceleration_mode: {"enabled": bool}
+    if RegExMatch(content, """hardware_acceleration_mode""\s*:\s*\{\s*""enabled""\s*:\s*(true|false)\s*\}") {
+        content := RegExReplace(content, """hardware_acceleration_mode""\s*:\s*\{\s*""enabled""\s*:\s*(true|false)\s*\}", """hardware_acceleration_mode"":{""enabled"":" targetEnabled "}")
+    } else {
+        content := RegExReplace(content, "^\{", "{""hardware_acceleration_mode"":{""enabled"":" targetEnabled "},")
+    }
+
+    ; 2. Update or insert hardware_acceleration_mode_previous
+    if RegExMatch(content, """hardware_acceleration_mode_previous""\s*:\s*(true|false)") {
+        content := RegExReplace(content, """hardware_acceleration_mode_previous""\s*:\s*(true|false)", """hardware_acceleration_mode_previous"":" targetEnabled)
+    } else {
+        content := RegExReplace(content, "^\{", "{""hardware_acceleration_mode_previous"":" targetEnabled ",")
+    }
+
+    tempPath := localStatePath ".tmp"
+    FileDelete, %tempPath%
+    FileAppend, %content%, %tempPath%, UTF-8
+    if FileExist(tempPath) {
+        FileMove, %tempPath%, %localStatePath%, 1
+        return true
+    }
+    return false
+}
+
+LaunchBrowserInstance(browserName, args := "") {
+    meta := GetBrowserMeta(browserName)
+    exePath := meta.exePath
+    if (!exePath || !FileExist(exePath))
+        return false
+
+    cmd := """" exePath """" (args != "" ? (" " args) : "")
+    Run, %cmd%
+    return true
+}
+
