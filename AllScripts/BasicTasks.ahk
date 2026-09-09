@@ -1233,11 +1233,24 @@ ToggleTabletDisplayMode() {
     g_LastManualDisplaySwitch := A_TickCount
     markerFile := PATH_SUNSHINE_SCRIPTS ? (PATH_SUNSHINE_SCRIPTS "\.fast_since") : ""
 
+    ; Check if internal laptop display (DISPLAY1) is currently active on the desktop
+    SysGet, monCount, MonitorCount
+    hasInternal := false
+    Loop, %monCount%
+    {
+        SysGet, mName, MonitorName, %A_Index%
+        if InStr(mName, "DISPLAY1")
+        {
+            hasInternal := true
+            break
+        }
+    }
+
     SysGet, primIndex, MonitorPrimary
     SysGet, monName, MonitorName, %primIndex%
 
-    ; If marker exists OR primary monitor is DISPLAY4 (HDMI dummy plug), we are currently in Tablet Mode
-    isTablet := FileExist(markerFile) || InStr(monName, "DISPLAY4")
+    ; We are in Tablet Mode if internal panel (DISPLAY1) is inactive OR primary monitor is DISPLAY4 (HDMI dummy plug)
+    isTablet := (!hasInternal) || InStr(monName, "DISPLAY4")
 
     if (isTablet) {
         ; --- SWITCH TO LAPTOP MODE ---
@@ -1249,16 +1262,19 @@ ToggleTabletDisplayMode() {
         NumPut(1, accel, 8, "Int")
         DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
 
-        ; 2. Clear marker file for SunshineMouseWatchdog
+        ; 2. Clear marker files for SunshineMouseWatchdog
         FileDelete, %markerFile%
+        FileDelete, % A_Temp "\sunshine_manual_switch.flag"
 
         ; 3. Native silent switch to PC Screen Only (1 = Internal)
         Run, DisplaySwitch.exe 1,, Hide
+
+        ; 4. Restore Simple Sticky Notes to exact laptop coordinates once 1080p DWM settles
+        ApplyLaptopStickyNotesLayout(1200)
     } else {
         ; --- SWITCH TO TABLET MODE ---
-        ; Bail out if there's no second display at all. Confirmed (Windows forum reports): DisplaySwitch.exe 4 (Second screen only) with only one monitor connected blanks the screen entirely, recoverable only by a blind Win+P keypress sequence with zero visual feedback.
-        SysGet, monCount, MonitorCount
-        if (monCount < 2) {
+        ; Bail out if there is no second display attached at all (prevents blank screen if no external monitor or dummy plug is connected).
+        if (!HasSecondDisplayConnected()) {
             ShowTimedToolTip("No second display detected - staying on current display.", 2000)
             return
         }
@@ -1271,14 +1287,23 @@ ToggleTabletDisplayMode() {
         NumPut(0, accel, 8, "Int")
         DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
 
-        ; 2. Create marker file for SunshineMouseWatchdog - content "manual" (rather than the
-        ; empty file set_fast.ps1 creates) lets it tell a deliberate manual toggle apart from a
-        ; real Sunshine session, so it never overrides this because of a stale sunshine.log or
-        ; Tailscale reading (see SunshineMouseWatchdog.ahk's own comment on this).
+        ; 2. Create marker files for SunshineMouseWatchdog: "manual" content in the main marker
+        ; (rather than the empty file set_fast.ps1 creates) lets it tell a deliberate manual
+        ; toggle apart from a real Sunshine session, and the separate manualFlag below adds a
+        ; 20s grace window so the watchdog doesn't act on a stale sunshine.log/Tailscale reading
+        ; before the user has had a chance to actually open Moonlight (see SunshineMouseWatchdog.ahk's
+        ; own MANUAL OVERRIDE comment for the full reasoning).
+        FileDelete, %markerFile%
         FileAppend, manual, %markerFile%
+        manualFlag := A_Temp "\sunshine_manual_switch.flag"
+        FileDelete, %manualFlag%
+        FileAppend, % A_TickCount, %manualFlag%
 
         ; 3. Native silent switch to Second Screen Only (4 = External)
         Run, DisplaySwitch.exe 4,, Hide
+
+        ; 4. Apply Simple Sticky Notes tablet layout once 2560x1600 DWM settles
+        ApplyTabletStickyNotesLayout(1200)
     }
 }
 
@@ -1288,9 +1313,8 @@ ToggleTabletDisplayMode() {
 SwitchToDuplicateDisplayMode() {
     global PATH_SUNSHINE_SCRIPTS, g_LastManualDisplaySwitch
 
-    ; Bail out if there's no second display at all - same reasoning as ToggleTabletDisplayMode()'s tablet branch (see that function's own comment on this).
-    SysGet, monCount, MonitorCount
-    if (monCount < 2) {
+    ; Bail out if there is no second display attached at all.
+    if (!HasSecondDisplayConnected()) {
         ShowTimedToolTip("No second display detected - staying on current display.", 2000)
         return
     }
@@ -1306,11 +1330,19 @@ SwitchToDuplicateDisplayMode() {
     NumPut(0, accel, 8, "Int")
     DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
 
-    ; Create marker file for SunshineMouseWatchdog - same "manual" convention as ToggleTabletDisplayMode()'s tablet branch (see that function's own comment for why).
+    ; Create marker files for SunshineMouseWatchdog - same "manual" + 20s-grace-window convention
+    ; as ToggleTabletDisplayMode()'s tablet branch (see that function's own comment for why).
+    FileDelete, %markerFile%
     FileAppend, manual, %markerFile%
+    manualFlag := A_Temp "\sunshine_manual_switch.flag"
+    FileDelete, %manualFlag%
+    FileAppend, % A_TickCount, %manualFlag%
 
     ; Native silent switch to Duplicate (2 = Duplicate, matching the existing 1/4 convention ToggleTabletDisplayMode() already uses for PC-only/Second-screen-only).
     Run, DisplaySwitch.exe 2,, Hide
+
+    ; Apply tablet layout for dummy-plug mirror mode once DWM settles
+    ApplyTabletStickyNotesLayout(1200)
 }
 
 ; Hardware lid-open auto-recovery handler:
@@ -1319,6 +1351,9 @@ SwitchToDuplicateDisplayMode() {
 OnDisplayChange_LidRecovery(wParam, lParam, msg, hwnd) {
     global PATH_SUNSHINE_SCRIPTS, g_LastManualDisplaySwitch
     markerFile := PATH_SUNSHINE_SCRIPTS ? (PATH_SUNSHINE_SCRIPTS "\.fast_since") : ""
+
+    ; Always re-align sticky notes whenever the display topology changes (both manual Win+Shift+P and lid events)
+    AutoApplyStickyNotesLayout(1200)
 
     ; Guard 1: Ignore display events triggered by manual Win+Shift+P toggles (within 4s)
     if (g_LastManualDisplaySwitch && (A_TickCount - g_LastManualDisplaySwitch < 4000))
@@ -1359,6 +1394,9 @@ OnDisplayChange_LidRecovery(wParam, lParam, msg, hwnd) {
 
         ; 3. Native silent switch to PC Screen Only (1 = Internal 1080p @ 144Hz)
         Run, DisplaySwitch.exe 1,, Hide
+
+        ; 4. Restore Simple Sticky Notes to exact laptop coordinates once 1080p DWM settles
+        ApplyLaptopStickyNotesLayout(1200)
     }
 }
 ; [END: Tablet Headless Display & Mouse Speed Toggle]

@@ -67,4 +67,6 @@ PATH_SKILLS_TEST_FILE     := "D:\Path\To\Your\.gemini\skills\Global-Developer-Sk
 PATH_SHAREX_EXE        := "C:\Program Files\ShareX\ShareX.exe"
 PATH_BRAVE_EXE         := "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
 PATH_CHROME_EXE        := "C:\Program Files\Google\Chrome\Application\chrome.exe"
+PATH_TAILSCALE_EXE     := "C:\Program Files\Tailscale\tailscale.exe"
 PATH_TAILSCALE_IPN_EXE := "C:\Program Files\Tailscale\tailscale-ipn.exe"
+PATH_SUNSHINE_LOG      := "C:\Program Files\Sunshine\config\sunshine.log"

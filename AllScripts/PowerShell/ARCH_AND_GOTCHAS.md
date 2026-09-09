@@ -147,3 +147,75 @@ This document is the engineering reference for the ext4 external SSD automation 
   2. **Synchronous Barrier**: `unmount_wsl_ssd.ps1` polls for this flag (up to 6 seconds at 250ms intervals), ensuring `wsl.exe --unmount` has fully finished and released all handles before Step 6 begins.
   3. **Multi-Attempt Retry Loop**: Step 6 now executes up to 6 retry attempts (spaced 350ms apart) for `CM_Request_Device_EjectW`, gracefully accommodating any brief driver-stack teardown latency.
   4. **Single-Action Guarantee**: Safe removal now completes reliably on the very first click, displaying Windows native "Safe to Remove Hardware" toast.
+
+---
+
+## 7. Multi-Resolution Display Switching & Desktop Layout Engine
+
+### Gotcha 12: The 73px Logical Screen Width Deficit (1536px vs 1463px) & Boundary Clamping Cascade
+
+- **Symptom**: When switching from Laptop mode to Tablet mode, Simple Sticky Notes windows clump together in the middle of the screen or cascade into each other, instead of maintaining their neat column positions.
+- **Root Cause**:
+  1. The host laptop display (`DISPLAY1`) runs at 1920x1080 with 125% Windows DPI scaling. The logical desktop resolution is:
+     $$\text{Width} = \frac{1920}{1.25} = 1536\text{ DIP}, \quad \text{Height} = \frac{1080}{1.25} = 864\text{ DIP}$$
+  2. The tablet display (HDMI dummy plug `DISPLAY4` matching Galaxy Tab S10 Ultra) runs at 2560x1600 with 175% Windows DPI scaling. The logical desktop resolution is:
+     $$\text{Width} = \frac{2560}{1.75} \approx 1462.85 \to 1463\text{ DIP}, \quad \text{Height} = \frac{1600}{1.75} \approx 914.28 \to 914\text{ DIP}$$
+  3. The tablet screen is 73 logical pixels narrower than the laptop screen (1463px vs 1536px).
+  4. On the laptop, Column 3 sits at $X = 1268$ with width $W = 268$, extending flush to the right boundary:
+     $$X + W = 1268 + 268 = 1536\text{px}$$
+  5. When switched to the tablet, any note positioned at $X = 1268$ exceeds the screen boundary by 73px ($1536 > 1463$).
+  6. `ssn.exe` monitors display boundaries. When it detects a window outside the new screen dimensions, it automatically clamps the window inward to keep it visible. This shoves Column 3 into Column 2 ($X = 968$), which then shoves Column 2 into Column 1 ($X = 728$), causing an irreversible clumping cascade.
+- **Resolution**: Separate deterministic pixel coordinate profiles for each screen topology:
+  - **Laptop Profile**: Col 0 at $X = 0$, Col 1 at $X = 728$, Col 2 at $X = 968$, Col 3 at $X = 1268$ (flush at 1536px).
+  - **Tablet Profile**: Shift columns leftward to fit within 1463px: Col 0 at $X = 0$, Col 1 at $X = 640$, Col 2 at $X = 885$, Col 3 at $X = 1190$ ($1190 + 268 = 1458\text{px}$, leaving a safe 5px margin before the 1463px edge).
+
+### Gotcha 13: Dynamic Window Position Snapshotting Poisoning
+
+- **Symptom**: AutoHotkey scripts that try to remember positions dynamically by reading `WinGetPos` on switch and saving to an INI file end up corrupting positions permanently after 1 or 2 display toggles.
+- **Root Cause**:
+  1. If the user triggers a switch while already on the tablet, or if a switch is triggered while DWM is mid-transition, `WinGetPos` captures the already-clumped or scaled coordinates (e.g. $X = 2219$ or $X = 906$).
+  2. The script saves these corrupted coordinates as the "laptop baseline", overwriting the true layout.
+  3. Dynamic snapshotting relies on the assumption that windows are in their intended positions at the moment of capture, which is violated during automated lid events, disconnects, and rapid re-toggles.
+- **Resolution**: Use static deterministic coordinate profiles. Never dynamically snapshot live coordinates at switch time. The exact pixel coordinates for each note profile are hardcoded in `apply_ssn_layout.ps1` based on mathematical layout rules.
+
+### Gotcha 14: Ephemeral HWNDs and Post-WM_DISPLAYCHANGE Destruction/Recreation
+
+- **Symptom**: Restoring notes by saved window handle (`HWND`) fails because half or all of the windows report as invalid or do not move.
+- **Root Cause**: `ssn.exe` responds to the Windows `WM_DISPLAYCHANGE` (0x007E) message by destroying its existing `UINoteWindow` handles and recreating new Win32 windows with entirely new HWNDs to adapt to the new display device context.
+- **Resolution**: Never identify sticky notes by HWND across display switches. Instead, identify them dynamically by:
+  1. Win32 class name `UINoteWindow`.
+  2. Dimension signature $(W, H)$ which Simple Sticky Notes preserves across instances (e.g. $240 \times 120$ for small note, $300 \times 240$ for medium note, $268 \times 548$ for expanded "Today" note, $268 \times 32$ for minimized title bars).
+  3. Vertical sorting ($Y$ coordinate) to break ties when multiple notes share identical dimensions.
+
+### Gotcha 15: Hardware EDID / DWM Topology Renegotiation Race Condition (Dual-Wave Settle)
+
+- **Symptom**: The layout script executes, reports success, but notes are still clumped or partially displaced.
+- **Root Cause**:
+  1. Calling `DisplaySwitch.exe /internal` or `DisplaySwitch.exe /external` initiates physical EDID handshake and DWM reconfiguration. This hardware negotiation takes between 1.5 and 2.5 seconds.
+  2. If the positioning script runs too early (e.g. after a fixed 800ms sleep), it moves the windows while Windows is still running on the old display context.
+  3. At ~2.0 seconds, Windows finalizes the display transition and broadcasts `WM_DISPLAYCHANGE`. Upon receiving this message, `ssn.exe` recreates its windows at its own default clamped positions, completely undoing the script's work.
+- **Resolution**: Dual-wave settlement architecture in `apply_ssn_layout.ps1`:
+  1. Active polling loop: Polls every 300ms for up to 6 seconds until target windows exist in the new desktop session.
+  2. Primary wave: Positions all notes once windows are detected.
+  3. Secondary wave (Dual-wave lock): Sleeps 1.2 seconds to allow DWM and `ssn.exe` to complete any late `WM_DISPLAYCHANGE` handling, then applies `SetWindowPos` a second time with `SWP_NOZORDER | SWP_NOACTIVATE`.
+
+### Gotcha 16: Desktop Window Station Isolation in AutoHotkey (`WinGet` Failure)
+
+- **Symptom**: During or immediately following a display switch, AutoHotkey's built-in `WinGet, idList, List, ahk_class UINoteWindow` returns 0 windows, even while sticky notes are clearly visible on screen.
+- **Root Cause**:
+  1. When Windows switches display topologies or changes session state, threads can be temporarily isolated from the active interactive desktop station (`WinSta0\Default`).
+  2. AutoHotkey v1's `WinGet` uses standard `EnumWindows`, which is scoped to the calling thread's current desktop. If the desktop handle is not synchronized with the active DWM surface, `EnumWindows` returns an empty set.
+- **Resolution**: Implement the positioning engine in PowerShell with native Win32 P/Invoke:
+  1. Explicitly call `OpenDesktop("Default", 0, false, 0x01FF)` to acquire a handle to the interactive desktop.
+  2. Attach the worker thread via `SetThreadDesktop(hDesktop)`.
+  3. Query `GetProcessByName("ssn")` and iterate through all process threads using `EnumThreadWindows`. This guarantees enumeration of every note window regardless of desktop transition state.
+
+### Gotcha 17: 16:9 vs 16:10 Vertical Aspect Ratio Variance (864px vs 914px DIP)
+
+- **Symptom**: On the tablet screen, there is approximately 50 pixels of extra empty space between the bottom notes and the taskbar compared to the laptop.
+- **Root Cause**:
+  1. Host laptop screen is 16:9 aspect ratio ($1920 \times 1080$). At 125% DPI scaling, height is 864 DIP.
+  2. Tablet screen is 16:10 aspect ratio ($2560 \times 1600$). At 175% DPI scaling, height is 914 DIP.
+  3. The tablet provides $914 - 864 = 50$ extra vertical pixels.
+  4. Preserving the exact top positions ($Y = 0$, $Y = 120$, $Y = 240$, $Y = 423$) keeps note alignment consistent from the top of the screen down, leaving the surplus 50px at the bottom.
+- **Resolution**: This is mathematically expected behavior due to the 16:10 aspect ratio. Anchoring notes from the top edge maintains visual muscle memory across devices.

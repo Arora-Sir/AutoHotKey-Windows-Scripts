@@ -4,6 +4,7 @@
 SendMode Input
 SetWorkingDir %A_ScriptDir%
 #Include *i %A_ScriptDir%\LocalPaths.ahk ; SUNSHINE_TABLET_TAILSCALE_IP lives here (gitignored)
+#Include %A_ScriptDir%\SharedHelpers.ahk ; Supplies IsExternalDisplayActive()
 #SingleInstance force
 DetectHiddenWindows, On
 
@@ -47,18 +48,18 @@ DetectHiddenWindows, On
 SunshineScriptsDir      := PATH_SUNSHINE_SCRIPTS
 MarkerFile              := SunshineScriptsDir "\.fast_since"
 NormalScript            := SunshineScriptsDir "\set_normal.ps1"
-SunshineLog             := "C:\Program Files\Sunshine\config\sunshine.log"
+SunshineLog             := PATH_SUNSHINE_LOG
 LogsDir                 := A_ScriptDir "\Logs"
 if !FileExist(LogsDir)
     FileCreateDir, %LogsDir%
 LogFile                 := LogsDir "\SunshineMouseWatchdog.log"
-CheckIntervalMs         := 15000
+ManualFlag              := A_Temp "\sunshine_manual_switch.flag"
+QuitFlag                := SunshineScriptsDir "\.session_quit"
+CheckIntervalMs         := 1500  ; halved: faster quit-flag detection (1.5s) without hammering the CPU
 MaxFastHours            := 8
-MinFastAgeSec           := 20 ; grace period after marker creation before disconnect-checks may act (see RACE FIX above)
-RequiredLogStreak       := 1 ; log event is authoritative -- act on first confirmed read
-RequiredOfflineStreak   := 8 ; Tailscale is a weaker signal require ~2min of continuous offline. Was 2 (~30s) until 2026-09-06.
-                             ; Tailscale can flap this tablet "offline" for 30-45s roughly every 45-90s even mid-session, so 30s was firing on pure noise.
-                             ; The LastEvent != "CONNECTED" gate below is the primary fix; this bump is defense-in-depth.
+MinFastAgeSec           := 5 ; grace period after marker creation before disconnect-checks may act
+RequiredLogStreak       := 16 ; 16 polls x 1.5s = 24s grace window so Pause/Back doesn't trigger a restore; Quit bypasses this via QuitFlag
+RequiredOfflineStreak   := 10 ; Tailscale is a weaker signal, require ~15s of continuous offline
 RequiredConnectStreak   := 1 ; symmetric with RequiredLogStreak -- CLIENT CONNECTED is equally authoritative
 
 LogDisconnectedStreak := 0
@@ -67,86 +68,53 @@ ConnectStreak := 0
 
 Loop
 {
-    if FileExist(MarkerFile)
+    ; PRIORITY 0: Sunshine undo hook fired = explicit session Quit (instant restore, no streak needed).
+    ; set_normal.ps1 creates this flag only when called by Sunshine's own undo hook, never by this watchdog.
+    ; skipScript:=true prevents ForceNormal from re-invoking set_normal.ps1, which would re-create the flag and cause a cascade loop.
+    if FileExist(QuitFlag)
     {
-        FileGetTime, FastSince, %MarkerFile%, M
-        NowCopy := A_Now
-        EnvSub, NowCopy, %FastSince%, Hours
-
-        if (NowCopy >= MaxFastHours)
-        {
-            SunshineWatchdog_ForceNormal("stuck fast " NowCopy "h+, past the " MaxFastHours "h ceiling")
-            LogDisconnectedStreak := 0, OfflineStreak := 0
-            Sleep, % CheckIntervalMs
-            continue
-        }
-
-        FastAgeSec := A_Now
-        EnvSub, FastAgeSec, %FastSince%, Seconds
-        if (FastAgeSec < MinFastAgeSec)
-        {
-            ; too fresh to trust either disconnect-check yet -- see RACE FIX above
-            LogDisconnectedStreak := 0, OfflineStreak := 0
-            Sleep, % CheckIntervalMs
-            continue
-        }
-
-        ; MANUAL OVERRIDE: BasicTasks.ahk's Win+Shift+P (ToggleTabletDisplayMode) writes "manual" into this same marker instead of leaving it empty the way set_fast.ps1 does.
-        ; A manual toggle isn't tied to a Sunshine session at all, so the log/Tailscale checks below would be answering the wrong question ("did the OLD session end") and could clobber a deliberate choice off a stale sunshine.log entry or a flaky Tailscale read.
-        ; Deferred to entirely until the user toggles back (or the lid-reopen recovery in BasicTasks.ahk fires) - MaxFastHours above still applies regardless, as the leave-it-on-forever safety net.
-        MarkerContent := ""
-        FileRead, MarkerContent, %MarkerFile%
-        if (MarkerContent = "manual")
-        {
-            LogDisconnectedStreak := 0, OfflineStreak := 0
-            Sleep, % CheckIntervalMs
-            continue
-        }
-
-        ; Primary: Sunshine's own log
-        LastEvent := SunshineWatchdog_LastClientEvent()
-        if (LastEvent = "DISCONNECTED")
-        {
-            LogDisconnectedStreak++
-            if (LogDisconnectedStreak >= RequiredLogStreak)
-            {
-                SunshineWatchdog_ForceNormal("sunshine.log shows CLIENT DISCONNECTED as the latest event")
-                LogDisconnectedStreak := 0, OfflineStreak := 0
-                Sleep, % CheckIntervalMs
-                continue
-            }
-        }
-        else
-            LogDisconnectedStreak := 0
-
-        ; Secondary: tablet's Tailscale reachability (independent path, weaker signal).
-        ; Only consulted when the log itself has no authoritative answer this tick - skip entirely when the log's latest event is CONNECTED, since that stronger signal must never be overridden by the flappier Tailscale read.
-        ; Tailscale can read this tablet offline for 30-45s roughly every 45-90s even while the session never actually disconnects per sunshine.log, which left unguarded can flap forced-normal/forced-FAST repeatedly over several hours while CONNECTED holds the whole time.
-        ; This restores the ORIGINAL intent above (secondary path is only for when the log is unreadable/rotated), not a new behavior.
-        if (LastEvent != "CONNECTED")
-        {
-            if SunshineWatchdog_TabletReachable()
-                OfflineStreak := 0
-            else
-            {
-                OfflineStreak++
-                if (OfflineStreak >= RequiredOfflineStreak)
-                {
-                    SunshineWatchdog_ForceNormal("tablet unreachable on Tailscale for " (OfflineStreak * CheckIntervalMs / 1000) "s+")
-                    LogDisconnectedStreak := 0, OfflineStreak := 0
-                }
-            }
-        }
-        else
-            OfflineStreak := 0
-        ConnectStreak := 0 ; not relevant while marker is present
+        FileDelete, %QuitFlag%
+        SunshineWatchdog_ForceNormal("Sunshine executed undo hook: explicit Quit", true)
+        LogDisconnectedStreak := 0
+        OfflineStreak := 0
+        Sleep, % CheckIntervalMs
+        continue
     }
-    else
+
+    ; MANUAL OVERRIDE: BasicTasks.ahk's Win+Shift+P (ToggleTabletDisplayMode) writes this separate
+    ; ManualFlag file (A_Temp\sunshine_manual_switch.flag) the instant the user manually switches
+    ; into tablet mode - a manual toggle isn't tied to a Sunshine session at all, so the log/
+    ; Tailscale checks below would be answering the wrong question ("did the OLD session end")
+    ; when what actually matters is "has the user had time to open Moonlight yet". A 20s bounded
+    ; window (not indefinite-until-toggled-back) is enough to cover that startup gap without
+    ; permanently disabling the disconnect checks if the user toggles to tablet mode and never
+    ; actually streams.
+    ; Check manual switch grace flag (gives user 20s to connect Moonlight after manual toggle)
+    isManualGrace := false
+    if FileExist(ManualFlag)
     {
-        ; Marker absent (mouse currently normal) - check for a RESUME that prep-cmd's own "do" never re-triggered on (see BI-DIRECTIONAL above).
-        LogDisconnectedStreak := 0, OfflineStreak := 0
-        LastEvent := SunshineWatchdog_LastClientEvent()
-        if (LastEvent = "CONNECTED")
+        FileGetTime, manualTime, %ManualFlag%, M
+        manualAgeSec := A_Now
+        EnvSub, manualAgeSec, %manualTime%, Seconds
+        if (manualAgeSec < 20)
+            isManualGrace := true
+        else
+            FileDelete, %ManualFlag%
+    }
+
+    LastEvent := SunshineWatchdog_LastClientEvent()
+
+    ; 1. CLIENT CONNECTED: active streaming session
+    if (LastEvent = "CONNECTED")
+    {
+        if FileExist(ManualFlag)
+            FileDelete, %ManualFlag%
+
+        LogDisconnectedStreak := 0
+        OfflineStreak := 0
+
+        ; If mouse is currently normal (marker absent), boost it to fast for this session
+        if (!FileExist(MarkerFile))
         {
             ConnectStreak++
             if (ConnectStreak >= RequiredConnectStreak)
@@ -157,6 +125,74 @@ Loop
         }
         else
             ConnectStreak := 0
+    }
+    ; 2. CLIENT DISCONNECTED: stream paused or terminated on tablet
+    else if (LastEvent = "DISCONNECTED")
+    {
+        ConnectStreak := 0
+
+        if (!isManualGrace)
+        {
+            LogDisconnectedStreak++
+            if (LogDisconnectedStreak >= RequiredLogStreak)
+            {
+                ; Act if mouse is fast (MarkerFile exists) OR external dummy plug is active on desktop (Tablet/Duplicate mode)
+                if (FileExist(MarkerFile) || IsExternalDisplayActive())
+                {
+                    SunshineWatchdog_ForceNormal("sunshine.log shows CLIENT DISCONNECTED as the latest event")
+                }
+                LogDisconnectedStreak := 0
+                OfflineStreak := 0
+            }
+        }
+        else
+            LogDisconnectedStreak := 0
+    }
+    ; 3. Fallback: Tailscale reachability check when log has no active answer.
+    ; Secondary, weaker signal - only consulted when the log has no authoritative answer this tick
+    ; (skipped when CONNECTED, since that stronger signal must never be overridden by the flappier
+    ; Tailscale read; also skipped during isManualGrace for the same "wrong question" reason as the
+    ; DISCONNECTED branch above).
+    ; Tailscale can read this tablet offline for 30-45s roughly every 45-90s even while the session
+    ; never actually disconnects per sunshine.log - left unguarded, this flapped forced-normal/
+    ; forced-FAST repeatedly over several hours while CONNECTED held the whole time.
+    ; RequiredOfflineStreak restores that original intent (secondary path only fires once the
+    ; offline reading is sustained, not on ordinary Tailscale noise), not a new behavior.
+    else
+    {
+        ConnectStreak := 0
+        if (!isManualGrace && (FileExist(MarkerFile) || IsExternalDisplayActive()))
+        {
+            if SunshineWatchdog_TabletReachable()
+                OfflineStreak := 0
+            else
+            {
+                OfflineStreak++
+                if (OfflineStreak >= RequiredOfflineStreak)
+                {
+                    SunshineWatchdog_ForceNormal("tablet unreachable on Tailscale for " (OfflineStreak * CheckIntervalMs / 1000) "s+")
+                    LogDisconnectedStreak := 0
+                    OfflineStreak := 0
+                }
+            }
+        }
+        else
+            OfflineStreak := 0
+    }
+
+    ; 4. Safety net ceiling: stuck fast past MaxFastHours regardless
+    if FileExist(MarkerFile)
+    {
+        FileGetTime, FastSince, %MarkerFile%, M
+        NowCopy := A_Now
+        EnvSub, NowCopy, %FastSince%, Hours
+
+        if (NowCopy >= MaxFastHours)
+        {
+            SunshineWatchdog_ForceNormal("stuck fast " NowCopy "h+, past the " MaxFastHours "h ceiling")
+            LogDisconnectedStreak := 0
+            OfflineStreak := 0
+        }
     }
 
     Sleep, % CheckIntervalMs
@@ -209,12 +245,12 @@ SunshineWatchdog_LastClientEvent() {
 ; Reads Tailscale's own view of the tablet's reachability via "tailscale status" text.
 ; Correctly shows a device as "offline" on a real power-off, but stays "active" straight through a Sunshine-level pause - exactly why this is the secondary signal, not the primary one.
 SunshineWatchdog_TabletReachable() {
-    global SUNSHINE_TABLET_TAILSCALE_IP
+    global SUNSHINE_TABLET_TAILSCALE_IP, PATH_TAILSCALE_EXE
     if (!SUNSHINE_TABLET_TAILSCALE_IP)
         return true ; not configured in LocalPaths.ahk -- fail open, rely on the other signals
 
-    TailscaleExe := "C:\Program Files\Tailscale\tailscale.exe"
-    if !FileExist(TailscaleExe)
+    TailscaleExe := PATH_TAILSCALE_EXE
+    if (!TailscaleExe || !FileExist(TailscaleExe))
         return true ; can't check -- fail open rather than false-trigger
 
     TmpFile := A_Temp "\sunshine_watchdog_ts_status.tmp"
@@ -233,21 +269,60 @@ SunshineWatchdog_TabletReachable() {
     return true
 }
 
-SunshineWatchdog_ForceNormal(reason) {
-    global NormalScript, LogFile
-    RunWait, powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%NormalScript%",, Hide
-    ; Also switches the display back to PC-only, mirroring BasicTasks.ahk's manual Win+Shift+P toggle's own laptop branch (DisplaySwitch.exe 1).
-    ; set_normal.ps1 deliberately never touches displays itself - it runs in Sunshine's own service context, where that risks a GUI popup (see the Sunshine scripts README's "black screen" note).
-    ; This AHK script runs in the interactive user session instead, same as BasicTasks.ahk, so it can safely do this where set_normal.ps1 cannot.
-    ; One-way only: switching TO tablet mode on connect was tried and reverted - it raced with Sunshine's own connect-time Duplicate-mode transition and caused a hang (see DISPLAY AUTO-SWITCH ON CONNECT in the header).
+SunshineWatchdog_ForceNormal(reason, skipScript := false) {
+    global NormalScript, LogFile, MarkerFile
+
+    ; 1. Immediate native display switch back to PC Screen Only (1 = Internal 1080p @ 144Hz panel)
+    ; Runs in the interactive user session so the laptop screen re-engages the moment the stream ends
     Run, DisplaySwitch.exe 1,, Hide
+
+    ; 2. Instant Win32 restore of mouse speed to 10 and acceleration ON (avoids PowerShell startup delay)
+    DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
+    VarSetCapacity(accel, 12, 0)
+    NumPut(6, accel, 0, "Int")
+    NumPut(10, accel, 4, "Int")
+    NumPut(1, accel, 8, "Int")
+    DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
+
+    ; 3. Clean up marker and manual grace files immediately
+    if (MarkerFile)
+        FileDelete, %MarkerFile%
+    FileDelete, % A_Temp "\sunshine_manual_switch.flag"
+
+    ; 4. Asynchronously invoke set_normal.ps1 to keep Sunshine script state synchronized.
+    ;    Skipped when called from the quit-flag path (skipScript=true): set_normal.ps1 already ran
+    ;    (it created the quit flag), so calling it again would re-create the flag and cause a cascade loop.
+    if (!skipScript && NormalScript && FileExist(NormalScript))
+        Run, powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%NormalScript%",, Hide
+
+    ; 5. Restore Simple Sticky Notes to exact laptop coordinates once 1080p DWM settles
+    ApplyLaptopStickyNotesLayout(1200)
+
     FileAppend, % A_Now " - forced normal: " reason "`n", %LogFile%
 }
 
 SunshineWatchdog_ForceFast(reason) {
-    global SunshineScriptsDir, LogFile
+    global SunshineScriptsDir, LogFile, MarkerFile
+
+    ; 1. Instant Win32 boost of mouse speed to 20 and acceleration OFF (avoids PowerShell startup delay)
+    DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 20, "UInt", 3)
+    VarSetCapacity(accel, 12, 0)
+    NumPut(6, accel, 0, "Int")
+    NumPut(10, accel, 4, "Int")
+    NumPut(0, accel, 8, "Int")
+    DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
+
+    ; 2. Touch marker file immediately
+    if (MarkerFile) {
+        FileDelete, %MarkerFile%
+        FileAppend,, %MarkerFile%
+    }
+
+    ; 3. Asynchronously invoke set_fast.ps1 to keep Sunshine script state synchronized
     FastScript := SunshineScriptsDir "\set_fast.ps1"
-    RunWait, powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%FastScript%",, Hide
+    if (FileExist(FastScript))
+        Run, powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%FastScript%",, Hide
+
     FileAppend, % A_Now " - forced FAST: " reason "`n", %LogFile%
 }
 

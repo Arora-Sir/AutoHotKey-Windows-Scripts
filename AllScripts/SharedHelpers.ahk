@@ -298,6 +298,94 @@ RemoveTimedToolTip() {
 
 
 ; -----------------------------------------------------------------------------
+; CONNECTED DISPLAY DETECTION - hardware-level check for external displays
+; -----------------------------------------------------------------------------
+; Checks if a second display (physical monitor or HDMI dummy plug) is attached to any graphics adapter, even when Windows has turned off its desktop output in PC Screen Only mode (where SM_CMONITORS / SysGet MonitorCount reports 1).
+HasSecondDisplayConnected() {
+    ; If virtual desktop already has 2 or more active monitors (e.g. extended desktop), a second display is definitely active.
+    SysGet, monCount, MonitorCount
+    if (monCount >= 2)
+        return true
+
+    ; When in single-monitor mode (PC Screen Only or Second Screen Only), query attached hardware devices via EnumDisplayDevices to find unique attached monitors.
+    uniqueMonitors := {}
+    devNum := 0
+    VarSetCapacity(dispDev, 840, 0)
+    NumPut(840, dispDev, 0, "UInt")
+
+    while DllCall("EnumDisplayDevices", "Ptr", 0, "UInt", devNum, "Ptr", &dispDev, "UInt", 0) {
+        ; Skip virtual mirroring drivers (DISPLAY_DEVICE_MIRRORING_DRIVER = 0x00000008)
+        devFlags := NumGet(dispDev, 324, "UInt")
+        if (devFlags & 8) {
+            devNum++
+            VarSetCapacity(dispDev, 840, 0)
+            NumPut(840, dispDev, 0, "UInt")
+            continue
+        }
+
+        devName := StrGet(&dispDev + 4, 32)
+        monNum := 0
+        VarSetCapacity(monDev, 840, 0)
+        NumPut(840, monDev, 0, "UInt")
+
+        while DllCall("EnumDisplayDevices", "Str", devName, "UInt", monNum, "Ptr", &monDev, "UInt", 0) {
+            monFlags := NumGet(monDev, 324, "UInt")
+            monId := StrGet(&monDev + 328, 128)
+            ; 0x2 = DISPLAY_DEVICE_ATTACHED
+            if ((monFlags & 2) && monId != "") {
+                uniqueMonitors[monId] := true
+            }
+            monNum++
+            VarSetCapacity(monDev, 840, 0)
+            NumPut(840, monDev, 0, "UInt")
+        }
+        devNum++
+        VarSetCapacity(dispDev, 840, 0)
+        NumPut(840, dispDev, 0, "UInt")
+    }
+
+    count := 0
+    for id in uniqueMonitors
+        count++
+
+    return (count >= 2)
+}
+
+; Checks if an external display (e.g. HDMI dummy plug on DISPLAY4) is active on the virtual desktop,
+; either alone (Second Screen Only / Tablet Mode) or combined with the internal panel (Duplicate or Extend).
+IsExternalDisplayActive() {
+    ; Check 1: If internal laptop panel (DISPLAY1) is not active at all, an external display is active alone.
+    SysGet, monCount, MonitorCount
+    hasInternal := false
+    Loop, %monCount% {
+        SysGet, mName, MonitorName, %A_Index%
+        if InStr(mName, "DISPLAY1") {
+            hasInternal := true
+            break
+        }
+    }
+    if (!hasInternal)
+        return true
+
+    ; Check 2: If internal panel is active, check if any external graphics adapter (DISPLAY4+) is attached to the desktop (0x1).
+    devNum := 0
+    VarSetCapacity(dispDev, 840, 0)
+    NumPut(840, dispDev, 0, "UInt")
+    while DllCall("EnumDisplayDevices", "Ptr", 0, "UInt", devNum, "Ptr", &dispDev, "UInt", 0) {
+        devName := StrGet(&dispDev + 4, 32)
+        devFlags := NumGet(dispDev, 324, "UInt")
+        if (!InStr(devName, "DISPLAY1") && (devFlags & 1)) {
+            return true
+        }
+        devNum++
+        VarSetCapacity(dispDev, 840, 0)
+        NumPut(840, dispDev, 0, "UInt")
+    }
+    return false
+}
+
+
+; -----------------------------------------------------------------------------
 ; TRAY MENU MANIFEST - publish/dispatch for StartupScript.ahk's master submenu
 ; -----------------------------------------------------------------------------
 ; Call PublishTrayMenuManifest once from each script's auto-execute section right after its native tray setup, passing label/Gosub pairs as a nested array:
@@ -553,4 +641,112 @@ LaunchBrowserInstance(browserName, args := "") {
     Run, %cmd%
     return true
 }
+
+; =============================================================================
+; Simple Sticky Notes (ssn.exe) Dual Deterministic Layout Engine
+; =============================================================================
+; Solves the multi-resolution desktop layout scrambling issue between:
+; - Host Laptop (DISPLAY1): 1920x1080 @ 125% DPI scale = 1536 x 864 logical DIP workspace
+; - Tablet (DISPLAY4):     2560x1600 @ 175% DPI scale = 1463 x 914 logical DIP workspace
+;
+; Mathematical Root Cause:
+; Notes arranged across 4 columns on the laptop extend to X=1536 (flush against the right edge).
+; When switching to Tablet mode, the tablet's logical screen is 73 pixels narrower (1463px vs 1536px).
+; Any note with X + Width > 1463 extends off-screen. Simple Sticky Notes detects Column 3 is off-screen
+; and forces it to slide left, colliding with Column 2, which in turn collides with Column 1.
+;
+; Dual Deterministic Layouts (Pixel-by-Pixel):
+;
+; 1. LAPTOP LAYOUT (Logical workspace: 1536 x 864):
+;    - Column 0 (Far Left):
+;      * 1 note: W=240, H=240 -> X=0, Y=576 (bottom edge = 816px)
+;    - Column 1:
+;      * Top note:    W=240, H=120 -> X=728, Y=0
+;      * Bottom note: W=240, H=240 -> X=728, Y=120 (bottom edge = 360px)
+;      * Right edge: 728 + 240 = 968px (flush against Column 2)
+;    - Column 2:
+;      * Top note:    W=300, H=240 -> X=968, Y=0
+;      * Middle note: W=300, H=183 -> X=968, Y=240
+;      * Bottom note: W=300, H=236 -> X=968, Y=423 (bottom edge = 659px)
+;      * Right edge: 968 + 300 = 1268px (flush against Column 3)
+;    - Column 3:
+;      * 'Today' note (expanded): W=268, H=548 -> X=1268, Y=0
+;      * Minimized notes: W=268, H=32 -> X=1268, stacked below Today at Y=548, 580, 612, 644, 676
+;      * Right edge: 1268 + 268 = 1536px (flush against laptop right screen boundary)
+;
+; 2. TABLET LAYOUT (Logical workspace: 1463 x 914):
+;    - Column 0 (Far Left):
+;      * 1 note: W=240, H=240 -> X=0, Y=576
+;    - Column 1:
+;      * Top note:    W=240, H=120 -> X=640, Y=0
+;      * Bottom note: W=240, H=240 -> X=640, Y=120
+;      * Right edge: 640 + 240 = 880px (5px gap before Column 2)
+;    - Column 2:
+;      * Top note:    W=300, H=240 -> X=885, Y=0
+;      * Middle note: W=300, H=183 -> X=885, Y=240
+;      * Bottom note: W=300, H=236 -> X=885, Y=423
+;      * Right edge: 885 + 300 = 1185px (5px gap before Column 3)
+;    - Column 3:
+;      * 'Today' note (expanded): W=268, H=548 -> X=1190, Y=0
+;      * Minimized notes: W=268, H=32 -> X=1190, stacked below Today at Y=548, 580, 612, 644, 676
+;      * Right edge: 1190 + 268 = 1458px (safe 5px margin before 1463px tablet edge, zero cut-off)
+;
+; Window Identification Signatures:
+; - Column 3: Width in [260, 290] ('Today' H=548, minimized notes H=32)
+; - Column 2: Width in [295, 315] (H=240 top, H=183 middle, H=236 bottom)
+; - Column 1: Width in [230, 250], H <= 130 is top note (H=120)
+; - Column 0 vs Column 1: Width in [230, 250], H > 130 (H=240): note with smaller X is Column 0, larger X is Column 1 bottom
+
+_SSN_Sort(arr, prop, ascending := true) {
+    n := arr.Length()
+    if (n <= 1)
+        return
+    Loop, % n - 1 {
+        i := A_Index
+        Loop, % n - i {
+            j := A_Index
+            v1 := arr[j][prop]
+            v2 := arr[j + 1][prop]
+            swap := ascending ? (v1 > v2) : (v1 < v2)
+            if (swap) {
+                tmp := arr[j]
+                arr[j] := arr[j + 1]
+                arr[j + 1] := tmp
+            }
+        }
+    }
+}
+
+ApplyLaptopStickyNotesLayout(delayMs := 0) {
+    psScript := A_ScriptDir "\PowerShell\apply_ssn_layout.ps1"
+    cmd := "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ psScript """ -Mode Laptop -DelayMs " delayMs
+    Run, %cmd%,, Hide
+    return true
+}
+
+ApplyTabletStickyNotesLayout(delayMs := 0) {
+    psScript := A_ScriptDir "\PowerShell\apply_ssn_layout.ps1"
+    cmd := "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ psScript """ -Mode Tablet -DelayMs " delayMs
+    Run, %cmd%,, Hide
+    return true
+}
+
+AutoApplyStickyNotesLayout(delayMs := 0) {
+    psScript := A_ScriptDir "\PowerShell\apply_ssn_layout.ps1"
+    cmd := "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ psScript """ -Mode Auto -DelayMs " delayMs
+    Run, %cmd%,, Hide
+    return true
+}
+
+; Backward compatibility shims
+SaveSimpleStickyNotesPositions() {
+    ; No-op: deterministic profiles eliminate fragile dynamic snapshotting
+    return true
+}
+
+RestoreSimpleStickyNotesPositions(delayMs := 0) {
+    ; Fallback redirection to deterministic laptop profile
+    return ApplyLaptopStickyNotesLayout(delayMs)
+}
+
 
