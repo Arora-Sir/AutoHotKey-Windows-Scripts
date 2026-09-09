@@ -1,6 +1,6 @@
 # Architecture
 
-This document covers the shared library (`AllScripts/SharedHelpers.ahk`), the debounce pattern it provides as a reusable template, the bottom-right badge system, and the local-path leak prevention setup.
+This document covers the shared library (`AllScripts/SharedHelpers.ahk`), the debounce pattern it provides as a reusable template, the bottom-right badge system, the local-path leak prevention setup, the Windows Task Scheduler boot architecture, DRM Video Streaming Mode, the master tray menu, the Sunshine/Moonlight display topology and watchdog lifecycle, and the Simple Sticky Notes multi-resolution layout engine.
 Read this before adding a new hotkey or feature that needs any of these.
 
 ## Shared helpers (`AllScripts/SharedHelpers.ahk`)
@@ -59,10 +59,12 @@ Every script that needs one of these includes it with an **explicit** `%A_Script
 - **`PublishTrayMenuManifest(itemsArray)` / `HandleRemoteTrayMenuTrigger`** - publishes a script's custom tray-menu items so `StartupScript.ahk`'s master submenu can mirror them generically.
   - Call once per script, right after that script's own `Menu, Tray, Add` lines:
   ```ahk
-  PublishTrayMenuManifest([["Display Label 1", "TrayLabel1"],
-                            ["Display Label 2", "TrayLabel2"]])
+  PublishTrayMenuManifest([ ["Display Label 1", "TrayLabel1"]
+                          , ["-"]
+                          , ["Display Label 2", "TrayLabel2"] ])
   ```
   - Each script gets its own manifest file (`%A_Temp%\ahk_traymenu_<ScriptName>.txt`, keyed by that script's own filename), so sharing this one function across multiple processes is safe - there's no cross-process state beyond the convention of one manifest file per script.
+  - **Separator Support**: An entry of `["-"]` or a string `"-"` serializes to `"-|"` in the manifest. When `StartupScript.ahk` reads the manifest, any item whose first token is `"-"` (or empty) executes a bare `Menu, SubMenu_%PID%, Add` to insert a native Win32 horizontal separator line, grouping custom items cleanly.
   - If a script stops publishing items it previously did (a feature moved elsewhere, say), delete its stale manifest file once by hand.
     `StartupScript.ahk`'s `HandleRemoteTrayMenuTrigger` guard (`IsLabel`) keeps a leftover manifest from raising an error dialog, but won't clean up the dead entry on its own.
 
@@ -77,6 +79,12 @@ Every script that needs one of these includes it with an **explicit** `%A_Script
     `SuspendAllToggle` only ever posts to the managed child scripts, never to this master script's own window, so none of its hotkeys can ever actually become suspended.
   - "Restart" kills a script and relaunches it fresh without moving it to the Load submenu (unlike Exit).
     Useful when just one script needs a clean restart without a full fleet reload.
+
+- **`ShowDRMStatusBadge(msg)`** - thin color-mapping wrapper over `ShowBottomRightBadge`, specific to the DRM Video Streaming Mode feature (maps `[ACTIVE]` to deep green `#1A6E3C`, and `[OFF]` to dark slate grey `#3A3D40`, shown for 3000ms).
+
+- **Chromium browser lifecycle helpers (`GetTargetBrowsersForDRM`, `GetBrowserHardwareAcceleration`, `SetBrowserHardwareAcceleration`, `CloseBrowserGracefully`, `LaunchBrowserInstance`)**
+  - Cross-cutting utility functions providing graceful session-preserving shutdown, preference parsing, and headless/GPU flag manipulation for Chromium-based browsers (Brave and Google Chrome).
+  - Used by `BasicTasks.ahk` for the DRM Video Streaming Mode toggle.
 
 - **`RunSilentPowerShell(scriptPath, args := "")`** - launches a PowerShell script with zero visible window.
 
@@ -148,22 +156,21 @@ return
 
 Colors follow a simple convention - pick from these when adding a new message, or extend `ShowSkillsStatusBadge` (a `SharedHelpers.ahk` wrapper over `ShowBottomRightBadge` that maps a `[LOCKED]`/`[UNLOCKED]`/`[AUTO]`/error message to its color automatically, shared by both `BasicTasks.ahk`'s manual toggle and `BackgroundAutomations.ahk`'s auto watcher) if you need new ones:
 
-| Color | Hex | Meaning |
-|---|---|---|
-| Deep green | `1A6E3C` | Unlocked / open / permissive state |
-| Deep red | `8B1A1A` | Locked / restricted state |
-| Deep blue | `0D4F8B` | Automatic / focus-driven state |
-| Amber | `6E5A00` | Work in progress ("applying...") - not an error |
-| Dark orange | `7A3B00` | Error |
+| Color       | Hex      | Meaning                                         |
+| :---------- | :------- | :---------------------------------------------- |
+| Deep green  | `1A6E3C` | Unlocked / open / permissive state              |
+| Deep red    | `8B1A1A` | Locked / restricted state                       |
+| Deep blue   | `0D4F8B` | Automatic / focus-driven state                  |
+| Amber       | `6E5A00` | Work in progress ("applying...") - not an error |
+| Dark orange | `7A3B00` | Error                                           |
 
 **The DPI subtlety `ShowBottomRightBadge` encodes:**
 
-- Under Windows display scaling above 100%, a `Gui` requested at `w300 h46` can *render* larger than requested, inflated by the DPI scale factor (e.g. 125% scaling inflates it to `375x58`), even though the requested x/y *position* matches the actual rendered position exactly (position passes through unscaled; size does not).
-- A clamp computed against the nominal 300x46 size would not catch this - it would still overflow using the real, larger rect.
-- **The fix**: measure the actual post-creation rect via `WinGetPos` and correct against *that*, position-only.
-  Re-specifying w/h in the correction step recompounds the same inflation (a second explicit w/h compounds `375→469`, not back down to 300).
-- If you copy this pattern for a new kind of popup, keep the measure-then-correct-position-only structure; don't simplify it back to a pre-computed clamp.
-- This measure-and-correct block only runs once, at first creation (see below); it is never re-triggered by a later color/text update, so the inflation can never recompound in normal use.
+- Under Windows display scaling above 100%, AHK v1's default Gui coordinate space is DPI-virtualized: a `Gui`'s rendered size can be inflated by the DPI scale factor relative to what was requested, even though `x`/`y` position values pass through unscaled.
+- **The fix**: the `Gui` is created with `-DPIScale`, which maps every coordinate and dimension AHK sets or reads for that Gui 1:1 to physical screen pixels - the inflation problem is avoided at the root instead of being measured and corrected after the fact.
+- Because sizing is physical-pixel-exact, the badge can be sized directly from a live GDI `DrawTextW` (`DT_CALCRECT`) measurement of the actual message text, taken fresh on every call, rather than created at a fixed nominal size and corrected afterward. This is also what makes the auto-sizing pill shape possible: badge width tracks the measured text width, falling back to a word-wrapped box only for messages too long to fit inline.
+- `GetToastTargetMonitor()` re-resolves which monitor is under the cursor on every call, and the work area (`SysGet MonitorWorkArea`) is recalculated every call too - together these keep the badge anchored to the monitor actually in use (and its exact bottom-right work-area corner) across a Sunshine/Moonlight display-topology switch, rather than to a monitor index that goes stale the moment the active display changes.
+- If you copy this pattern for a new kind of popup, keep `-DPIScale` plus a live text measurement on every call; don't fall back to a fixed nominal size with an after-the-fact position correction, which can't follow a monitor change or a message-length change without recomputing everything anyway.
 
 **Create once, update in place - no destroy/recreate:**
 
@@ -203,11 +210,11 @@ A local, gitignored `CLAUDE.md` at the repo root carries additional contributor/
 
 ## Cross-file state via a shared marker file
 
-Not every shared state goes through `SharedHelpers.ahk`. `AllScripts/SunshineMouseWatchdog.ahk` and `AllScripts/BasicTasks.ahk` (Win+Shift+P's `ToggleTabletDisplayMode`) coordinate the Sunshine fast/normal mouse-speed state through one plain marker file (`.fast_since`) instead, since two independent PowerShell scripts (`set_fast.ps1`/`set_normal.ps1`) already owned it before the AHK-side manual toggle existed.
+Not every shared state goes through `SharedHelpers.ahk`. `AllScripts/SunshineMouseWatchdog.ahk` and `AllScripts/BasicTasks.ahk` (Win+Shift+P's `ToggleTabletDisplayMode`) coordinate the Sunshine fast/normal mouse-speed state through plain marker files instead, since Sunshine's own prep-cmd hooks - `AllScripts/PowerShell/Sunshine/set_fast.ps1` (`do`) / `set_normal.ps1` (`undo`), run directly by Sunshine on stream start/end, independent of any AHK script - already owned this convention before the AHK-side manual toggle existed.
 
-- The marker's mere existence means "fast mode"; its content distinguishes *why*: empty means a real Sunshine session set it (`set_fast.ps1`), `"manual"` means the Win+Shift+P toggle did.
-- `SunshineMouseWatchdog.ahk` defers entirely to a `"manual"` marker, skipping its own sunshine.log/Tailscale disconnect checks - those answer "did the old session end," not "does the user still want tablet mode," and would otherwise clobber a deliberate toggle off stale data.
-- See that file's own comments (`MANUAL OVERRIDE`) for the full reasoning.
+- **`.fast_since`** - the marker's mere existence means "fast mode"; its content distinguishes *why*: empty means a real Sunshine session set it (`set_fast.ps1`), `"manual"` means the Win+Shift+P toggle did.
+- **`sunshine_manual_switch.flag`** (in `%A_Temp%`, separate from `.fast_since`) - a 20-second-bounded grace window armed by the manual toggle itself. `SunshineMouseWatchdog.ahk` skips its sunshine.log/Tailscale disconnect checks entirely while this flag is younger than 20s - those checks answer "did the old session end," not "has the user had time to open Moonlight yet," and would otherwise revert a deliberate toggle before the user even connects. Bounded rather than indefinite, so toggling to tablet mode and never actually streaming doesn't permanently disable the disconnect checks. See that file's own `MANUAL OVERRIDE` comments for the full reasoning.
+- **`.session_quit`** - written by `set_normal.ps1` only when Sunshine's own `undo` prep-cmd hook fires (an explicit Moonlight quit), never by the watchdog. Lets `SunshineMouseWatchdog.ahk` short-circuit straight to a ~1.5s display restore instead of waiting out the normal multi-poll debounce/settle window that exists to avoid reacting to a transient back-gesture/app-switch.
 
 ## Why ToggleTabletDisplayMode() has three keybinds
 
@@ -217,3 +224,231 @@ Not every shared state goes through `SharedHelpers.ahk`. `AllScripts/SunshineMou
 - This applies to both a physical/case Bluetooth keyboard and the tablet's own on-screen Samsung Keyboard - the latter's own Ctrl+A/Ctrl+C-style "shortcuts" are local Android text-editing actions, not genuine key events that would traverse to a remote session at all.
 - Settings > General Management > Physical Keyboard > Keyboard Shortcuts on the tablet only affects an attached physical keyboard, not the on-screen one, and doesn't fix this either way.
 - All three keybinds are confirmed manual, PC-side-only options as a result - none of them are expected to work when sent from the tablet. The confirmed-working remote path is touching the PC's tray items (Toggle Display Mode, Duplicate Only, under `BasicTasks.ahk`'s tray submenu) directly through the Moonlight stream, since that involves no keyboard at all.
+
+## Windows Task Scheduler boot architecture
+
+The AutoHotkey fleet is launched on Windows boot via a dedicated scheduled task named `"AHK Startup Script"`, managed by `setup_startup_task.ps1` (with Explorer-friendly 1-click batch wrappers `Install_Startup_Task.bat` and `Uninstall_Startup_Task.bat`).
+
+- **30-Second Logon Delay (`PT30S`)**:
+  - Task Scheduler is deliberately chosen over Windows Startup (`shell:startup` or registry `Run` keys) because of startup race conditions.
+  - On modern Windows 10/11 installations, audio endpoints, network adapters (Tailscale/Wi-Fi), graphics drivers, and the Windows Explorer shell initialize concurrently across multiple worker threads at user logon.
+  - Launching the AHK fleet instantaneously on logon causes tray icons to fail to register with `Shell_NotifyIcon`, display topology queries to return incomplete monitor arrays, and background network checks to throw spurious errors.
+  - A 30-second delay (`PT30S`) ensures the entire desktop subsystem has settled before `StartupScript.exe` executes.
+
+- **Elevated Task Creation vs. Standard User Execution (`RunLevel Limited`)**:
+  - Registering or modifying tasks in the Task Scheduler root (`\`) requires Administrator privileges. Therefore, `Install_Startup_Task.bat` and `setup_startup_task.ps1` self-elevate via PowerShell `Start-Process -Verb RunAs` if executed un-elevated.
+  - However, the task itself is registered with `Principal.RunLevel = Limited` under the user's standard account (`$env:USERNAME`).
+  - Running as a standard user is critical: running AHK elevated would trigger UAC confirmation prompts on every boot, isolate window messages (UIPI blocks un-elevated apps from sending messages to elevated windows), and alter file virtualization paths.
+
+- **Battery Resilience & Infinite Execution**:
+  - Registered with `Settings.AllowStartIfOnBatteries = $true` and `Settings.DontStopIfGoingOnBatteries = $true`.
+  - Windows Task Scheduler defaults to stopping background tasks when a laptop disconnects from AC power; these flags guarantee continuous background automation on laptops.
+  - `ExecutionTimeLimit = PT0S` (zero timeout) prevents Windows from terminating the fleet after the default 3-day task limit.
+
+- **Recompilation & Relaunch Integration**:
+  - `build_startup_exe.ps1` checks for the existence of `"AHK Startup Script"` in Task Scheduler.
+  - When invoked with `-Relaunch` (or when triggered via the tray menu's "Recompile Startup" item), it first stops `StartupScript.exe` to release file locks, compiles a fresh binary via `Ahk2Exe`, and triggers `schtasks /run /tn "AHK Startup Script"` to restart the master process seamlessly in the user's active session without command prompt flashes. If the scheduled task is not registered on that machine, it gracefully falls back to `Start-Process`.
+
+## DRM Video Streaming Mode architecture
+
+When streaming desktop video to a tablet (such as Samsung Galaxy Tab S10 Ultra) or handheld device via Moonlight and Sunshine, hardware-accelerated video playback on Chromium browsers (Brave, Google Chrome) results in a black video screen for DRM-protected content (Netflix, Amazon Prime Video, Disney+ Hotstar, Udemy, etc.).
+
+- **The Root Cause**:
+  - Protected media playback utilizes Windows Hardware DRM / Protected Media Path (PMP) surfaces within Chromium's GPU process.
+  - Desktop duplication APIs (Direct3D Desktop Duplication / DXGI) used by Sunshine and Moonlight cannot capture protected Direct3D surfaces while GPU compositing is active, outputting solid black frames for the video area while subtitles and browser UI remain visible.
+
+- **The Architecture Solution (`BasicTasks.ahk` + `SharedHelpers.ahk`)**:
+  - Rather than switching monitor topologies or disabling system-wide virtual display drivers, the toggle operates strictly at the browser application level via `ToggleDRMStreamingMode()`:
+  1. **Target Browser Resolution**: Detects whether Brave or Chrome is the active focused window. If neither is active, it inspects running background processes, falling back to Brave as default.
+  2. **Graceful Shutdown (`CloseBrowserGracefully`)**: Sends `WM_CLOSE` to all top-level windows (`WinClose ahk_id %this_id%`). This allows Chromium to write open tabs, history, and active sessions to disk cleanly. Lingering background watcher processes are terminated to release file locks on Chromium profile files.
+  3. **Atomic `Local State` Modification (`SetBrowserHardwareAcceleration`)**: Reads Chromium's root `Local State` JSON file in UTF-8. Atomically sets `"hardware_acceleration_mode": {"enabled": false}` (and updates `hardware_acceleration_mode_previous`). Writes to a `.tmp` file and performs an atomic replace (`FileMove ... 1`) to eliminate corruption risks.
+  4. **Targeted Relaunch (`LaunchBrowserInstance`)**: Relaunches the browser with:
+     - `--disable-gpu`: Disables the GPU process, forcing software rasterization for video presentation surfaces.
+     - `--restore-last-session`: Automatically restores all previously open tabs without requiring manual user intervention.
+     - `--disable-session-crashed-bubble`: Suppresses the "Restore pages? Chromium didn't shut down correctly" warning bubble.
+  5. **Status Badge & Tray Menu Sync**: Displays `ShowDRMStatusBadge("[ACTIVE] DRM Streaming: ... (HW Accel OFF)")` and updates the tray menu item label dynamically via `UpdateDRMTrayStatus`.
+  6. **Reversion**: Clicking the toggle again reverses the JSON preference (`"enabled": true`), closes the browser gracefully, and relaunches with normal GPU hardware acceleration restored.
+
+## Master tray menu architecture
+
+`StartupScript.ahk` provides a centralized system tray interface for the entire script fleet, ensuring that multiple background scripts do not clutter the Windows notification area with redundant icons.
+
+- **Unified Single Tray Icon**:
+  - On startup and resolution changes, `TrayIconRemove` iterates through all child script processes and calls `Shell32\Shell_NotifyIcon` with `NIM_DELETE` on their notification handles.
+  - The master script keeps only its own single tray icon active. Mouseover (`WM_MOUSEMOVE` `0x200`) proactively cleans up any ghost icons left by terminated child processes.
+
+- **Click Action Dispatch (`AHK_NOTIFYICON`)**:
+  - Tray interactions are intercepted via `OnMessage(0x404, "AHK_NOTIFYICON")`:
+    - **Left-Click (`WM_LBUTTONUP` `0x202`) & Right-Click (`WM_RBUTTONUP` `0x205`)**: Both left-click and right-click open the master tray context menu (`Menu, Tray, Show`).
+    - **Hover Tooltip (`WM_MOUSEMOVE` `0x200`)**: Displays a dynamic sorted list of all active scripts and cleans up any ghost tray icons.
+
+- **Menu Hierarchy & Pinned Scripts**:
+  - **Pinned Scripts**: Scripts listed in `PinnedScripts` (`BasicTasks`, `PersonalKeywords`) are rendered directly at the top level of the master tray menu for immediate 1-click submenu access.
+  - **Additional Scripts Submenu**: All remaining active background scripts (`BackgroundAutomations`, `Brightness`, `ClosePrograms`, `Ext4SsdManager`, `HotkeyHelp`, `SunshineMouseWatchdog`, `Watchdog`) are cleanly consolidated into an expandable "Additional Scripts" submenu, preventing vertical menu overflow.
+  - **Child Submenu Structure**: Each managed script submenu provides standard management actions (`View Key History`, `Edit`, `Restart`, `Exit`), followed by a horizontal separator line and any custom items published by that script.
+  - **Global Actions**: Positioned at the bottom of the master menu: "Reload All", "Recompile Startup", "Suspend Hotkeys" (global cascade toggle), and "Exit".
+
+## Sunshine & Moonlight display topology and watchdog lifecycle architecture
+
+This system orchestrates high-performance, low-latency remote desktop streaming from the host laptop to a Samsung Galaxy Tab S10 Ultra using Sunshine, Moonlight, and an HDMI dummy plug, coordinated by `SunshineMouseWatchdog.ahk` and `BasicTasks.ahk`.
+
+### Hardware topology & display modes
+
+```mermaid
+flowchart TD
+    subgraph Host ["Host Laptop (Acer Predator Helios 300)"]
+        Internal["DISPLAY1: Internal Panel (1920x1080 @ 144Hz, 16:9)"]
+        DummyPlug["DISPLAY4: HDMI Dummy Plug (2560x1600 @ 120Hz, 16:10)"]
+    end
+
+    subgraph Client ["Client Device (Samsung Galaxy Tab S10 Ultra)"]
+        TabletScreen["OLED Panel (2560x1600 Native, 16:10 Aspect Ratio)"]
+    end
+
+    subgraph Modes ["Display Topologies"]
+        PC_Only["PC Screen Only (DisplaySwitch 1): DISPLAY1 Active, DISPLAY4 Off, Mouse Speed 10"]
+        Tab_Only["Tablet Mode / Second Screen Only (DisplaySwitch 4): DISPLAY1 Off, DISPLAY4 Active, Mouse Speed 20"]
+        Duplicate["Duplicate Mode (DisplaySwitch 2): DISPLAY1 Cloned with DISPLAY4, Mouse Speed 20"]
+    end
+
+    DummyPlug -. Matches Aspect Ratio .-> TabletScreen
+    PC_Only --> Internal
+    Tab_Only --> DummyPlug
+    Duplicate --> Internal
+    Duplicate --> DummyPlug
+```
+
+### Complete lifecycle, race conditions, and disconnect flap hazard
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User (Tablet / Laptop)
+    participant Moonlight as Moonlight (Tab S10 Ultra)
+    participant Sunshine as Sunshine Server (Windows Service)
+    participant Watchdog as SunshineMouseWatchdog.ahk (Interactive Session)
+    participant Win11 as Windows 11 Display Engine (DisplaySwitch)
+
+    Note over User,Win11: Phase 1: Initiation & Streaming
+    User->>Win11: Win+Shift+P or Tray Menu (Toggle Tablet Mode)
+    Win11-->>User: DisplaySwitch 4 (DISPLAY4 2560x1600 Active, Laptop Screen OFF, mouse speed boosted to 20 and 20s manual grace window armed directly by the toggle itself - not the Watchdog)
+    User->>Moonlight: Open Desktop Stream
+    Moonlight->>Sunshine: Connect Stream (Tailscale 100.x.y.z)
+    Sunshine->>Sunshine: DXGI Desktop Duplication on DISPLAY4 (2560x1600 @ 60/120Hz)
+    Sunshine->>Watchdog: Log "CLIENT CONNECTED"
+    Watchdog->>Watchdog: Clears manual grace flag (mouse speed was already boosted at the manual toggle above; ForceFast only re-boosts here for a resumed session where the marker was absent)
+
+    Note over User,Win11: Phase 2: Disconnect vs. Transient Back Button Flap
+    User->>Moonlight: Press Android Back / Switch Tablet App / Screen Timeout
+    Moonlight->>Sunshine: Disconnect Session
+    Sunshine->>Watchdog: Log "CLIENT DISCONNECTED"
+    Sunshine->>Sunshine: Start Undo Cmd countdown (5s-20s exit timeout)
+
+    alt Explicit Quit (Sunshine's own undo hook fires)
+        Sunshine->>Watchdog: set_normal.ps1 (Sunshine's undo prep-cmd, not a Watchdog action) writes .session_quit
+        Watchdog->>Win11: Instant restore (~1.5s) - bypasses the debounce/settle window below entirely
+    else Aggressive Immediate Trigger (< 3s)
+        Watchdog->>Win11: DisplaySwitch 1 (Switches back to DISPLAY1 1080p)
+        Win11-->>Watchdog: Internal Screen ON, DISPLAY4 Deactivated
+        Note over User,Win11: Hazard: User returns to Moonlight after 3 seconds
+        User->>Moonlight: Re-tap Desktop Stream
+        Moonlight->>Sunshine: Connect while Windows is on DISPLAY1 (1080p)
+        Sunshine->>Sunshine: DXGI tries to capture DISPLAY1, races display topology, or hangs in duplicate window!
+    else Reconnect within Settle Window (< 3s or Debounce Window)
+        User->>Moonlight: Re-tap Desktop Stream within settle grace
+        Moonlight->>Sunshine: Re-connect before Watchdog switches display
+        Sunshine->>Sunshine: DISPLAY4 still active at 2560x1600, stream resumes smoothly without hang!
+    end
+
+    Note over User,Win11: Phase 3: Hardware Lid-Open Safety Net
+    User->>Host: Physically lift laptop lid while streaming
+    Host->>Watchdog: WM_DISPLAYCHANGE (0x007E) triggered by DISPLAY1 wake
+    Watchdog->>Win11: DisplaySwitch 1 (Restores PC Screen Only, mouse speed 10)
+```
+
+### State matrix and trade-off analysis
+
+| State / Event | Trigger | Intended Outcome | Potential Hazard / Consequence | Design Mitigation |
+| :--- | :--- | :--- | :--- | :--- |
+| **Manual Tablet Toggle** | `Win+Shift+P` / Tray Menu | Switches to `DisplaySwitch 4`, mouse speed 20. | Sunshine log tail still shows old `CLIENT DISCONNECTED`. | 20s manual grace window (`sunshine_manual_switch.flag`) prevents watchdog revert. |
+| **Moonlight Connect** | Moonlight app taps "Desktop" | Sunshine captures `DISPLAY4` at 2560x1600. | Auto-switching to `DisplaySwitch 4` on connect races with Sunshine DXGI and hangs. | Connect-side stays manual; watchdog only auto-boosts mouse speed if normal. |
+| **Transient Disconnect** | Android back gesture / app switch | User intends to pause or check another tablet app for 5-15s. | Watchdog immediately reverts to `DisplaySwitch 1` in 3s, deactivating `DISPLAY4`. | Disconnect debounce / settle period prevents flap hang on prompt reconnect. |
+| **Permanent Disconnect** | User finishes work, closes Moonlight | Laptop screen turns back on (`DisplaySwitch 1`), mouse speed 10. | Laptop screen stays black if watchdog fails to detect disconnect. | Multi-signal detection: Sunshine log (`CLIENT DISCONNECTED`), Tailscale peer offline, and 8h ceiling. |
+| **Explicit Quit** | Sunshine's own undo prep-cmd hook fires (`set_normal.ps1`) | `.session_quit` written, mouse speed and display restored almost immediately. | The normal ~24s debounce (`RequiredLogStreak` polls) would otherwise delay an already-confirmed quit for no reason. | Watchdog treats `.session_quit` as an instant (~1.5s) signal, bypassing the debounce entirely, and deletes it immediately after consuming it so it can't re-trigger. |
+| **Lid Open While Streaming** | User opens laptop lid | Immediate return to Laptop Mode (`DisplaySwitch 1`), mouse speed 10. | Infinite loop if display change re-triggers lid handler. | Guard 1 (4s manual toggle lock) + Guard 2 (only acts if `.fast_since` exists). |
+
+---
+
+## Simple Sticky Notes Multi-Resolution Layout Architecture
+
+This section documents the dual deterministic desktop positioning system for Simple Sticky Notes (`ssn.exe`), implemented in `AllScripts/PowerShell/apply_ssn_layout.ps1` and wired into `AllScripts/SharedHelpers.ahk`, `AllScripts/BasicTasks.ahk`, and `AllScripts/SunshineMouseWatchdog.ahk`.
+
+### Display Geometry & Mathematical Model
+
+The workstation alternates between two distinct physical display surfaces:
+
+1. **Host Laptop Screen (`DISPLAY1`)**:
+   - Physical Resolution: $1920 \times 1080$ @ 144Hz (16:9 aspect ratio)
+   - Windows DPI Scale: 125%
+   - Logical Workspace (DIP): $1536 \times 864$
+
+2. **Tablet Screen via HDMI Dummy Plug (`DISPLAY4`)**:
+   - Physical Resolution: $2560 \times 1600$ @ 120Hz (16:10 aspect ratio)
+   - Windows DPI Scale: 175%
+   - Logical Workspace (DIP): $1463 \times 914$
+
+### The 73px Deficit Problem
+
+$$\Delta\text{Width} = 1536\text{px (Laptop)} - 1463\text{px (Tablet)} = 73\text{px}$$
+
+On the laptop, notes span across 4 columns ending flush at the right bezel:
+- Column 0: $X = 0, W = 240$
+- Column 1: $X = 728, W = 240$ (ends at 968px)
+- Column 2: $X = 968, W = 300$ (ends at 1268px)
+- Column 3: $X = 1268, W = 268$ (ends at 1536px)
+
+When Windows switches to Tablet Mode (`DisplaySwitch 4`), Column 3 extends 73 pixels beyond the tablet screen edge ($1536 > 1463$). Windows and Simple Sticky Notes detect the boundary breach and clamp Column 3 leftward into Column 2, which then collides with Column 1, destroying the layout.
+
+### Deterministic Pixel Profiles
+
+Instead of dynamic runtime snapshots (which capture corrupted positions during transitions), the engine enforces two mathematically calculated deterministic layouts:
+
+| Column | Dimensions ($W \times H$) | Description | Laptop ($X, Y$) | Tablet ($X, Y$) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Col 0** | $240 \times 240$ | Far Left Bottom Note | $X = 0, Y = 576$ | $X = 0, Y = 576$ |
+| **Col 1** | $240 \times 120$ | Top Small Note | $X = 728, Y = 0$ | $X = 640, Y = 0$ |
+| **Col 1** | $240 \times 240$ | Bottom Square Note | $X = 728, Y = 120$ | $X = 640, Y = 120$ |
+| **Col 2** | $300 \times 240$ | Top Medium Note | $X = 968, Y = 0$ | $X = 885, Y = 0$ |
+| **Col 2** | $300 \times 183$ | Middle Note | $X = 968, Y = 240$ | $X = 885, Y = 240$ |
+| **Col 2** | $300 \times 236$ | Bottom Medium Note | $X = 968, Y = 423$ | $X = 885, Y = 423$ |
+| **Col 3** | $268 \times 548$ | "Today" Expanded Note | $X = 1268, Y = 0$ | $X = 1190, Y = 0$ |
+| **Col 3** | $268 \times 32$ | Minimized Title Bars (x5) | $X = 1268, Y = 548, 580, \dots$ | $X = 1190, Y = 548, 580, \dots$ |
+
+- **Laptop Column 3 Edge**: $1268 + 268 = 1536\text{px}$ (flush against laptop right boundary).
+- **Tablet Column 3 Edge**: $1190 + 268 = 1458\text{px}$ (safe 5px margin before 1463px tablet edge, zero cut-off).
+
+### Lifecycle & Multi-Trigger Execution
+
+The positioning engine is triggered automatically across all display transition pathways:
+
+1. **Manual Hotkey (`Win+Shift+P`)**:
+   - `ToggleTabletDisplayMode()` in `AllScripts/BasicTasks.ahk`: Executes `DisplaySwitch 4` or `1`, and calls `ApplyTabletStickyNotesLayout(1500)` or `ApplyLaptopStickyNotesLayout(1500)`.
+2. **Duplicate Mode (`Win+Ctrl+Shift+P`)**:
+   - `SwitchToDuplicateDisplayMode()`: Sets `DisplaySwitch 2` and re-applies layout.
+3. **Sunshine Watchdog Auto-Revert**:
+   - `SunshineWatchdog_ForceNormal()` in `AllScripts/SunshineMouseWatchdog.ahk`: When Moonlight disconnects or session times out, reverts to `DisplaySwitch 1` and calls `ApplyLaptopStickyNotesLayout(2000)`.
+4. **Hardware Lid Reopen (`WM_DISPLAYCHANGE 0x007E`)**:
+   - `OnDisplayChange_LidRecovery` in `AllScripts/BasicTasks.ahk`: Catches physical lid reopening during stream and restores laptop layout.
+5. **Fleet Startup / User Logon**:
+   - `StartupScript.ahk` auto-execute: Evaluates current screen width and applies the matching layout.
+
+### Win32 Native Implementation (`apply_ssn_layout.ps1`)
+
+The script avoids AutoHotkey desktop isolation and DWM race conditions via:
+- **Thread Desktop Attachment**: Uses `OpenDesktop("Default", ...)` and `SetThreadDesktop` to access the interactive surface.
+- **Process Thread Enumeration**: Calls `EnumThreadWindows` across `ssn.exe` threads rather than `EnumWindows`.
+- **Dimension Signature Matching**: Matches windows by width and height rather than volatile HWNDs.
+- **Dual-Wave Locking**: Performs an active polling loop (up to 6s at 300ms intervals) followed by a secondary `SetWindowPos` pass 1.2s later to defeat late DWM refreshes.
+
+
+

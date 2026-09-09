@@ -28,3 +28,41 @@ OpenNotesApp(){
 
 ; Custom Hotkey Binding (Win + Alt + A)
 #!a:: OpenNotesApp()
+
+; Example: launch a Windows Store (UWP) app by AppID if not already running, activate if it is
+OpenSamsungNotes(){
+    If WinExist("Your Notes App Window Title")
+    {
+        WinActivate
+    }
+    else{
+        Run, shell:AppsFolder\YourPackageFamilyName!App
+    }
+}
+#^!n:: OpenSamsungNotes() ; example binding only - pick whatever combo you like
+
+; Example: launch a desktop app by its .exe if not already active, focus it if it is
+OpenNotion(){
+    If WinActive("ahk_exe YourApp.exe")
+    {
+        WinActivate
+    }
+    else{
+        Run, shell:AppsFolder\YourPackageFamilyName
+    }
+}
+#^!o:: OpenNotion() ; example binding only - pick whatever combo you like
+
+; Example: focus your browser and jump straight to its built-in password manager
+OpenPass()
+{
+    if (WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe"))
+    {
+        Send ^t
+        Sleep, 10
+        SendInput, chrome://password-manager/passwords
+        Sleep, 10
+        Send, {Return}
+    }
+}
+#^!p:: OpenPass() ; example binding only - pick whatever combo you like

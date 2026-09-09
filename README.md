@@ -1,53 +1,147 @@
 # How to Use AHK Scripts (for Windows 10 & 11)
 
-Personal AutoHotkey setup: global hotkeys plus always-on background automation (crash recovery, Sefirah phone-link, Python servers), all orchestrated by one startup script.
+Personal AutoHotkey fleet: global productivity hotkeys plus always-on background automation (crash recovery, Sefirah phone-link, Python servers, Linux ext4 backup SSD auto-mounting, DRM video streaming mode, Skills Vault auto-locking, and headless tablet display streaming), all orchestrated by a single compiled startup master script.
 
-## Setup
+## Setup & First-Time Quickstart
 
-- **Install AutoHotkey**: [installer](https://www.autohotkey.com/) or `winget install AutoHotkey.AutoHotkey` via the v2 dual-runtime installer. Scripts here stay on `#Requires AutoHotkey v1.1` regardless, a v2 script breaks `StartupScript.exe`'s tray submenu (see that file's comments for why).
-- **Local Custom Paths**: copy `AllScripts/LocalPaths.ahk.example` -> `AllScripts/LocalPaths.ahk` for your machine paths, app/device config, and skills vault lock scripts. Gitignored.
-- **Personal Keywords**: copy `AllScripts/PersonalKeywords.ahk.example` -> `AllScripts/PersonalKeywords.ahk` for private hotstrings. Gitignored.
-- **Compiled Executables**: personally-compiled executables (e.g. `StartupScript.exe`) are never tracked in Git, since a compiled AHK exe can be decompiled back into readable script logic - compile `StartupScript.ahk` locally when it changes (see below). Third-party, publicly-distributed utility binaries (the AutoHotkey installers under `AHK Setup/`, NirCmd under `AutoHotkey Companion Files/`) are tracked deliberately, as a convenience bundle - they carry no personal information either way.
+Getting the fleet running on a new machine requires a few one-time manual configurations (to protect your privacy), followed by a 1-click automated build and registration.
 
-## Scripts Overview
+### 1. Manual Prerequisites (One-Time)
 
-| Script                      | Purpose                                                                                                                                                                                                                                                         |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `StartupScript.ahk`         | Orchestrator. Launches everything below at boot with a tray submenu each. Runs as the compiled `StartupScript.exe`.                                                                                                                                             |
-| `BasicTasks.ahk`            | Hotkeys only, see tables below. Includes `Win+Alt+L` (3-way cycle: Auto Mode -> Force Locked -> Force Unlocked with bottom-right corner badge) and its own tray submenu (mirrors `Win+Shift+P`'s Toggle Display Mode, plus a Duplicate Only switch with no dedicated hotkey). |
-| `BackgroundAutomations.ahk` | Everything that runs with no keypress: Tailscale tray launch, Google Drive silent launch, GravityBridge/CopyClip servers, Sefirah reconnect + phone priority, and Skills Vault auto-lock/unlock watcher (Claude focus locks, Antigravity focus unlocks, badge feedback shown by default, paused while a Force mode is active). |
-| `Ext4SsdManager.ahk`        | Everything for the WSL ext4 backup SSD: `Win+Alt+M`/`Win+Alt+U` (manual mount/unmount), auto-mount on boot/hotplug (`mount_wsl_ssd.ps1` / `unmount_wsl_ssd.ps1`), wake-from-sleep remount check, tray items, and the Windows "Problem Ejecting" dialog auto-resolver. |
-| `Watchdog.ahk`              | Generic crash-relaunch for whatever's listed in `WATCHDOG_APPS`.                                                                                                                                                                                                |
-| `Brightness.ahk`            | Brightness hotkeys.                                                                                                                                                                                                                                             |
-| `ClosePrograms.ahk`         | Force-close hotkeys for tray-minimizing apps.                                                                                                                                                                                                                   |
-| `HotkeyHelp.ahk`            | In-app hotkey reference / settings GUI.                                                                                                                                                                                                                         |
-| `PersonalKeywords.ahk`      | Private hotstrings (gitignored).                                                                                                                                                                                                                                |
-| `SunshineMouseWatchdog.ahk` | Remote desktop watchdog for Sunshine: automatically switches the display back to Laptop (PC screen only) on a real disconnect/pause, and manages pointer speed (fast during active sessions, normal on disconnect). Switching TO Tablet mode on connect stays manual (`Win+Shift+P` / `BasicTasks.ahk` tray items) - tried automatic once, but reverted after it raced with Sunshine's own connect-time Duplicate-mode transition and caused a hang. |
-| `LocalPaths.ahk`            | Personal machine config (gitignored).                                                                                                                                                                                                                           |
-| `SharedHelpers.ahk`         | Pure function library included by other scripts (see ARCHITECTURE.md) - also kept as its own tray entry for quick Edit access; has no hotkeys of its own.                                                                                                      |
+1. **Install AutoHotkey v1.1**:
+   - Download the official [v1.1 installer](https://www.autohotkey.com/) or run `winget install AutoHotkey.AutoHotkey` (select v1.1 if prompted).
+   - *Note*: Every script in this fleet stays on `#Requires AutoHotkey v1.1` (v2 breaks `StartupScript.exe`'s tray submenu architecture).
+2. **Configure Local Paths**:
+   - Copy `AllScripts/LocalPaths.ahk.example` -> `AllScripts/LocalPaths.ahk`.
+   - Fill in your machine-specific paths, device IPs, and optional tool locations.
+   - This file is automatically **gitignored** to keep personal directories private.
+3. **Configure Personal Keywords & App Launchers**:
+   - Copy `AllScripts/PersonalKeywords.ahk.example` -> `AllScripts/PersonalKeywords.ahk`.
+   - Add your private hotstrings, email shortcuts, or app launchers (gitignored).
+4. **Enable Git Leak Protection (Recommended for Git Clones)**:
+   - Run `git config core.hooksPath .githooks` in your terminal.
+   - Activates `.githooks/pre-commit`, which automatically prevents committing personal usernames, computer names, or private configuration files into public git history.
+5. **Optional: Linux ext4 Backup SSD Engine**:
+   - If using external ext4 backup SSDs via WSL2: Copy `AllScripts/PowerShell/ssd_config.json.example` -> `AllScripts/PowerShell/ssd_config.json` (gitignored) and customize your drive letter, disk model, and WSL distro.
 
-`GravityBridge`, `CopyClip`, and `Sefirah` above are separate personal projects/tools (Python servers and an Android companion app) launched or monitored by `BackgroundAutomations.ahk` - they aren't included in this repo.
-Their own paths are configured through the gitignored `LocalPaths.ahk`.
+### 2. Automated 1-Click Build & Auto-Start
 
-## Compiling StartupScript.exe
+Once your local paths are configured, compile and register the fleet:
 
-Task Scheduler launches the compiled `.exe`, not the `.ahk` source, so an edit to `StartupScript.ahk` itself won't take effect until you rebuild it. Every other script still just needs a reload (`Win+Ctrl+Alt+R`), no rebuild involved.
+- **1-Step Terminal Build**:
+  ```powershell
+  .\build_startup_exe.ps1 -Relaunch
+  ```
+  - Automatically compiles `AllScripts\StartupScript.exe` using custom icons and the base 64-bit runtime.
+  - Detects if `"AHK Startup Script"` is missing from Windows Task Scheduler and automatically launches `setup_startup_task.ps1` (prompting for Administrator approval once) to register the scheduled task.
+  - Launches the fleet immediately via Task Scheduler in your standard user session.
+- **Explorer 1-Click Batch Wrappers**:
+  - Double-click **`.\Install_Startup_Task.bat`**: Self-elevates and registers the scheduled task directly.
+  - Double-click **`.\Uninstall_Startup_Task.bat`**: Self-elevates and unregisters the scheduled task cleanly.
+- **Why Task Scheduler instead of `shell:startup`?**
+  - The task is registered with a **30-second logon delay** (`PT30S`).
+  - At Windows user logon, Windows Explorer, audio services, network adapters (Tailscale/Wi-Fi), and graphics drivers initialize concurrently across multiple threads.
+  - A 30-second delay guarantees that the desktop environment settles completely before the fleet launches, preventing startup race conditions and missing notification tray icons.
+  - Configured with `RunLevel Limited` under your standard account (`$env:USERNAME`), eliminating boot-time UAC prompts while preserving normal window message routing.
 
-Run `.\build_startup_exe.ps1`: rebuilds with the correct icon/base binary, auto-stops any running `StartupScript.exe` first (it locks itself while running). Doesn't relaunch it, prints the command to do that when ready.
+---
 
-If that script doesn't work on your machine: right-click `StartupScript.ahk` -> **Compile Script (GUI)**, set Source/Destination/Icon to the `.ahk`/`.exe`/`.ico` files here and Base to `AutoHotkeyU64.exe`, then Convert (stop any running `StartupScript.exe` first, it locks its own file).
+## Compiling & Relaunching StartupScript.exe
 
-## Watchdog: auto-relaunch an app if it crashes or closes
+Windows Task Scheduler launches the compiled binary `StartupScript.exe`, not the `.ahk` source file. A source edit to `StartupScript.ahk` takes effect only after recompiling:
 
-- Add an app with one entry, nothing in `Watchdog.ahk` itself ever needs editing:
+- **Recompile Command**: Run `.\build_startup_exe.ps1` (or click **"Recompile Startup"** in the master tray menu).
+- **Safe Recompilation**: Automatically terminates the running `StartupScript.exe` to release file locks, compiles a fresh binary via `Ahk2Exe`, and restarts the fleet seamlessly via Task Scheduler.
+- **Child Script Edits**: All managed child scripts (`BasicTasks.ahk`, `Brightness.ahk`, etc.) require only an instant fleet reload (`Win+Ctrl+Alt+R` or click **"Reload All"** in the tray menu), no recompilation needed.
+
+---
+
+## Skills Vault Auto-Lock & Org Safe Mode (Claude vs. Antigravity)
+
+Protects personal skills vaults, private study roadmaps, and sensitive configuration directories during professional or organizational pair-programming sessions.
+
+- **Automated Focus Watcher (`BackgroundAutomations.ahk`)**:
+  - Continuously monitors active window focus:
+    - **Focusing Claude (`claude.exe`)**: Automatically triggers `lock-personal-skills.ps1` to revoke permissions and lock personal vaults (org safe mode). Displays an amber/red bottom-right badge.
+    - **Focusing Antigravity (`Antigravity.exe` or `agy.exe`)**: Automatically triggers `unlock-personal-skills.ps1` to restore full personal workspace permissions. Displays a deep green badge.
+- **Manual Cycle Mode (`BasicTasks.ahk`)**:
+  - Press **`Win+Alt+L`** (or click **"Cycle Skills Vault Mode"** in the `BasicTasks` tray submenu).
+  - Cycles between three modes: `Auto` -> `Force Locked` -> `Force Unlocked`.
+  - Debounced with a 2000ms settle window and protected by a Win32 named mutex (`SkillsVaultLock_AHK_v1`) to prevent rapid presses from racing `icacls` ACL permissions sweeps.
+  - Color-coded bottom-right corner badge confirms status: Deep Red for `[LOCKED]`, Deep Green for `[UNLOCKED]`, Deep Blue for `[AUTO]`, and Amber for `applying...`.
+
+---
+
+## Tablet Headless Display & Mouse Speed Engine (Moonlight / Sunshine)
+
+Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or handheld device via Moonlight and Sunshine without physical monitor constraints.
+
+- **Toggle Hotkeys**:
+  - Press **`Win+Shift+P`** (or **`Ctrl+Shift+P`**, **`Win+Alt+P`**, or click **"Project: Toggle Display Mode"** in the `BasicTasks` tray submenu).
+  - **Laptop Screen Mode**: Sets internal display to 1080p @ 144Hz, mouse speed to 10 (normal), and pointer precision to ON.
+  - **Tablet Streaming Mode**: Switches to headless virtual display (2560x1600 @ 120Hz), boosts mouse speed to 20 (fast), and turns pointer precision OFF for 1:1 tablet stylus/touch tracking.
+- **Duplicate Display Tray Action**:
+  - Click **"Project: Duplicate Display Only"** in the `BasicTasks` tray submenu to mirror the laptop screen to the tablet dummy plug.
+- **Watchdog Auto-Recovery (`SunshineMouseWatchdog.ahk`)**:
+  - Monitors Sunshine streaming logs and the tablet's Tailscale IP address. If the tablet drops offline or the stream terminates while fast mode is active, it automatically restores mouse speed to 10.
+- **Hardware Lid-Open Auto-Recovery**:
+  - When in tablet streaming mode with the laptop lid closed, opening the lid triggers a Win32 `WM_DISPLAYCHANGE` notification.
+  - `OnDisplayChange_LidRecovery` detects the return of the internal laptop panel (`DISPLAY1`), restores mouse speed to 10, and switches display topology back to PC Screen Only.
+- **Simple Sticky Notes Multi-Resolution Auto-Arrangement (`apply_ssn_layout.ps1`)**:
+  - Automatically re-arranges Simple Sticky Notes (`ssn.exe`) windows to match the active screen resolution and DPI scaling:
+    - **Laptop (1536x864 DIP)**: 4 columns flush against the right bezel ($X = 1268$, $W = 268 \to 1536\text{px}$).
+    - **Tablet (1463x914 DIP)**: 4 columns shifted left to fit within the narrower 1463px canvas ($X = 1190$, $W = 268 \to 1458\text{px}$, leaving a 5px margin).
+  - Eliminates clumping, overlapping, and off-screen window drift across manual toggles (`Win+Shift+P`), Moonlight disconnects, and lid re-openings using dual-wave Win32 thread enumeration.
+
+---
+
+## DRM Video Streaming Mode (Moonlight / Sunshine)
+
+When streaming your desktop to a tablet or remote client via Moonlight/Sunshine, DRM-protected video (Netflix, Prime Video, Hotstar, Udemy) displays as a black screen due to Chromium hardware acceleration capturing protected surfaces.
+
+- **Toggle Action**: Click **"Toggle DRM Streaming Mode"** inside the `BasicTasks` tray submenu.
+- **How it Works**:
+  1. Detects active or running Chromium browsers (Brave and Google Chrome).
+  2. Sends `WM_CLOSE` to gracefully save open tabs and session history, then terminates background processes to unlock configuration files.
+  3. Atomically edits Chromium's `Local State` JSON file to toggle `"hardware_acceleration_mode": {"enabled": false}`.
+  4. Relaunches the browser with `--disable-gpu --restore-last-session --disable-session-crashed-bubble`.
+  5. Displays a color-coded bottom-right corner badge indicating the new status.
+- **Zero Display Alterations**: Strictly modifies browser acceleration state; does not alter monitor resolutions, refresh rates, or virtual display topologies.
+
+---
+
+## Dynamic Bottom-Right Corner Badge Engine
+
+Shared toast notification surface (`AllScripts/SharedHelpers.ahk`) providing clean visual feedback for debounced toggles and background events.
+
+- **Singleton Surface**: A second badge update modifies text and color in place without window destruction, eliminating visual flicker and transition gaps.
+- **DPI Scaling Immune**: Operates with `-DPIScale` for 1:1 physical screen pixel accuracy across high-DPI displays.
+- **Auto-Sizing & Aesthetics**: Uses Win32 GDI `DrawTextW` to dynamically size the badge according to text extent, with modern 10px rounded corners applied via `SetWindowRgn`.
+- **Color Palette**:
+  - Deep Green (`#1A6E3C`): Unlocked / active state.
+  - Deep Red (`#8B1A1A`): Locked / restricted state.
+  - Deep Blue (`#0D4F8B`): Automatic / focus-driven state.
+  - Dark Slate Grey (`#3A3D40`): Off / inactive state.
+  - Amber (`#6E5A00`): In-progress / applying changes.
+  - Dark Orange (`#7A3B00`): Error.
+
+---
+
+## Watchdog: Auto-Relaunch Applications on Exit or Crash
+
+`Watchdog.ahk` watches essential background processes and automatically relaunches them if they close or crash.
+
+- Configure watched applications in `AllScripts/LocalPaths.ahk`:
   ```ahk
   WATCHDOG_APPS := [{name: "SomeApp.exe", path: "C:\Path\To\SomeApp.exe"}]
   ```
-- Reacts to _any_ exit, crash or deliberate close, there's no reliable way to tell them apart from outside the process. Closing a watched app normally brings it back within one poll (`CheckIntervalMs`, 10s by default).
+- Reacts to any application termination, checking every 10 seconds (`CheckIntervalMs`) and restarting missing processes silently.
+
+---
 
 ## WSL ext4 Backup SSD Automation Suite
 
-Plug-and-play auto-mount engine for external Linux ext4 SSDs on Windows 11 using WSL2, Samba, and AutoHotkey.
+Plug-and-play auto-mount engine for external Linux ext4 SSDs on Windows 11 using WSL2, Samba, and AutoHotkey (`AllScripts/Ext4SsdManager.ahk`).
 
 - **Automations**:
   - **USB Hotplug**: `WM_DEVICECHANGE` (`0x0007` / `0x8000`) detects hardware arrival via in-memory WMI check (22ms), attaches block device via zero-UAC scheduled task, starts guest keepalive, mounts ext4 (`noatime,nodiratime,errors=remount-ro`), probes Samba TCP port 445, maps drive letter (default `P:`), and opens the configured target folder in Explorer.
@@ -56,129 +150,143 @@ Plug-and-play auto-mount engine for external Linux ext4 SSDs on Windows 11 using
   - **Manual Hotkeys & Tray Controls**:
     - `Win+Alt+M`: Manual mount and open in Explorer.
     - `Win+Alt+U`: Safe ejection (sets flag so watchdog will not prematurely remount while plugged in).
-    - Tray Menu: Right-click AutoHotkey tray icon -> "Mount Pixel SSD (P:)" / "Eject Pixel SSD Safely" / "Register Zero-UAC Tasks".
+    - Tray Menu: Click AutoHotkey tray icon -> "Additional Scripts" -> "Ext4SsdManager" -> "Mount Pixel SSD (P:)" / "Eject Pixel SSD Safely" / "Register Zero-UAC Tasks".
+- **Setup & Guide**:
+  - Double-click `AllScripts\PowerShell\Install_WSL_Mount_Tasks.bat` to register zero-UAC scheduled tasks.
+  - See [AllScripts/PowerShell/README.md](AllScripts/PowerShell/README.md) for full Samba configuration steps and architecture details.
 
-- **Setup & Configuration**:
-  1. **One-Time Zero-UAC Registration**:
-     - Double-click `AllScripts\PowerShell\Install_WSL_Mount_Tasks.bat` (or click "Register Zero-UAC Tasks" in the tray menu) to register elevated Task Scheduler actions.
-  2. **Configuring Your Own Drive**:
-     - Copy `AllScripts\PowerShell\ssd_config.json.example` to `AllScripts\PowerShell\ssd_config.json` (gitignored).
-     - Customize disk model filters, drive letter, WSL distro, and target folder.
-     - Optionally add matching `EXT4_SSD_*` overrides to `AllScripts\LocalPaths.ahk` (gitignored, template in `LocalPaths.ahk.example`).
-  3. **Full Architecture & Setup Guide**:
-     - See [AllScripts/PowerShell/README.md](AllScripts/PowerShell/README.md) for full Ubuntu Samba setup steps, `/etc/samba/smb.conf` template, and troubleshooting details.
+---
+
+## Master Tray Menu Organization
+
+`StartupScript.ahk` consolidates the entire fleet into a clean, single system tray icon:
+
+- **Left-Click & Right-Click**: Both left-click and right-click on the tray icon open the master tray context menu. Nothing else.
+- **Pinned Scripts**: Pinned scripts (`BasicTasks`, `PersonalKeywords`) sit at the top level of the menu for instant access.
+- **Additional Scripts Submenu**: All remaining background scripts (`BackgroundAutomations`, `Brightness`, `ClosePrograms`, `Ext4SsdManager`, `HotkeyHelp`, `SunshineMouseWatchdog`, `Watchdog`) are collapsed into an expandable **"Additional Scripts"** submenu to prevent vertical clutter.
+- **Submenu Separator Lines**: Child script submenus cleanly separate standard controls (`View Key History`, `Edit`, `Restart`, `Exit`) from custom published actions using native horizontal separator bars (`-|`).
+- **Global Fleet Actions**: Positioned at the bottom: **"Reload All"**, **"Recompile Startup"**, **"Suspend Hotkeys"** (global cascade toggle), and **"Exit"**.
+
+---
 
 ## Working Hotkeys
 
 - ### BRIGHTNESS
 
-  | Key       | Usage                             |
-  | --------- | --------------------------------- |
-  | F1        | Set Current +5 Brightness         |
-  | Shift+F1  | Set Current -5 Brightness         |
-  | Ctrl+PgDn | Push Brightness Extremes Down -10 |
-  | Ctrl+PgUp | Push Brightness Extremes Up +10   |
+  | Key         | Usage                             |
+  | :---------- | :-------------------------------- |
+  | `F1`        | Set Current +5 Brightness         |
+  | `Shift+F1`  | Set Current -5 Brightness         |
+  | `Ctrl+PgDn` | Push Brightness Extremes Down -10 |
+  | `Ctrl+PgUp` | Push Brightness Extremes Up +10   |
 
 - ### BASIC TASKS
 
-  | Key                   | Usage                                                                                                                                                                                    |
-  | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | Volume_Up              | Volume Up                                                                                                                                                                                |
-  | Volume_Down            | Volume Down                                                                                                                                                                              |
-  | Win+Del               | Empty Recycle Bin                                                                                                                                                                        |
-  | Win+C                 | Run Calculator                                                                                                                                                                           |
-  | Win+M                 | Minimize Active Window                                                                                                                                                                   |
-  | Win+F                 | Open FireFox                                                                                                                                                                             |
-  | Win+F8                | Bluetooth On/Off (Disabled)                                                                                                                                                              |
-  | Win+X+X               | Sleep Laptop (single Win+X still passes through to the normal Quick Link menu)                                                                                                          |
-  | Win+Shift+A           | Open Notification Center                                                                                                                                                                 |
-  | Win+Shift+E           | (Folder) Open Downloads (Screenshots) Folder                                                                                                                                             |
-  | Win+Shift+J           | (Folder) Open Java Course                                                                                                                                                                |
-  | Win+Shift+P           | Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)                                                                                                                 |
-  | Ctrl+Shift+P          | Same as above - alternate keybind, manual PC-side use only (see ARCHITECTURE.md for why it can't be triggered remotely from the tablet)                                                 |
-  | Win+Alt+P             | Same as above - third keybind, manual PC-side use only (see ARCHITECTURE.md)                                                                                                             |
-  | Win+Alt+C             | Run Alarm Clock                                                                                                                                                                          |
-  | Win+Alt+N             | Clear Notification Center                                                                                                                                                                |
-  | Win+Alt+X             | (Script) Reconnect Cloudflare Network                                                                                                                                                    |
-  | Win+Alt+L             | (Script) Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)                                                                                                                 |
-  | Alt+X                 | Open Today Calendar in [Checker Plus Extension](https://chromewebstore.google.com/detail/checker-plus-for-google-c/hkhggnncdpfibdhinjiegagmopldibha)                                     |
-  | Alt+D                 | Open ChatGPT                                                                                                                                                                             |
-  | Alt+G                 | Monica AI Grammar Correction                                                                                                                                                             |
-  | Alt+Shift+S           | Monica AI Content Summary                                                                                                                                                                |
-  | Alt+Shift+T           | This Window Always on Top (Disabled -> Using PowerToys)                                                                                                                                  |
-  | Alt+Ctrl+D            | Sort Folder Content by Date                                                                                                                                                              |
-  | Alt+Ctrl+E            | Enable/Disable File Extension                                                                                                                                                            |
-  | Alt+Ctrl+H            | Enable/Disable Hidden Files                                                                                                                                                              |
-  | Alt+Ctrl+MouseLButton | Move Background Apps                                                                                                                                                                     |
-  | Ctrl+G                | Search the Selected/Clipboard Text                                                                                                                                                       |
-  | Ctrl+T+T              | Open New Tab (In Browser)                                                                                                                                                                |
-  | Ctrl+J+J              | Close Downloads Bar (In Browser)                                                                                                                                                         |
-  | Ctrl+Y+T              | Open YouTube (In Browser)                                                                                                                                                                |
-  | Ctrl+Shift+V          | Browser to Go to Previous Tab When Taking a Screenshot in [Awesome Screen Recorder](https://chromewebstore.google.com/detail/awesome-screen-recorder-s/nlipoenfbbikpbjkfpfillcgkoblgpmj) |
-  | Ctrl+Shift+WheelUp    | (VS Code) Increase Whole UI Zoom (+0.05), only while VS Code is focused                                                                                                                  |
-  | Ctrl+Shift+WheelDown  | (VS Code) Decrease Whole UI Zoom (-0.05), only while VS Code is focused                                                                                                                  |
-  | Capslock+Capslock     | Double Tap to Activate/Deactivate                                                                                                                                                        |
-  | MouseLButton          | Double Click Taskbar to Show/Hide it - handled by [WindHawk](https://windhawk.net/) (a separate third-party tool), not this repo's AHK code, which has its own version of this hotkey disabled |
+  | Key                     | Usage                                                                                                |
+  | :---------------------- | :--------------------------------------------------------------------------------------------------- |
+  | `WheelUp` / `WheelDown` | (Over Taskbar) System Volume Up / Down when mouse is scrolled anywhere over the Windows Taskbar      |
+  | `Volume_Up`             | Volume Up (+10)                                                                                      |
+  | `Volume_Down`           | Volume Down (-10)                                                                                    |
+  | `Win+Del`               | Empty Recycle Bin                                                                                    |
+  | `Win+C`                 | Run Calculator                                                                                       |
+  | `Win+M`                 | Minimize Active Window                                                                               |
+  | `Win+F`                 | Open Firefox                                                                                         |
+  | `Win+X+X`               | Sleep Laptop (double-tap Win+X puts laptop to sleep; single Win+X opens normal Quick Link menu)      |
+  | `Win+Shift+A`           | Open Notification Center / Action Center                                                             |
+  | `Win+Shift+E`           | Open Screenshots Folder (`%UserProfile%\Pictures\Screenshots`)                                       |
+  | `Win+Shift+J`           | Open Java Course Folder (`%PATH_JAVA_COURSE%`)                                                       |
+  | `Win+Shift+P`           | Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet Headless 2560x1600 @ 120Hz)                     |
+  | `Ctrl+Shift+P`          | Same as above (alternate keybind, manual PC-side use only)                                           |
+  | `Win+Alt+P`             | Same as above (third keybind, manual PC-side use only)                                               |
+  | `Win+Alt+C`             | Run Windows Alarm Clock (`Microsoft.WindowsAlarms`)                                                  |
+  | `Win+Alt+Ctrl+C`        | Open PowerShell 7 as Administrator                                                                   |
+  | `Win+Alt+N`             | Clear All Notifications in Windows 11 Action Center                                                  |
+  | `Win+Alt+X`             | Reconnect Cloudflare WARP / Run IP Rotator (`%PATH_IP_ROTATOR%`)                                     |
+  | `Win+Alt+L`             | Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)                                     |
+  | `Alt+Ctrl+Z`            | Capture selection and open in ShareX Image Editor                                                    |
+  | `Ctrl+C`                | (In OneNote) Intercepts OneNote copy to extract clean text instead of pasting as an image/screenshot |
+  | `Alt+F11`               | Toggle Window Caption Bar / Titlebar on active window (borderless fullscreen)                        |
+  | `Alt+X`                 | Open Today's Calendar in browser (Checker Plus extension / Google Calendar)                          |
+  | `Alt+D`                 | Open ChatGPT in browser                                                                              |
+  | `Alt+G`                 | Monica AI Grammar Correction (copies selected text and launches Monica grammar fix)                  |
+  | `Alt+Shift+S`           | Monica AI Summarize Content (copies selected text and launches Monica summary)                       |
+  | `Alt+Ctrl+D`            | Sort Explorer Folder Content by Date                                                                 |
+  | `Alt+Ctrl+E`            | Toggle File Extension Visibility in Explorer                                                         |
+  | `Alt+Ctrl+H`            | Toggle Hidden Files Visibility in Explorer                                                           |
+  | `Alt+Ctrl+MouseLButton` | Move background windows without activating or bringing them to foreground                            |
+  | `Ctrl+G`                | Google Search selected/clipboard text in browser                                                     |
+  | `Ctrl+T+T`              | Open new browser tab from anywhere (double-tap Ctrl+T)                                               |
+  | `Ctrl+J+J`              | Close bottom downloads shelf in Chrome/Brave (double-tap Ctrl+J)                                     |
+  | `Ctrl+Y+T`              | Open YouTube in browser                                                                              |
+  | `Ctrl+Shift+V`          | Return to previous browser tab when capturing screenshot in Awesome Screen Recorder                  |
+  | `Ctrl+Shift+WheelUp`    | (In VS Code) Increase Whole UI Zoom (+0.05 zoomLevel)                                                |
+  | `Ctrl+Shift+WheelDown`  | (In VS Code) Decrease Whole UI Zoom (-0.05 zoomLevel)                                                |
+  | `Capslock+Capslock`     | Double-tap CapsLock to toggle CapsLock on/off (prevents accidental toggling)                         |
 
 - ### EXT4 SSD MANAGER
 
-  | Key       | Usage                                     |
-  | --------- | ------------------------------------------ |
-  | Win+Alt+M | Mount ext4 Backup SSD & Open in Explorer    |
-  | Win+Alt+U | Safely Unmount ext4 Backup SSD              |
+  | Key         | Usage                                    |
+  | :---------- | :--------------------------------------- |
+  | `Win+Alt+M` | Mount ext4 Backup SSD & Open in Explorer |
+  | `Win+Alt+U` | Safely Unmount ext4 Backup SSD           |
 
 - ### HOTKEYHELP
 
-  | Key             | Usage                                   |
-  | --------------- | --------------------------------------- |
-  | Win+F1          | Display Help                            |
-  | Ctrl+F          | Find in Hotkey Help                     |
-  | Win+Ctrl+F1     | Excluded Files, Hotkeys, and Hotstrings |
-  | Win+Alt+Ctrl+F1 | Raw Hotkey List                         |
-  | Win+Alt+F1      | Settings                                |
+  | Key               | Usage                                   |
+  | :---------------- | :-------------------------------------- |
+  | `Win+F1`          | Display Interactive Hotkey Help GUI     |
+  | `Ctrl+F`          | Find in Hotkey Help                     |
+  | `Win+Ctrl+F1`     | Excluded Files, Hotkeys, and Hotstrings |
+  | `Win+Alt+Ctrl+F1` | Raw Hotkey List                         |
+  | `Win+Alt+F1`      | Settings                                |
 
 - ### WINDOW STARTUP SCRIPT
 
-  | Key                     | Usage                                                              |
-  | ----------------------- | ------------------------------------------------------------------ |
-  | Win+ScrollLock          | Suspend All Scripts' Hotkeys (background timers/watchers keep running) |
-  | Win+Ctrl+Alt+ScrollLock | Terminate All Scripts                                              |
-  | Win+Ctrl+Alt+R          | Reload All Scripts                                                 |
-  | Win+Ctrl+Alt+W          | Run Window Spy Script                                              |
-
-  The tray icon's right-click menu mirrors these last three as "Suspend Hotkeys" / "Exit" / "Reload All" - same actions, same keys.
-
-  - These replace AutoHotkey's own native Suspend Hotkeys/Pause Script/Exit items (which only ever acted on the master script's own hotkeys, not the fleet). So there is exactly one of each, not two.
-  - Each managed script's own submenu is trimmed to View Key History/Edit/Restart/Exit for that one script, plus any of its own published quick-actions. "Restart" kills and relaunches just that one script without a full fleet reload.
+  | Key / Action                    | Usage                                                                      |
+  | :------------------------------ | :------------------------------------------------------------------------- |
+  | `Tray Left-Click / Right-Click` | Open Master Tray Context Menu                                              |
+  | `Tray Hover Tooltip`            | Displays dynamic sorted list of all currently active scripts               |
+  | `Win+ScrollLock`                | Suspend All Scripts' Hotkeys (background timers and watchers keep running) |
+  | `Win+Ctrl+Alt+ScrollLock`       | Terminate All Scripts (clean fleet exit)                                   |
+  | `Win+Ctrl+Alt+R`                | Reload All Scripts (instant fleet-wide reload)                             |
+  | `Win+Ctrl+Alt+W`                | Run Window Spy utility                                                     |
 
 - ### PERSONAL KEYWORDS
   - It's a key-value pair. Type the key in the text field to get its corresponding value.
 
-    | Key        | Usage                       |
-    | ---------- | --------------------------- |
-    | ValueOfPie | 3.141592653589793238        |
-    | e1.        | demo@example.com (email 1)  |
-    | e2.        | demo2@example.com (email 2) |
-    | c1.        | +1-555-0100 (contact 1)     |
+    | Keyword / Key | Usage                                                         |
+    | :------------ | :------------------------------------------------------------ |
+    | `ValueOfPie`  | `3.141592653589793238`                                        |
+    | `e1.`         | `demo@example.com` (Email 1)                                  |
+    | `e2.`         | `demo2@example.com` (Email 2)                                 |
+    | `c1.`         | `+1-555-0100` (Contact 1)                                     |
+    | `Win+Alt+A`   | Open Samsung Notes / Notes App                                |
+    | `Win+Alt+S`   | Open Notion                                                   |
+    | `Win+Alt+P`   | Open Chrome Passwords (`chrome://password-manager/passwords`) |
 
 - ### FORCE CLOSE PROGRAMS
   - For programs that go to the system tray when closed by pressing the close button
 
-    | Key         | Usage                         |
-    | ----------- | ----------------------------- |
-    | Alt+Ctrl+F4 | Close All Programs            |
-    | Alt+F4      | Close Currently Active Screen |
+    | Key            | Usage                                                                    |
+    | :------------- | :----------------------------------------------------------------------- |
+    | `Alt+Ctrl+F4`  | Close All Programs (gracefully closes open desktop applications)         |
+    | `Alt+Shift+F4` | Close Specific Active Program (terminates stubborn background tray apps) |
+    | `Alt+F4`       | Close Currently Active Screen (with key-release guard and tray cleanup)  |
+
+---
 
 ## Get Installed Apps List and Run Apps
 
-- Get installed app names:
+- Get installed app names and AppIDs:
   ```powershell
   Get-StartApps | Sort-Object Name | Format-Table -Property Name, AppID
   ```
-- Run one from AHK:
+- Run an app from AutoHotkey via its AppID:
   ```ahk
   Run, shell:AppsFolder\SamsungNotes_8wekyb3d8bbwe!App
   ```
+
+---
 
 ## License
 
@@ -190,7 +298,7 @@ Plug-and-play auto-mount engine for external Linux ext4 SSDs on Windows 11 using
 
 <h3>
   <p align="center">
-    :exclamation::exclamation: Reload the script `StartupScript.ahk` after any edit in ".ahk" file :smile:
+    💡 <b>Fleet Maintenance Tip:</b> After editing any child script (e.g. <code>BasicTasks.ahk</code>), press <code>Win+Ctrl+Alt+R</code> (or select <b>"Reload All"</b> in the tray menu) to reload the fleet instantly. Recompilation via <code>build_startup_exe.ps1</code> is only required when modifying <code>StartupScript.ahk</code>.
   </p>
 </h3>
 
