@@ -86,72 +86,148 @@ DebounceEndCommit(ByRef pendingVar, snapshotValue, ByRef busyFlag, timerLabel, d
 
 
 ; -----------------------------------------------------------------------------
-; BOTTOM-RIGHT BADGE - colored toast, bottom-right corner
+; BOTTOM-RIGHT BADGE - dynamic singleton toast surface
 ; -----------------------------------------------------------------------------
-; Singleton badge surface (one "BottomRightBadge" Gui, matching how this behaved before extraction) - a second call while one is showing updates its color/text in place, never stacks a second one.
-; If a future feature needs independent simultaneous badges, this would need a name parameter added - not needed by anything today.
+; Singleton badge surface (one "BottomRightBadge" Gui) - a second call while one is showing updates its color/text in place, never stacks a second one. If a future feature needs independent simultaneous badges, this would need a name parameter added - not needed by anything today.
 ;
-; The underlying Gui window is created ONCE (on first call) and never destroyed again afterward - later calls just update its color/text and re-Show it if hidden.
-; Destroying and recreating the window on every call instead (via Destroy + Sleep + rebuild) produces a visible blank gap between badge transitions; updating a persistent window in place is instant.
-; displayMs := 0 (the default) means "leave this on screen until the next ShowBottomRightBadge/HideBottomRightBadge call" - pass an explicit ms value for anything that should auto-dismiss on its own (status toasts, errors, or a generous safety-net ceiling for a badge normally dismissed explicitly but that shouldn't get stuck forever if that call is ever skipped).
+; Auto-sizing dynamic toast surface anchored to the bottom-right corner of active monitor work area.
+; 1. Operates with -DPIScale so all coordinates and dimensions map 1:1 to physical screen pixels.
+; 2. Recalculates work area on every invocation to eliminate drift during display mode switches.
+; 3. Uses GDI DrawText (DT_CALCRECT + DT_WORDBREAK) to dynamically auto-size without clipping.
+; 4. Applies modern 10px rounded corners via SetWindowRgn for polished toast aesthetics.
+; 5. Reuses the persistent GUI window in-place without flicker, blank gaps, or rebuild delays.
+; 6. HwndhTextCtl, not a v-variable: a `v`-prefixed Gui output variable on an Add command executed from INSIDE a function (as opposed to top-level auto-execute code) hangs indefinitely on AHK v1.1.37.02, while the exact same control created with an `Hwnd` option instead works instantly. The static hTextCtl holds the control's HWND for later GuiControl/Show calls, which accept a bare HWND value as a ControlID just as readily as a v-variable name.
+; 7. Explicit WinSet Redraw forces transparent text controls to repaint immediately on color changes - without it, the old color can linger behind the control until some unrelated repaint event happens to trigger it.
 ShowBottomRightBadge(msg, bgColorHex, displayMs := 0) {
-    static created := false, hTextCtl := 0
+    static created := false, hGui := 0, hTextCtl := 0
 
     SetTimer, RemoveBottomRightBadge, Off
 
     if (!created) {
-        SysGet, PrimaryMon, MonitorPrimary
-        SysGet, wa, MonitorWorkArea, %PrimaryMon%
-        xPos := waRight - 314 ; 300px wide + 14px right margin
-        yPos := waBottom - 60 ; 46px tall + 14px gap above taskbar
-
-        Gui, BottomRightBadge: +AlwaysOnTop +ToolWindow -Caption +LastFound
-        Gui, BottomRightBadge: Color, %bgColorHex%
-        Gui, BottomRightBadge: Font, s11 Bold cFFFFFF, Segoe UI
-        ; HwndhTextCtl, not vBottomRightBadgeText: a `v`-prefixed Gui output variable on an Add command executed from INSIDE a function (as opposed to top-level auto-execute code) hangs indefinitely on AHK v1.1.37.02, while the exact same control created with an `Hwnd` option instead works instantly.
-        ; The static hTextCtl below holds the control's HWND for later GuiControl/Show calls, which accept a bare HWND value as a ControlID just as readily as a v-variable name.
-        Gui, BottomRightBadge: Add, Text, x0 y14 w300 h24 Center BackgroundTrans HwndhTextCtl, % msg
-        Gui, BottomRightBadge: Show, x%xPos% y%yPos% w300 h46 NA
-
-        ; Under Windows display scaling above 100%, a requested 300x46 box can RENDER larger (e.g. 375x58 at 125% DPI), even though the requested x/y position matches the actual rendered position exactly.
-        ; A clamp computed against the nominal 300x46 size would NOT catch this - it would still overflow using the real, larger rect.
-        ; Measure the actual post-creation rect and correct against it, position-only (re-specifying w/h here re-triggers the same inflation on the new values, compounding it further - e.g. 375->469). See ARCHITECTURE.md for the full explanation.
-        ; This block only ever runs once now (at creation) - every later call reuses this same window without re-specifying w/h, so the inflation can never recompound.
-        WinGetPos, actualX, actualY, actualW, actualH
-        finalX := actualX, finalY := actualY
-        needsMove := false
-        if (actualX + actualW > A_ScreenWidth) {
-            finalX := A_ScreenWidth - actualW
-            needsMove := true
-        }
-        if (finalX < 0) {
-            finalX := 0
-            needsMove := true
-        }
-        if (actualY + actualH > A_ScreenHeight) {
-            finalY := A_ScreenHeight - actualH
-            needsMove := true
-        }
-        if (finalY < 0) {
-            finalY := 0
-            needsMove := true
-        }
-        if (needsMove)
-            Gui, BottomRightBadge: Show, x%finalX% y%finalY% NA
-
+        Gui, BottomRightBadge: -DPIScale +AlwaysOnTop +ToolWindow -Caption +HwndhGui +LastFound
+        Gui, BottomRightBadge: Margin, 0, 0
+        Gui, BottomRightBadge: Font, s12 Bold cFFFFFF, Segoe UI
+        ; HwndhTextCtl, not a v-variable: a `v`-prefixed Gui output variable on an Add command executed from INSIDE a function (as opposed to top-level auto-execute code) hangs indefinitely on AHK v1.1.37.02, while the exact same control created with an `Hwnd` option instead works instantly - see the function header above for the full explanation.
+        ; Start with -Wrap so text stays strictly inline on a single line
+        Gui, BottomRightBadge: Add, Text, HwndhTextCtl Center -Wrap BackgroundTrans, % msg
         created := true
     } else {
-        ; Update in place - no Destroy, no Sleep, no gap.
-        ; The explicit Redraw forces the BackgroundTrans text control's parent-colored backdrop to repaint immediately; without it the old color can linger behind the control until some unrelated repaint event happens to trigger it.
-        Gui, BottomRightBadge: Color, %bgColorHex%
-        Gui, BottomRightBadge: +LastFound
-        WinSet, Redraw
-        GuiControl, BottomRightBadge:, %hTextCtl%, % msg
-        Gui, BottomRightBadge: Show, NA
+        Gui, BottomRightBadge: Font, s12 Bold cFFFFFF, Segoe UI
+        GuiControl, BottomRightBadge: Font, %hTextCtl%
     }
+
+    ; 1. Resolve current active monitor work area (handles Laptop vs Tablet switches)
+    monIndex := GetToastTargetMonitor()
+    SysGet, wa, MonitorWorkArea, %monIndex%
+    monW := waRight - waLeft
+    monH := waBottom - waTop
+    if (monW <= 0 || monH <= 0) {
+        waLeft := 0, waTop := 0, waRight := A_ScreenWidth, waBottom := A_ScreenHeight
+        monW := A_ScreenWidth, monH := A_ScreenHeight
+    }
+
+    ; 2. Measure text dimensions via GDI DrawText
+    hDC := DllCall("GetDC", "ptr", hGui, "ptr")
+    SendMessage, 0x31, 0, 0,, ahk_id %hTextCtl% ; WM_GETFONT
+    hFont := ErrorLevel
+    hOldFont := DllCall("SelectObject", "ptr", hDC, "ptr", hFont, "ptr")
+
+    ; Measure single-line extent first (DT_CALCRECT | DT_SINGLELINE = 0x420)
+    VarSetCapacity(RECT_SINGLE, 16, 0)
+    DllCall("DrawTextW", "ptr", hDC, "wstr", msg, "int", -1, "ptr", &RECT_SINGLE, "uint", 0x420)
+    measuredW_single := NumGet(RECT_SINGLE, 8, "int") - NumGet(RECT_SINGLE, 0, "int")
+    measuredH_single := NumGet(RECT_SINGLE, 12, "int") - NumGet(RECT_SINGLE, 4, "int")
+
+    ; Max inline single-line width: generous 60% of monitor width (e.g. 1150px on 1080p, 1530px on 2560x1600)
+    maxInlineBadgeW := Floor(monW * 0.60)
+    if (maxInlineBadgeW < 450)
+        maxInlineBadgeW := 450
+
+    ; Scale padding, height, and corner radius proportionally with measured single-line text height
+    padX := Max(26, Floor(measuredH_single * 1.15))
+    padY := Max(13, Floor(measuredH_single * 0.45))
+    badgeH := Max(50, measuredH_single + (padY * 2))
+    cornerR := Max(11, Floor(badgeH * 0.22))
+
+    if (measuredW_single + (padX * 2) <= maxInlineBadgeW) {
+        ; --- PREFERRED: SLEEK SINGLE-LINE INLINE PILL ---
+        GuiControl, BottomRightBadge: -Wrap, %hTextCtl%
+        badgeW := measuredW_single + (padX * 2)
+        minBadgeW := Max(220, Floor(monW * 0.12))
+        if (badgeW < minBadgeW)
+            badgeW := minBadgeW
+        textW := measuredW_single + 10 ; extra breathing room prevents subpixel word wrap
+        textH := measuredH_single
+        textX := Floor((badgeW - textW) / 2)
+        textY := Floor((badgeH - textH) / 2)
+    } else {
+        ; --- FALLBACK: MULTI-LINE WORD-WRAPPED BOX (only for extreme strings) ---
+        GuiControl, BottomRightBadge: +Wrap, %hTextCtl%
+        maxWrapTextW := maxInlineBadgeW - (padX * 2)
+        VarSetCapacity(RECT_WRAP, 16, 0)
+        NumPut(maxWrapTextW, RECT_WRAP, 8, "int")
+        DllCall("DrawTextW", "ptr", hDC, "wstr", msg, "int", -1, "ptr", &RECT_WRAP, "uint", 0x410)
+        measuredW_wrap := NumGet(RECT_WRAP, 8, "int") - NumGet(RECT_WRAP, 0, "int")
+        measuredH_wrap := NumGet(RECT_WRAP, 12, "int") - NumGet(RECT_WRAP, 4, "int")
+
+        badgeW := measuredW_wrap + (padX * 2)
+        badgeH := measuredH_wrap + (padY * 2)
+        cornerR := Max(10, Floor(badgeH * 0.15))
+        textW := measuredW_wrap + 4
+        textH := measuredH_wrap
+        textX := padX
+        textY := padY
+    }
+
+    DllCall("SelectObject", "ptr", hDC, "ptr", hOldFont)
+    DllCall("ReleaseDC", "ptr", hGui, "ptr", hDC)
+
+    ; 3. Anchor to bottom-right corner of active monitor work area (respects taskbar)
+    marginX := Max(24, Floor(monW * 0.015))
+    marginY := Max(24, Floor(monH * 0.02))
+    finalX := waRight - badgeW - marginX
+    finalY := waBottom - badgeH - marginY
+
+    ; Clamp strictly within active monitor boundaries
+    if (finalX < waLeft + marginX)
+        finalX := waLeft + marginX
+    if (finalY < waTop + marginY)
+        finalY := waTop + marginY
+
+    ; 4. Update GUI styling, text position, and content
+    Gui, BottomRightBadge: Color, %bgColorHex%
+    GuiControl, BottomRightBadge:, %hTextCtl%, % msg
+    GuiControl, BottomRightBadge: Move, %hTextCtl%, x%textX% y%textY% w%textW% h%textH%
+
+    ; Show GUI with exact physical coordinates (-DPIScale guarantees 1:1 match)
+    Gui, BottomRightBadge: Show, x%finalX% y%finalY% w%badgeW% h%badgeH% NA
+
+    ; Smooth rounded corners for modern Windows toast finish
+    hRgn := DllCall("CreateRoundRectRgn", "int", 0, "int", 0, "int", badgeW, "int", badgeH, "int", cornerR, "int", cornerR, "ptr")
+    DllCall("SetWindowRgn", "ptr", hGui, "ptr", hRgn, "int", true)
+
+    ; Force immediate redraw to prevent backdrop color artifacting
+    Gui, BottomRightBadge: +LastFound
+    WinSet, Redraw
 
     if (displayMs > 0)
         SetTimer, RemoveBottomRightBadge, % -displayMs
+}
+
+GetToastTargetMonitor() {
+    ; Determine which monitor the user is actively viewing.
+    ; Check cursor position first as it tracks active user focus across monitors.
+    CoordMode, Mouse, Screen
+    MouseGetPos, mx, my
+    SysGet, monCount, MonitorCount
+    Loop, %monCount% {
+        SysGet, m, Monitor, %A_Index%
+        if (mx >= mLeft && mx <= mRight && my >= mTop && my <= mBottom)
+            return A_Index
+    }
+    ; Fallback to Primary monitor
+    SysGet, primaryMon, MonitorPrimary
+    return primaryMon ? primaryMon : 1
 }
 
 ; Hides the badge immediately, without waiting for any auto-dismiss timer - the window itself stays alive (Hide, not Destroy), so the next ShowBottomRightBadge call is an instant in-place update, not a rebuild.
