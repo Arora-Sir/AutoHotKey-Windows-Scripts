@@ -782,8 +782,11 @@ ImageEditor()
 
     Send, ^c
     ; ClipWait, 1
-    Run, "C:\Program Files\ShareX\ShareX.exe" -ImageEditor
-    ; Sleep, 500
+    global PATH_SHAREX_EXE
+    if (PATH_SHAREX_EXE && FileExist(PATH_SHAREX_EXE))
+        Run, "%PATH_SHAREX_EXE%" -ImageEditor
+    else
+        Run, ShareX.exe -ImageEditor
     MouseClick, left, 902, 471
 }
 
@@ -1068,7 +1071,7 @@ CommitPersonalSkillsLock:
     if (!hMutex) {
         ShowSkillsStatusBadge("[ERROR] Vault busy, try again")
     } else {
-        pwsh := PATH_PWSH_EXE ? PATH_PWSH_EXE : (FileExist("C:\Program Files\PowerShell\7\pwsh.exe") ? "C:\Program Files\PowerShell\7\pwsh.exe" : "powershell.exe")
+        pwsh := (PATH_PWSH_EXE && FileExist(PATH_PWSH_EXE)) ? PATH_PWSH_EXE : "pwsh.exe"
         shell := ComObjCreate("WScript.Shell")
         scriptOk := true ; false only if a required script vanished since press time
 

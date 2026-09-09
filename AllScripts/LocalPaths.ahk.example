@@ -59,7 +59,10 @@ EXT4_SSD_TARGET_PATH      := "backup_volume\Photos\Camera" ; Optional subfolder 
 ; while focusing Antigravity.exe / agy.exe automatically restores access.
 ; If omitted or files are not found, the watcher and toggle exit gracefully without error.
 PATH_PWSH_EXE             := "C:\Program Files\PowerShell\7\pwsh.exe"
-PATH_SKILLS_LOCK_SCRIPT   := "C:\Users\YourUsername\.claude\scripts\lock-personal-skills.ps1"
-PATH_SKILLS_UNLOCK_SCRIPT := "C:\Users\YourUsername\.claude\scripts\unlock-personal-skills.ps1"
-PATH_SKILLS_TEST_FILE     := "C:\Users\YourUsername\.gemini\skills\Global-Developer-Skills\00-user-context\SKILL.md"
+PATH_SKILLS_LOCK_SCRIPT   := "D:\Path\To\Your\.claude\scripts\lock-personal-skills.ps1"
+PATH_SKILLS_UNLOCK_SCRIPT := "D:\Path\To\Your\.claude\scripts\unlock-personal-skills.ps1"
+PATH_SKILLS_TEST_FILE     := "D:\Path\To\Your\.gemini\skills\Global-Developer-Skills\00-user-context\SKILL.md"
 
+; Optional Application Paths & Tool Overrides (auto-detected if blank or omitted)
+PATH_SHAREX_EXE        := "C:\Program Files\ShareX\ShareX.exe"
+PATH_TAILSCALE_IPN_EXE := "C:\Program Files\Tailscale\tailscale-ipn.exe"

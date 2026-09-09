@@ -21,10 +21,9 @@ DetectHiddenWindows, On
 ; Auto-start Tailscale's tray app in the same burst as the other scripts, deterministically, instead of racing 14+ other Startup-folder apps through Explorer with no ordering guarantee.
 ; tailscaled itself (the actual VPN backend CopyClip depends on) is a Windows service and starts independently of this either way - this only affects how soon the tray icon shows up.
 ; Guarded so a plain AHK reload doesn't relaunch an already-running copy.
-TailscaleExe := "C:\Program Files\Tailscale\tailscale-ipn.exe"
 Process, Exist, tailscale-ipn.exe
-if (!ErrorLevel && FileExist(TailscaleExe))
-    Run, %TailscaleExe%
+if (!ErrorLevel && PATH_TAILSCALE_IPN_EXE && FileExist(PATH_TAILSCALE_IPN_EXE))
+    Run, %PATH_TAILSCALE_IPN_EXE%
 
 ; Auto-start Google Drive in the same burst, silently.
 ; Its own native Run-key entry keeps getting toggled off in Task Manager's Startup Apps behind our backs (found disabled twice now), so this no longer depends on that staying on.
@@ -306,7 +305,7 @@ WatchSkillsLock:
         return
     }
 
-    pwsh := PATH_PWSH_EXE ? PATH_PWSH_EXE : (FileExist("C:\Program Files\PowerShell\7\pwsh.exe") ? "C:\Program Files\PowerShell\7\pwsh.exe" : "powershell.exe")
+    pwsh := (PATH_PWSH_EXE && FileExist(PATH_PWSH_EXE)) ? PATH_PWSH_EXE : "pwsh.exe"
     shell := ComObjCreate("WScript.Shell")
     ; Applying badge before the blocking call, THEN a real [LOCKED]/[UNLOCKED] confirmation afterward (via the shared ShowSkillsStatusBadge, which auto-dismisses itself after 3000ms - no explicit hide needed).
     ; Unlike the manual Win+Alt+L path, this watcher never shows an upfront "requested state" badge (it's a silent focus-change timer, not a keypress) - the applying flash is the ONLY signal the user gets before this point, so a done confirmation here is genuinely new information, not a redundant repeat the way it would be on the manual path.
