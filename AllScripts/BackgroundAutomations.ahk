@@ -4,6 +4,7 @@
 SendMode Input
 SetWorkingDir %A_ScriptDir%
 #Include *i %A_ScriptDir%\LocalPaths.ahk ; Include local custom paths if present (ignored by Git)
+EnvGet, UserProfile, USERPROFILE ; Get Windows UserProfile directory (AHK v1 compatibility)
 #Include %A_ScriptDir%\SharedHelpers.ahk ; Functions shared across scripts - see ARCHITECTURE.md
 #SingleInstance force
 DetectHiddenWindows, On
