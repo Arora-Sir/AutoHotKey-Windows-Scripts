@@ -222,7 +222,7 @@ Not every shared state goes through `SharedHelpers.ahk`. `AllScripts/SunshineMou
 
 - Android intercepts recognized modifier-key combos (Alt+Tab, the Windows key, Ctrl+S, etc.) at the OS level before any app - Moonlight included - ever sees them, redirecting to Android's own system actions instead. This is a documented, still-open limitation in Moonlight Android (see its GitHub issues #840 and #975), not something fixable from this repo's side.
 - This applies to both a physical/case Bluetooth keyboard and the tablet's own on-screen Samsung Keyboard - the latter's own Ctrl+A/Ctrl+C-style "shortcuts" are local Android text-editing actions, not genuine key events that would traverse to a remote session at all.
-- Alternate keybinds like `Ctrl+Shift+P` also collided with universal editor shortcuts (Command Palette in VS Code / Antigravity), while `Win+Alt+P` belongs to Chrome Passwords in `PersonalKeywords.ahk`. Both were retired, leaving `Win+Shift+P` as the sole PC shortcut.
+- Alternate keybinds like `Ctrl+Shift+P` also collided with universal editor shortcuts (Command Palette in VS Code / Antigravity), while `Win+Alt+P` belongs to Bitwarden Vault (Password Manager) in `PersonalKeywords.ahk`. Both were retired, leaving `Win+Shift+P` as the sole PC shortcut.
 - The confirmed-working remote path remains touching the PC's tray items (Toggle Display Mode, Duplicate Only, under `BasicTasks.ahk`'s tray submenu) directly through the Moonlight stream, since that involves no keyboard at all.
 
 ## Windows Task Scheduler boot architecture
@@ -449,6 +449,106 @@ The script avoids AutoHotkey desktop isolation and DWM race conditions via:
 - **Process Thread Enumeration**: Calls `EnumThreadWindows` across `ssn.exe` threads rather than `EnumWindows`.
 - **Dimension Signature Matching**: Matches windows by width and height rather than volatile HWNDs.
 - **Dual-Wave Locking**: Performs an active polling loop (up to 6s at 300ms intervals) followed by a secondary `SetWindowPos` pass 1.2s later to defeat late DWM refreshes.
+---
 
+## Key Design Decisions
 
+Architectural decisions in this fleet prioritize reliability, non-blocking responsiveness, and resilience against Windows OS quirks.
 
+### 1. Win32 Named Mutex Over Lock Files (`AcquireNamedMutex`)
+- **Context**: Heavy cross-process operations (such as `icacls` permission sweeps during Skills Vault toggles) require mutual exclusion across multiple independent scripts.
+- **Alternative**: Creating a lock file on disk (`%TEMP%\vault.lock`).
+- **Decision**: Win32 named kernel mutex (`CreateMutex`, `WaitForSingleObject`).
+- **Rationale**: If an AHK process crashes or is forcefully terminated mid-operation, a lock file remains orphaned on disk, permanently wedging future operations. The Windows kernel automatically marks a named mutex as abandoned when its owning thread terminates, allowing the next waiting process to acquire it cleanly.
+
+### 2. 30-Second Task Scheduler Delay Over `shell:startup`
+- **Context**: The fleet must auto-start on user logon.
+- **Alternative**: Placing shortcuts in the Windows startup folder (`shell:startup`).
+- **Decision**: Windows Task Scheduler trigger with a 30-second logon delay (`PT30S`) and `RunLevel Limited`.
+- **Rationale**: At user logon, Windows Explorer, graphics drivers, audio services, and network adapters (Tailscale/Wi-Fi) initialize concurrently across multiple CPU threads. Launching immediately causes race conditions, missing system tray icons, and failed IPC registrations. A 30-second delay guarantees the desktop shell has completely settled. `RunLevel Limited` under the standard user account prevents boot UAC prompts while maintaining proper window message routing.
+
+### 3. AutoHotkey v1.1 Retention Over v2 Migration
+- **Context**: Upgrading the codebase to AutoHotkey v2.
+- **Alternative**: Rewriting all scripts to AHK v2 syntax.
+- **Decision**: Explicit `#Requires AutoHotkey v1.1` across the entire fleet.
+- **Rationale**: `StartupScript.exe` relies on dynamic runtime Win32 tray menu reflection (`Menu, SubMenu_%PID%, Add`), cross-process label triggers, and specific Win32 API structures that behave differently under v2. The fleet is stable, fully debugged, and heavily integrated with Win32 message routing. Rewriting to v2 would break master tray submenu mirroring without functional benefit.
+
+### 4. Global Hotkey Suspension Over Script Pausing (`SuspendAllToggle`)
+- **Context**: Providing a single kill-switch hotkey (`Win+ScrollLock`) to disable productivity hotkeys during gaming or full-screen apps.
+- **Alternative**: Pausing all child scripts (`Pause, Toggle`).
+- **Decision**: Cascading hotkey suspension (`PostMessage, 0x111, 65305`) while keeping script event loops running.
+- **Rationale**: Pausing a script freezes its underlying timers, watchdog threads, and window message handlers. Background watchdogs (such as `SunshineMouseWatchdog.ahk` and `WatchSkillsLock`) must continue monitoring system state even when typing shortcuts are suspended. Hotkey suspension disables keyboard hooks while leaving background automation fully operational.
+
+### 5. Debounced Commit Pattern for Slow Workflows
+- **Context**: Operations requiring slow disk or permission changes (such as the 2.3-3.5 second `icacls` folder sweep).
+- **Alternative**: Executing the slow command on every hotkey press, or queuing sequential runs.
+- **Decision**: Two-phase settle architecture (`DebounceArmTimer` and `DebounceTryBeginCommit`).
+- **Rationale**: Every keypress provides instant user feedback by updating a colored HUD badge in place, but defers execution by resetting a 2000ms countdown timer. Rapid successive presses update state in memory without locking the desktop. The heavy system command executes exactly once after the user stops pressing.
+
+### 6. Deterministic Layout Profiles Over Dynamic Window Snapshots
+- **Context**: Repositioning Simple Sticky Notes (`ssn.exe`) when switching between laptop screen and headless tablet display.
+- **Alternative**: Capturing window coordinates dynamically before display transitions and restoring them afterward.
+- **Decision**: Enforcing mathematically calculated pixel coordinates (`apply_ssn_layout.ps1`) based on detected screen width.
+- **Rationale**: Dynamic coordinate snapshots captured during display mode switches frequently record corrupted, intermediate positions caused by DWM boundary clamping (the 73px width deficit between laptop 1536px and tablet 1463px). Hardcoded coordinate tables guarantee pixel-perfect placement flush against screen bezels on every switch.
+
+### 7. Non-Blocking TCP Pre-Check Before ADB Connections
+- **Context**: Wireless ADB file transfer to mobile devices via Tailscale or local Wi-Fi.
+- **Alternative**: Invoking `adb connect <ip>:5555` directly.
+- **Decision**: Probing port 5555 with a .NET `TcpClient` socket using a 500ms timeout prior to invoking ADB.
+- **Rationale**: Native `adb connect` has a hardcoded 21.1-second timeout when an IP is offline. Probing the port via a raw TCP handshake detects unreachable endpoints in 500ms, enabling instant failover from Tailscale to local Wi-Fi without locking Windows Explorer.
+
+### 8. Keyword Expansion Engine and Settle Delay in PersonalKeywords.ahk
+- **Context**: Expanding short keywords into email addresses, website URLs, government IDs, and large multi-line AI reasoning prompt directives.
+- **Problem**: When `:X*:` hotstrings for URLs used clipboard pasting (`PasteText()`), typing `linpro.` in Chromium address bars (Chrome/Brave) caused the URL to collapse into `://` and produce an invalid scheme navigation error.
+- **Root Cause**: AutoHotkey sends 7 backspaces to erase `linpro.`. In `PasteText()`, dispatching `SendInput, ^v` with 0 ms delay created a race condition: Chromium was still draining backspaces from the Windows input queue when `Ctrl+V` landed. Two backspaces drained before the paste, and the remaining 5 backspaces drained after `https://` was pasted, deleting `https` (5 characters) and leaving only `://`.
+- **Decision**: Added a 50 ms backspace-drain settle delay (`Sleep, 50`) inside `PasteText()` before `SendInput, ^v`:
+  1. **URLs, Emails, and AI Prompts (`PasteText()`)**:
+     - Uses `ClipboardAll` backup, sets clipboard, waits via `ClipWait, 1`, sleeps 50 ms to allow the target window's message loop to completely drain all backspaces, issues `SendInput, ^v`, and waits 100 ms before restoring previous clipboard content.
+     - Provides instant expansion (0 ms visual feel) across both browser Omnibox fields and rich text editors with zero character loss or scheme corruption.
+  2. **Government IDs and Tax Numbers (`AadharNo.`, `PanNo.`) via Native Keystrokes (`:*:`)**:
+     - Indian banking, tax, and government KYC portals frequently enforce JavaScript paste blockers (`onpaste="return false;"`).
+     - Keystroke simulation bypasses paste restrictions; `Ctrl+V` clipboard pasting is actively rejected.
+
+### 9. Arrow Notation & Hotkey Help Comment Architecture
+- **Context**: In-file documentation comments, header shortcut summaries, and the two-column GUI built by `HotkeyHelp.ahk`.
+- **Problem**: Historical scripts mixed multi-hyphen arrows (`-->` forward and `<--` backward). The double-hyphen substring created friction with the zero double-hyphens documentation invariant and risked false positives in automated linters. Additionally, hotkeys defined without an inline semicolon comment (such as multi-line declarations `$!F4::` or taskbar wheel controls `WheelUp::Send {Volume_Up}`) caused `HotkeyHelp.ahk` to display blank descriptions in the GUI because its parser searches specifically for `::.*?;(.*)`.
+- **Decision**: Standardized all arrow symbols across the repository to single-hyphen notation without exceptions:
+  1. **Header & Block Comments (`->`)**:
+     - Format: `; Key -> Action` (e.g. `; Win+F -> Run Firefox`).
+     - Uses single-hyphen right arrow `->` to represent causal triggers cleanly while completely eliminating ASCII double-hyphens.
+  2. **Hotkey Help Inline Comments (`<-`)**:
+     - Format: `Key::Action ;{ <- Description` (e.g. `WheelUp::Send {Volume_Up} ;{ <- (Taskbar) Volume Up`).
+     - `HotkeyHelp.ahk` splits output into two columns: Hotkey Name (padded to 25 characters on the left) and Description (on the right). The single-hyphen left arrow `<-` visually points back toward the hotkey name, preserving intuitive layout cues with zero double-hyphens.
+     - Multi-line hotkeys and context-sensitive directives require an explicit inline comment on the hotkey declaration line so `RegExMatch(File_Line, "::.*?;(.*)", Match)` captures the intended description.
+
+---
+
+## Developer Tooling & Quality Standards
+
+To ensure high documentation quality, prevent data leaks, and avoid AI slop in public commits, the repository incorporates autonomous validation tooling.
+
+### Language-Aware Dash Cleaner (`scripts/clean_dashes.py`)
+
+A zero-dependency Python script that scans tracked and staged files for prohibited punctuation:
+- Detects and auto-repairs unicode em-dashes, en-dashes, and comment double-hyphens.
+- Enforces natural human punctuation (commas, colons, periods, parentheses).
+- Respects syntax exceptions: decrement operators (`i--`, `counter--`), CLI flags (`--staged`, `--check`), CSS custom properties (`--var`), and `@vendored` annotations.
+
+**Usage Commands**:
+```bash
+# Check staged files (exit code 1 if violations found)
+python scripts/clean_dashes.py --check
+
+# Auto-repair all staged files before committing
+python scripts/clean_dashes.py --staged
+
+# Scan and auto-repair all tracked repository files
+python scripts/clean_dashes.py --all
+```
+
+### Multi-Stage Pre-Commit Hook (`.githooks/pre-commit`)
+
+Configured via `git config core.hooksPath .githooks`. Runs three validation checks before any commit is accepted:
+1. **Check 1: Private Path & Secret Leak Protection**: Scans staged content against `LocalPaths.ahk.example` to ensure personal absolute paths, usernames, and private credentials are never committed.
+2. **Check 2: Prohibited File Staging**: Prevents staging unencrypted sensitive files, lock files, or temporary manifests.
+3. **Check 3: Dash Linting & Anti-Slop Enforcement**: Runs `python scripts/clean_dashes.py --check` across staged files. If violations exist, commit is blocked with instructions to run `python scripts/clean_dashes.py --staged`.

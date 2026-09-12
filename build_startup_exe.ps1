@@ -1,5 +1,5 @@
 # Recompiles StartupScript.exe from AllScripts\StartupScript.ahk, with the correct icon
-# and base AutoHotkey binary. Rerun any time StartupScript.ahk's source changes -- Task
+# and base AutoHotkey binary. Rerun any time StartupScript.ahk's source changes: Task
 # Scheduler's "AHK Startup Script" task launches the compiled .exe, not the .ahk source,
 # so a source edit alone does not take effect until this is rerun.
 

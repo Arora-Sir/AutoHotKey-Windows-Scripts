@@ -7,6 +7,8 @@ bfg*
 .vscode/
 *.log
 *.exe
+__pycache__/
+*.pyc
 # Except third-party utility binaries this repo deliberately tracks (see README's Setup section).
 !AHK Setup/*.exe
 !AutoHotkey Companion Files/*.exe

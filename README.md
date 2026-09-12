@@ -18,9 +18,11 @@ Getting the fleet running on a new machine requires a few one-time manual config
 3. **Configure Personal Keywords & App Launchers**:
    - Copy `AllScripts/PersonalKeywords.ahk.example` -> `AllScripts/PersonalKeywords.ahk`.
    - Add your private hotstrings, email shortcuts, or app launchers (gitignored).
-4. **Enable Git Leak Protection (Recommended for Git Clones)**:
+4. **Enable Git Leak & Quality Protection (Recommended for Git Clones)**:
    - Run `git config core.hooksPath .githooks` in your terminal.
-   - Activates `.githooks/pre-commit`, which automatically prevents committing personal usernames, computer names, or private configuration files into public git history.
+   - Activates `.githooks/pre-commit`, which automatically:
+     - Prevents committing personal usernames, computer names, or private configuration files into public git history.
+     - Enforces clean code comments and documentation by running `python scripts/clean_dashes.py --check` (blocks em-dashes and comment double-hyphens). Auto-repair anytime using `python scripts/clean_dashes.py --staged`.
 5. **Optional: Linux ext4 Backup SSD Engine**:
    - If using external ext4 backup SSDs via WSL2: Copy `AllScripts/PowerShell/ssd_config.json.example` -> `AllScripts/PowerShell/ssd_config.json` (gitignored) and customize your drive letter, disk model, and WSL distro.
 
@@ -87,6 +89,9 @@ Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or 
 - **Hardware Lid-Open Auto-Recovery**:
   - When in tablet streaming mode with the laptop lid closed, opening the lid triggers a Win32 `WM_DISPLAYCHANGE` notification.
   - `OnDisplayChange_LidRecovery` detects the return of the internal laptop panel (`DISPLAY1`), restores mouse speed to 10, and switches display topology back to PC Screen Only.
+- **System Wake & Hibernate Auto-Recovery**:
+  - Catches Win32 `WM_POWERBROADCAST` (0x0218) system resume events.
+  - Dual-wave recovery (1500ms and 3500ms) automatically switches display topology back to PC Screen Only (`DISPLAY1`), restores mouse speed to 10, cycles low-level keyboard hooks to prevent dead keys after Modern Standby, and suppresses stale pre-wake Sunshine log events.
 - **Simple Sticky Notes Multi-Resolution Auto-Arrangement (`apply_ssn_layout.ps1`)**:
   - Automatically re-arranges Simple Sticky Notes (`ssn.exe`) windows to match the active screen resolution and DPI scaling:
     - **Laptop (1536x864 DIP)**: 4 columns flush against the right bezel ($X = 1268$, $W = 268 \to 1536\text{px}$).
@@ -157,6 +162,22 @@ Plug-and-play auto-mount engine for external Linux ext4 SSDs on Windows 11 using
 
 ---
 
+## Cross-Device Wireless Sharing Engine (S24 Ultra & Tab S10 Ultra)
+
+Direct, zero-friction file transfer from Windows Explorer to connected Samsung devices (`/sdcard/Download/_LaptopTransfers/`) via Dual-IP ADB (`SendToDevice_Adb.ps1`).
+
+- **Hotkeys**:
+  - Single tap **`Win+Alt+T`**: Pushes selected Explorer file(s) to Samsung Galaxy S24 Ultra.
+  - Double tap **`Win+Alt+T+T`** (within 500ms): Pushes selected Explorer file(s) to Samsung Galaxy Tab S10 Ultra.
+- **Failover & Safety**:
+  - **Dual-IP Failover**: Probes Tailscale IP first; if offline, immediately fails over to Local Wi-Fi LAN IP (or dynamically from `sefirah.db`).
+  - **500ms Socket Pre-Check**: Eliminates the native 21-second ADB connect timeout on unreachable networks.
+  - **Duplicate Auto-Numbering**: Prevents overwriting files in destination (`notes (1).txt`, `notes (2).txt`) using O(1) in-memory HashSets.
+  - **URI-Encoded MediaScanner**: Triggers Android media indexation with properly escaped URIs so transferred files appear immediately in Samsung Gallery and My Files.
+  - **Interactive Sefirah Fallback**: Automatically launches Sefirah GUI if wireless debugging is offline on Android.
+
+---
+
 ## Master Tray Menu Organization
 
 `StartupScript.ahk` consolidates the entire fleet into a clean, single system tray icon:
@@ -201,6 +222,7 @@ Plug-and-play auto-mount engine for external Linux ext4 SSDs on Windows 11 using
   | `Win+Alt+N`             | Clear All Notifications in Windows 11 Action Center                                                  |
   | `Win+Alt+X`             | Reconnect Cloudflare WARP / Run IP Rotator (`%PATH_IP_ROTATOR%`)                                     |
   | `Win+Alt+L`             | Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)                                     |
+  | `Win+Alt+T`             | Wirelessly send selected file(s) to S24 Ultra (Double-tap within 500ms sends to Tab S10 Ultra)       |
   | `Alt+Ctrl+Z`            | Capture selection and open in ShareX Image Editor                                                    |
   | `Ctrl+C`                | (In OneNote) Intercepts OneNote copy to extract clean text instead of pasting as an image/screenshot |
   | `Alt+F11`               | Toggle Window Caption Bar / Titlebar on active window (borderless fullscreen)                        |
@@ -260,7 +282,7 @@ Plug-and-play auto-mount engine for external Linux ext4 SSDs on Windows 11 using
     | `c1.`         | `+1-555-0100` (Contact 1)                                     |
     | `Win+Alt+A`   | Open Samsung Notes / Notes App                                |
     | `Win+Alt+S`   | Open Notion                                                   |
-    | `Win+Alt+P`   | Open Chrome Passwords (`chrome://password-manager/passwords`) |
+    | `Win+Alt+P`   | Open Bitwarden Vault                                          |
 
 - ### FORCE CLOSE PROGRAMS
   - For programs that go to the system tray when closed by pressing the close button
