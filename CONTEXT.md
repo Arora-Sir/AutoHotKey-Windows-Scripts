@@ -17,7 +17,7 @@ The fleet runs under AutoHotkey v1.1. Do not convert scripts to v2.
 | Process / Script | Role | Lifecycle | Key Invariants |
 | :--- | :--- | :--- | :--- |
 | `AllScripts/StartupScript.exe` | Master Orchestrator | Windows Task Scheduler logon task (30s delay) | Compiles from `StartupScript.ahk`. Owns the single master tray icon, global suspend toggle (`Win+ScrollLock`), and child process supervisor. |
-| `AllScripts/BasicTasks.ahk` | Productivity Hotkeys | Child process managed by master | App launchers, tab navigation, clipboard utilities, DRM mode (Tray toggle), tablet toggle (`Win+Shift+P`), wireless phone push (`Win+Alt+T`). |
+| `AllScripts/BasicTasks.ahk` | Productivity Hotkeys | Child process managed by master | App launchers, tab navigation, clipboard utilities, DRM mode (Tray toggle), tablet toggle (`Win+Alt+P`), wireless phone push (`Win+Alt+T`). |
 | `AllScripts/BackgroundAutomations.ahk` | Window Focus Watcher | Child process managed by master | Focus watcher for Org Safe Mode (locks personal skills when Claude is focused, unlocks when Antigravity is focused). |
 | `AllScripts/SunshineMouseWatchdog.ahk` | Streaming Watchdog | Child process managed by master | Monitors Sunshine logs and Tailscale ping to auto-revert mouse speed (20 to 10) and display mode when tablet disconnects. |
 | `AllScripts/SharedHelpers.ahk` | Shared Function Library | Included by children (`#Persistent` standalone tray item) | HUD badges (`ShowBottomRightBadge`), named mutex (`AcquireNamedMutex`), debounce timers (`DebounceArmTimer`), and tray manifest publishing. |

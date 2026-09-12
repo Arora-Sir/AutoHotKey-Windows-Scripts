@@ -79,7 +79,7 @@ Protects personal skills vaults, private study roadmaps, and sensitive configura
 Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or handheld device via Moonlight and Sunshine without physical monitor constraints.
 
 - **Toggle Hotkey**:
-  - Press **`Win+Shift+P`** (or click **"Project: Toggle Display Mode"** in the `BasicTasks` tray submenu).
+  - Press **`Win+Alt+P`** (or click **"Project: Toggle Display Mode"** in the `BasicTasks` tray submenu).
   - **Laptop Screen Mode**: Sets internal display to 1080p @ 144Hz, mouse speed to 10 (normal), and pointer precision to ON.
   - **Tablet Streaming Mode**: Switches to headless virtual display (2560x1600 @ 120Hz), boosts mouse speed to 20 (fast), and turns pointer precision OFF for 1:1 tablet stylus/touch tracking.
 - **Duplicate Display Tray Action**:
@@ -96,7 +96,7 @@ Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or 
   - Automatically re-arranges Simple Sticky Notes (`ssn.exe`) windows to match the active screen resolution and DPI scaling:
     - **Laptop (1536x864 DIP)**: 4 columns flush against the right bezel ($X = 1268$, $W = 268 \to 1536\text{px}$).
     - **Tablet (1463x914 DIP)**: 4 columns shifted left to fit within the narrower 1463px canvas ($X = 1190$, $W = 268 \to 1458\text{px}$, leaving a 5px margin).
-  - Eliminates clumping, overlapping, and off-screen window drift across manual toggles (`Win+Shift+P`), Moonlight disconnects, and lid re-openings using dual-wave Win32 thread enumeration.
+  - Eliminates clumping, overlapping, and off-screen window drift across manual toggles (`Win+Alt+P`), Moonlight disconnects, and lid re-openings using dual-wave Win32 thread enumeration.
 
 ---
 
@@ -216,7 +216,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
   | `Win+Shift+A`           | Open Notification Center / Action Center                                                             |
   | `Win+Shift+E`           | Open Screenshots Folder (`%UserProfile%\Pictures\Screenshots`)                                       |
   | `Win+Shift+J`           | Open Java Course Folder (`%PATH_JAVA_COURSE%`)                                                       |
-  | `Win+Shift+P`           | Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet Headless 2560x1600 @ 120Hz)                     |
+  | `Win+Alt+P`             | Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet Headless 2560x1600 @ 120Hz)                     |
   | `Win+Alt+C`             | Run Windows Alarm Clock (`Microsoft.WindowsAlarms`)                                                  |
   | `Win+Alt+Ctrl+C`        | Open PowerShell 7 as Administrator                                                                   |
   | `Win+Alt+N`             | Clear All Notifications in Windows 11 Action Center                                                  |
@@ -282,7 +282,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
     | `c1.`         | `+1-555-0100` (Contact 1)                                     |
     | `Win+Alt+A`   | Open Samsung Notes / Notes App                                |
     | `Win+Alt+S`   | Open Notion                                                   |
-    | `Win+Alt+P`   | Open Bitwarden Vault                                          |
+    | `Win+Shift+P` | Open Bitwarden Vault                                          |
 
 - ### FORCE CLOSE PROGRAMS
   - For programs that go to the system tray when closed by pressing the close button

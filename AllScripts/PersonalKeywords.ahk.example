@@ -8,7 +8,7 @@
 ; Example Key Bindings:
 ; Win+Alt+A -> Open Notes App
 ; Win+Alt+S -> Open Workspace App
-; Win+Alt+P -> Open Password Manager
+; Win+Shift+P -> Open Password Manager
 ; Keyword thnk.     -> Paste comprehensive AI reasoning prompt
 ; Keywords E1.-E8.  -> Paste email addresses (instant, unicode-safe)
 ; Keywords *Pro.    -> Paste profile and website URLs
@@ -176,4 +176,4 @@ OpenPass()
 ; Hotkey Bindings
 #!a:: OpenSamsungNotes()
 #!s:: OpenNotion()
-#!p:: OpenPass()
+#+p:: OpenPass()

@@ -33,11 +33,11 @@ DetectHiddenWindows, On
 ;
 ; DISPLAY AUTO-SWITCH ON CONNECT: tried and reverted (2026-09-08).
 ; Switching to tablet mode (DisplaySwitch.exe 4) in this same fresh-marker window caused a hang, because Sunshine's own connect-time transition briefly puts the display in Duplicate mode first and the two display changes appear to race.
-; Connect-side switching stays manual (Win+Shift+P / the BasicTasks tray items) for this reason.
+; Connect-side switching stays manual (Win+Alt+P / the BasicTasks tray items) for this reason.
 ; On explicit quit (.session_quit), sustained Tailscale offline, or 8h ceiling, full display switch back to PC Screen Only (DisplaySwitch.exe 1) and Sticky Notes layout restoration are executed.
 ; For transient disconnects/pauses (CLIENT DISCONNECTED without explicit quit), only the mouse speed is restored to normal 10 via SunshineWatchdog_RestoreMouseNormal (without switching display topology), keeping the tablet dummy plug display alive so resuming the stream avoids DXGI display mode thrashing or capture hangs.
 ;
-; MANUAL OVERRIDE: BasicTasks.ahk's Win+Shift+P (ToggleTabletDisplayMode) also owns this marker, for a manual tablet-mode toggle that has nothing to do with an actual Sunshine session.
+; MANUAL OVERRIDE: BasicTasks.ahk's Win+Alt+P (ToggleTabletDisplayMode) also owns this marker, for a manual tablet-mode toggle that has nothing to do with an actual Sunshine session.
 ; It writes "manual" as the marker's content (set_fast.ps1 leaves it empty), and this script defers entirely to that - skipping the log/Tailscale checks below, which would otherwise be answering "did the OLD session end" instead of "did the user still want tablet mode" - until the user toggles back or the lid-reopen recovery in BasicTasks.ahk fires.
 ; MaxFastHours above still applies regardless of manual vs. session-driven origin, as the leave-it-on-forever safety net.
 ;
@@ -85,7 +85,7 @@ Loop
         continue
     }
 
-    ; MANUAL OVERRIDE: BasicTasks.ahk's Win+Shift+P (ToggleTabletDisplayMode) writes this separate
+    ; MANUAL OVERRIDE: BasicTasks.ahk's Win+Alt+P (ToggleTabletDisplayMode) writes this separate
     ; ManualFlag file (A_Temp\sunshine_manual_switch.flag) the instant the user manually switches
     ; into tablet mode - a manual toggle isn't tied to a Sunshine session at all, so the log/
     ; Tailscale checks below would be answering the wrong question ("did the OLD session end")

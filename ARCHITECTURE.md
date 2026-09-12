@@ -210,19 +210,19 @@ A local, gitignored `CLAUDE.md` at the repo root carries additional contributor/
 
 ## Cross-file state via a shared marker file
 
-Not every shared state goes through `SharedHelpers.ahk`. `AllScripts/SunshineMouseWatchdog.ahk` and `AllScripts/BasicTasks.ahk` (Win+Shift+P's `ToggleTabletDisplayMode`) coordinate the Sunshine fast/normal mouse-speed state through plain marker files instead, since Sunshine's own prep-cmd hooks - `AllScripts/PowerShell/Sunshine/set_fast.ps1` (`do`) / `set_normal.ps1` (`undo`), run directly by Sunshine on stream start/end, independent of any AHK script - already owned this convention before the AHK-side manual toggle existed.
+Not every shared state goes through `SharedHelpers.ahk`. `AllScripts/SunshineMouseWatchdog.ahk` and `AllScripts/BasicTasks.ahk` (Win+Alt+P's `ToggleTabletDisplayMode`) coordinate the Sunshine fast/normal mouse-speed state through plain marker files instead, since Sunshine's own prep-cmd hooks: `AllScripts/PowerShell/Sunshine/set_fast.ps1` (`do`) / `set_normal.ps1` (`undo`), run directly by Sunshine on stream start/end, independent of any AHK script: already owned this convention before the AHK-side manual toggle existed.
 
-- **`.fast_since`** - the marker's mere existence means "fast mode"; its content distinguishes *why*: empty means a real Sunshine session set it (`set_fast.ps1`), `"manual"` means the Win+Shift+P toggle did.
-- **`sunshine_manual_switch.flag`** (in `%A_Temp%`, separate from `.fast_since`) - a 20-second-bounded grace window armed by the manual toggle itself. `SunshineMouseWatchdog.ahk` skips its sunshine.log/Tailscale disconnect checks entirely while this flag is younger than 20s - those checks answer "did the old session end," not "has the user had time to open Moonlight yet," and would otherwise revert a deliberate toggle before the user even connects. Bounded rather than indefinite, so toggling to tablet mode and never actually streaming doesn't permanently disable the disconnect checks. See that file's own `MANUAL OVERRIDE` comments for the full reasoning.
-- **`.session_quit`** - written by `set_normal.ps1` only when Sunshine's own `undo` prep-cmd hook fires (an explicit Moonlight quit), never by the watchdog. Lets `SunshineMouseWatchdog.ahk` short-circuit straight to a ~1.5s display restore instead of waiting out the normal multi-poll debounce/settle window that exists to avoid reacting to a transient back-gesture/app-switch.
+- **`.fast_since`**: the marker's mere existence means "fast mode"; its content distinguishes *why*: empty means a real Sunshine session set it (`set_fast.ps1`), `"manual"` means the Win+Alt+P toggle did.
+- **`sunshine_manual_switch.flag`** (in `%A_Temp%`, separate from `.fast_since`): a 20-second-bounded grace window armed by the manual toggle itself. `SunshineMouseWatchdog.ahk` skips its sunshine.log/Tailscale disconnect checks entirely while this flag is younger than 20s. Those checks answer "did the old session end," not "has the user had time to open Moonlight yet," and would otherwise revert a deliberate toggle before the user connects. Bounded rather than indefinite, so toggling to tablet mode and never streaming does not permanently disable the disconnect checks. See that file's own `MANUAL OVERRIDE` comments for the full reasoning.
+- **`.session_quit`**: written by `set_normal.ps1` only when Sunshine's own `undo` prep-cmd hook fires (an explicit Moonlight quit), never by the watchdog. Lets `SunshineMouseWatchdog.ahk` short-circuit straight to a ~1.5s display restore instead of waiting out the normal multi-poll debounce/settle window that exists to avoid reacting to a transient back-gesture/app-switch.
 
-## Why ToggleTabletDisplayMode() is bound to Win+Shift+P
+## Why ToggleTabletDisplayMode() is bound to Win+Alt+P
 
-`BasicTasks.ahk` binds `Win+Shift+P` to `ToggleTabletDisplayMode()`. Previously, alternate bindings (`Ctrl+Shift+P` and `Win+Alt+P`) were tested in an attempt to trigger the toggle remotely from the Galaxy Tab S10 Ultra during a Moonlight session without walking over to the PC.
+`BasicTasks.ahk` binds `Win+Alt+P` to `ToggleTabletDisplayMode()`. Previously, alternate bindings (`Ctrl+Shift+P` and `Win+Shift+P`) were tested in an attempt to trigger the toggle remotely from the Galaxy Tab S10 Ultra during a Moonlight session without walking over to the PC:
 
-- Android intercepts recognized modifier-key combos (Alt+Tab, the Windows key, Ctrl+S, etc.) at the OS level before any app - Moonlight included - ever sees them, redirecting to Android's own system actions instead. This is a documented, still-open limitation in Moonlight Android (see its GitHub issues #840 and #975), not something fixable from this repo's side.
-- This applies to both a physical/case Bluetooth keyboard and the tablet's own on-screen Samsung Keyboard - the latter's own Ctrl+A/Ctrl+C-style "shortcuts" are local Android text-editing actions, not genuine key events that would traverse to a remote session at all.
-- Alternate keybinds like `Ctrl+Shift+P` also collided with universal editor shortcuts (Command Palette in VS Code / Antigravity), while `Win+Alt+P` belongs to Bitwarden Vault (Password Manager) in `PersonalKeywords.ahk`. Both were retired, leaving `Win+Shift+P` as the sole PC shortcut.
+- Android intercepts recognized modifier-key combos (Alt+Tab, the Windows key, Ctrl+S, etc.) at the OS level before any app (Moonlight included) ever sees them, redirecting to Android's own system actions instead. This is a documented, still-open limitation in Moonlight Android (see its GitHub issues #840 and #975), not something fixable from this repo's side.
+- This applies to both a physical/case Bluetooth keyboard and the tablet's own on-screen Samsung Keyboard: the latter's own Ctrl+A/Ctrl+C-style "shortcuts" are local Android text-editing actions, not genuine key events that would traverse to a remote session at all.
+- Alternate keybinds like `Ctrl+Shift+P` also collided with universal editor shortcuts (Command Palette in VS Code / Antigravity). `Win+Shift+P` is dedicated to Bitwarden Vault (Password Manager) in `PersonalKeywords.ahk`, leaving `Win+Alt+P` as the sole dedicated host display toggle.
 - The confirmed-working remote path remains touching the PC's tray items (Toggle Display Mode, Duplicate Only, under `BasicTasks.ahk`'s tray submenu) directly through the Moonlight stream, since that involves no keyboard at all.
 
 ## Windows Task Scheduler boot architecture
@@ -330,7 +330,7 @@ sequenceDiagram
     participant Win11 as Windows 11 Display Engine (DisplaySwitch)
 
     Note over User,Win11: Phase 1: Initiation & Streaming
-    User->>Win11: Win+Shift+P or Tray Menu (Toggle Tablet Mode)
+    User->>Win11: Win+Alt+P or Tray Menu (Toggle Tablet Mode)
     Win11-->>User: DisplaySwitch 4 (DISPLAY4 2560x1600 Active, Laptop Screen OFF, mouse speed boosted to 20 and 20s manual grace window armed directly by the toggle itself - not the Watchdog)
     User->>Moonlight: Open Desktop Stream
     Moonlight->>Sunshine: Connect Stream (Tailscale 100.x.y.z)
@@ -370,7 +370,7 @@ sequenceDiagram
 
 | State / Event | Trigger | Intended Outcome | Potential Hazard / Consequence | Design Mitigation |
 | :--- | :--- | :--- | :--- | :--- |
-| **Manual Tablet Toggle** | `Win+Shift+P` / Tray Menu | Switches to `DisplaySwitch 4`, mouse speed 20. | Sunshine log tail still shows old `CLIENT DISCONNECTED`. | 20s manual grace window (`sunshine_manual_switch.flag`) prevents watchdog revert. |
+| **Manual Tablet Toggle** | `Win+Alt+P` / Tray Menu | Switches to `DisplaySwitch 4`, mouse speed 20. | Sunshine log tail still shows old `CLIENT DISCONNECTED`. | 20s manual grace window (`sunshine_manual_switch.flag`) prevents watchdog revert. |
 | **Moonlight Connect** | Moonlight app taps "Desktop" | Sunshine captures `DISPLAY4` at 2560x1600. | Auto-switching to `DisplaySwitch 4` on connect races with Sunshine DXGI and hangs. | Connect-side stays manual; watchdog only auto-boosts mouse speed if normal. |
 | **Transient Disconnect** | Android back gesture / app switch | User intends to pause or check another tablet app for 5-15s. | Watchdog immediately reverts to `DisplaySwitch 1` in 3s, deactivating `DISPLAY4`. | Disconnect debounce / settle period prevents flap hang on prompt reconnect. |
 | **Permanent Disconnect** | User finishes work, closes Moonlight | Laptop screen turns back on (`DisplaySwitch 1`), mouse speed 10. | Laptop screen stays black if watchdog fails to detect disconnect. | Multi-signal detection: Sunshine log (`CLIENT DISCONNECTED`), Tailscale peer offline, and 8h ceiling. |
@@ -431,7 +431,7 @@ Instead of dynamic runtime snapshots (which capture corrupted positions during t
 
 The positioning engine is triggered automatically across all display transition pathways:
 
-1. **Manual Hotkey (`Win+Shift+P`)**:
+1. **Manual Hotkey (`Win+Alt+P`)**:
    - `ToggleTabletDisplayMode()` in `AllScripts/BasicTasks.ahk`: Executes `DisplaySwitch 4` or `1`, and calls `ApplyTabletStickyNotesLayout(1500)` or `ApplyLaptopStickyNotesLayout(1500)`.
 2. **Duplicate Mode (`Win+Ctrl+Shift+P`)**:
    - `SwitchToDuplicateDisplayMode()`: Sets `DisplaySwitch 2` and re-applies layout.

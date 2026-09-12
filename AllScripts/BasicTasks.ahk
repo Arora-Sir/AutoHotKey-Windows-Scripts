@@ -16,7 +16,7 @@
 ; Win+Shift+A -> Open Notification center
 ; Win+Shift+E -> (Folder) Open Downloads (My Screenshots) folder
 ; Win+Shift+J -> (Folder) Open Java Course
-; Win+Shift+P -> Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)
+; Win+Alt+P -> Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)
 ; Win+Alt+C -> Run Alarm Clock
 ; Win+Alt+Ctr+C -> Open PowerShell
 ; Win+Alt+Ctr+K -> Click Center of Screen (Disabled)
@@ -88,7 +88,7 @@ global g_DRMTrayStatusLabel := "DRM Streaming: [OFF] (HW Accel ON)"
 ; Menu, Tray, Add, %g_SkillsTrayStatusLabel%, TraySkillsVaultStatus
 ; Menu, Tray, Disable, %g_SkillsTrayStatusLabel%
 ; Menu, Tray, Add, Cycle Skills Vault Mode (Win+Alt+L), TraySkillsVaultCycle
-; Menu, Tray, Add, Project: Toggle Display Mode (Win+Shift+P), TrayToggleDisplayMode
+; Menu, Tray, Add, Project: Toggle Display Mode (Win+Alt+P), TrayToggleDisplayMode
 ; Menu, Tray, Add, Project: Duplicate Display Only, TrayDuplicateDisplayMode
 ; Menu, Tray, Add, %g_DRMTrayStatusLabel%, TrayDRMStreamingModeToggle
 
@@ -100,7 +100,7 @@ global g_DRMTrayStatusLabel := "DRM Streaming: [OFF] (HW Accel ON)"
 PublishTrayMenuManifest([ ["Skills: Vault Status (Show Toast)", "TraySkillsVaultStatus"]
                         , ["Skills: Cycle Skills Vault Mode (Win+Alt+L)", "TraySkillsVaultCycle"]
                         , ["-"]
-                        , ["Project: Toggle Display Mode (Win+Shift+P)", "TrayToggleDisplayMode"]
+                        , ["Project: Toggle Display Mode (Win+Alt+P)", "TrayToggleDisplayMode"]
                         , ["Project: Duplicate Display Only", "TrayDuplicateDisplayMode"]
                         , ["-"]
                         , ["Browser: Toggle DRM Streaming Mode", "TrayDRMStreamingModeToggle"] ])
@@ -968,8 +968,8 @@ $^c::CopyToClipboard() ;{ <- OneNote Copy Mechanism Handeling (instead of SS)
 ; Win+Shift+A Open Notification center
 #+A::OpenActionCenter() ;{ <- Open Notification center
 
-; Win+Shift+P Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)
-#+p::ToggleTabletDisplayMode() ;{ <- Toggle Display Mode
+; Win+Alt+P Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)
+#!p::ToggleTabletDisplayMode() ;{ <- Toggle Display Mode
 
 ; Win+Alt+N Clear Notification center
 #!N::ClearNotificaitons() ;{ <- Clear Notifications (Win 11)
@@ -1312,7 +1312,7 @@ return
 ; [LOCKED]/[UNLOCKED]/[AUTO]/error color mapping is defined exactly once.
 ; [END: Personal Skills Lock/Unlock 3-Way Toggle]
 
-; [START: Tablet Headless Display & Mouse Speed Toggle (Win+Shift+P)]
+; [START: Tablet Headless Display & Mouse Speed Toggle (Win+Alt+P)]
 ; Restores the host laptop to PC Screen Only mode:
 ; 1. Resets mouse speed to 10 (normal) and acceleration to 1 (Enhance pointer precision ON).
 ; 2. Clears Sunshine mouse watchdog marker files (.fast_since and sunshine_manual_switch.flag).
@@ -1466,10 +1466,10 @@ OnDisplayChange_LidRecovery(wParam, lParam, msg, hwnd) {
     global PATH_SUNSHINE_SCRIPTS, g_LastManualDisplaySwitch
     markerFile := PATH_SUNSHINE_SCRIPTS ? (PATH_SUNSHINE_SCRIPTS "\.fast_since") : ""
 
-    ; Always re-align sticky notes whenever the display topology changes (both manual Win+Shift+P and lid events)
+    ; Always re-align sticky notes whenever the display topology changes (both manual Win+Alt+P and lid events)
     AutoApplyStickyNotesLayout(1200)
 
-    ; Guard 1: Ignore display events triggered by manual Win+Shift+P toggles (within 4s)
+    ; Guard 1: Ignore display events triggered by manual Win+Alt+P toggles (within 4s)
     if (g_LastManualDisplaySwitch && (A_TickCount - g_LastManualDisplaySwitch < 4000))
         return
 
