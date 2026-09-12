@@ -45,6 +45,12 @@ PATH_ADB_EXE := "D:\Path\To\Your\adb.exe"
 SEFIRAH_ADB_TARGETS := "192.168.1.50:5555 192.168.1.60:5555"
 SEFIRAH_PRIORITY_TARGET := "192.168.1.50:5555"
 
+; Wireless ADB File Transfer (SendToDevice_Adb.ps1 via Win+Alt+T)
+ADB_PHONE_TAILSCALE_IP  := "100.x.y.z:5555"
+ADB_PHONE_LAN_IP        := "192.168.1.50:5555"
+ADB_TABLET_TAILSCALE_IP := "100.x.y.w:5555"
+ADB_TABLET_LAN_IP       := "192.168.1.60:5555"
+
 ; WSL ext4 Backup SSD (Optional Overrides)
 ; If omitted, BackgroundAutomations.ahk and BasicTasks.ahk use generic defaults.
 ; Full details and PowerShell engine configuration live in AllScripts\PowerShell\ssd_config.json.
