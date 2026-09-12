@@ -5,6 +5,9 @@
 # Fully generic and safe to be public: derives the sensitive strings to check for from THIS machine's own environment at commit time ($USERNAME/$COMPUTERNAME), never hardcodes anyone's actual username or machine name into this tracked file.
 # See ARCHITECTURE.md for the full design rationale (why a hook that hardcoded those values would itself be the exact leak it's meant to prevent).
 
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
+
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
 if [ -z "$STAGED_FILES" ]; then
     exit 0
@@ -60,7 +63,58 @@ if [ "$LEAK_FOUND" -eq 1 ]; then
     exit 1
 fi
 
-# --- 3. Soft warning only (does not block): real config vs. tracked .example drift ---
+# --- 3. Hard block: em-dashes (—, –) and double hyphens (--) in staged comments/markdown ---
+# Banned as AI slop and prohibited punctuation. Normal human writing uses colons, commas,
+# parentheses, or standard sentence stops (periods).
+EM_DASH_PATTERN='—|–|[[:space:]]--[[:space:]]|[[:alnum:]]--[[:alnum:]]|[[:space:]]--(\r?)$'
+EM_DASH_FOUND=0
+
+for f in $STAGED_FILES; do
+    # 3a. Skip third-party or vendored paths
+    case "$f" in
+        vendor/*|third_party/*|external/*|node_modules/*)
+            continue
+            ;;
+    esac
+
+    # 3b. Skip paths matched in .lintignore if present
+    if [ -f ".lintignore" ] && grep -qxF "$f" ".lintignore" 2>/dev/null; then
+        continue
+    fi
+
+    case "$f" in
+        *.ahk|*.ps1|*.py|*.cs|*.java|*.kt|*.kts|*.c|*.cpp|*.h|*.hpp|*.js|*.jsx|*.ts|*.tsx|*.go|*.rs|*.swift|*.dart|*.md|*.txt)
+            CONTENT=$(git show ":$f" 2>/dev/null)
+            if [ -z "$CONTENT" ]; then
+                continue
+            fi
+
+            # 3c. Skip file if marked as generated, vendored, or explicitly exempt in header
+            if echo "$CONTENT" | head -n 5 | grep -qE '(@generated|@vendored|<!-- no-dash-lint -->)'; then
+                continue
+            fi
+
+            # 3d. Check for violations, excluding lines with inline escape hatch 'no-dash-lint'
+            MATCHES=$(echo "$CONTENT" | grep -v 'no-dash-lint' | grep -nE "$EM_DASH_PATTERN")
+            if [ -n "$MATCHES" ]; then
+                echo "BLOCKED: staged file '$f' contains prohibited em-dashes or double-hyphens (--):" >&2
+                echo "$MATCHES" | head -n 5 | sed 's/^/  line /' >&2
+                EM_DASH_FOUND=1
+            fi
+            ;;
+    esac
+done
+
+if [ "$EM_DASH_FOUND" -eq 1 ]; then
+    echo "" >&2
+    echo "To auto-fix all staged files, run: python scripts/clean_dashes.py --staged (or tell the AI 'fix dashes')." >&2
+    echo "To exempt a specific line, append 'no-dash-lint' (e.g. '; no-dash-lint')." >&2
+    echo "To exempt a third-party file, place it in vendor/ or add '@vendored' at the top." >&2
+    echo "Use 'git commit --no-verify' only if you are certain this is intentional." >&2
+    exit 1
+fi
+
+# --- 4. Soft warning only (does not block): real config vs. tracked .example drift ---
 # $4 (optional) is a sed cleanup applied to each match, e.g. to strip a trailing ":" so a JSON "key": pattern compares as just the bare key name.
 # (The colon has to stay in the match pattern itself, to distinguish a KEY from an ordinary quoted VALUE, since plain -E has no lookahead.)
 check_sync() {
