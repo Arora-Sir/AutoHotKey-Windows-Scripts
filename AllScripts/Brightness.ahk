@@ -3,8 +3,8 @@
 ; ^ for Ctrl, ! for Alt, # for Win, + for Shift
 ; ~ prefix to prevent blocking native (original) functionality of that key
 
-; F1 & Shift+F1 --> Controls brightness
-; Ctr+PgUp & Ctr+PgDn --> Extreme levels of brightness (beyond brightness level)
+; F1 & Shift+F1 -> Controls brightness
+; Ctr+PgUp & Ctr+PgDn -> Extreme levels of brightness (beyond brightness level)
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
@@ -293,12 +293,12 @@ GetCurrentBrightNess()
 
 BS := new BrightnessSetter()
 Increments := 10
-+F1::BS.SetBrightness(-Increments) ;{ <-- Brightness decreased by 5 
-F1::BS.SetBrightness(+Increments) ;{ <-- Brightness increased by 5 
++F1::BS.SetBrightness(-Increments) ;{ <- Brightness decreased by 5 
+F1::BS.SetBrightness(+Increments) ;{ <- Brightness increased by 5 
 
 ExtremeIncrements := 10
-^PgUp:: adj_Brightness(+10) ;{ <-- Push Brightness Extremes Up +10
-^PgDn:: adj_Brightness(-10) ;{ <-- Push Brightness Extremes Down -10
+^PgUp:: adj_Brightness(+10) ;{ <- Push Brightness Extremes Up +10
+^PgDn:: adj_Brightness(-10) ;{ <- Push Brightness Extremes Down -10
 
 ; Increments := 10
 ; CurrentBrightness := GetCurrentBrightNess()

@@ -4,30 +4,92 @@
 ; Copy or rename this file to "PersonalKeywords.ahk" in the AllScripts directory.
 ; "PersonalKeywords.ahk" is automatically ignored by Git to protect your privacy.
 
+; ^ for Ctrl, ! for Alt, # for Win, + for Shift
+; Example Key Bindings:
+; Win+Alt+A -> Open Notes App
+; Win+Alt+S -> Open Workspace App
+; Win+Alt+P -> Open Password Manager
+; Keyword thnk.     -> Paste comprehensive AI reasoning prompt
+; Keywords E1.-E8.  -> Paste email addresses (instant, unicode-safe)
+; Keywords *Pro.    -> Paste profile and website URLs
+
 #NoEnv
 SendMode Input
 SetWorkingDir %A_ScriptDir%
 #SingleInstance force
 DetectHiddenWindows, On
 
-; Example Personal Hotstrings (Type keyword to expand)
-:*:E1.::your.email@example.com
-:*:Pro.::https://yourwebsite.com/
-:*:GitPro.::https://github.com/your-username
+; =============================================================================
+; KEYWORDS AND EXPANSIONS
+; =============================================================================
 
-; Example Custom App Launchers
-OpenNotesApp(){
-    If WinExist("Notes")
-    {
-        WinActivate
-    }
-    else{
-        Run, notepad.exe
-    }
+; [ID and number keywords]
+; These use native AHK keystroke expansion (not clipboard) so they work in
+; paste-restricted fields: government portals, tax logins, banking KYC forms.
+; Do not convert these to PasteText() because Ctrl+V is blocked on those sites.
+:*:MyId.::123456789012
+:*:TaxId.::ABCDE1234F
+:*:Phone.::1234567890
+
+; [Email addresses]
+; Unicode-safe and instant via clipboard. PasteText() backs up and restores your
+; prior clipboard content automatically after each paste.
+; To add a new email: copy any line below, change the keyword and address.
+:X*:E1.::PasteText("your.primary.email@example.com")
+:X*:E2.::PasteText("your.work.email@example.com")
+:X*:E3.::PasteText("your.school.email@example.edu")
+
+; [Profile and portfolio URLs]
+; Instant via clipboard with 50 ms settle delay to prevent Omnibox backspace collisions.
+; To add a new URL: copy any line below, change the keyword and URL.
+:X*:Pro.::PasteText("https://yourwebsite.com/")
+:X*:GitPro.::PasteText("https://github.com/your-username")
+:X*:LinPro.::PasteText("https://www.linkedin.com/in/your-profile/")
+
+; [AI prompt expansions]
+; thnk. -> 4-pillar engineering reasoning directive, with Task: cursor at end.
+:X*:thnk.::PasteThinkPrompt()
+
+; =============================================================================
+; PasteText: Universal clipboard paste helper
+; =============================================================================
+; Used by :X*: hotstrings above to paste any text instantly via Ctrl+V,
+; with automatic backup and restore of the previous clipboard content.
+;
+; HOW TO ADD A NEW KEYWORD:
+;   For instant paste (emails, URLs, prompts):
+;     :X*:keyword.::PasteText("text to paste")
+;
+;   For banking / government forms that block Ctrl+V (Aadhaar, PAN, OTP):
+;     :*:keyword.::text to type
+;
+PasteText(text) {
+    clipBackup := ClipboardAll
+    Clipboard := ""
+    Clipboard := text
+    ClipWait, 1
+    if ErrorLevel
+        return
+    Sleep, 50 ; Settle delay: ensures target window drains all backspaces before pasting
+    SendInput, ^v
+    Sleep, 100 ; Settle delay: ensures target window reads clipboard before restoration
+    Clipboard := clipBackup
+    clipBackup := ""
 }
 
-; Custom Hotkey Binding (Win + Alt + A)
-#!a:: OpenNotesApp()
+PasteThinkPrompt() {
+    prompt := "Think deeply and act with extreme precision. Do not guess blindly or make hasty assumptions. Follow this rigorous engineering process:`r`n`r`n"
+        . "1. Critical Deliberation and Root Cause: Thoroughly inspect the problem, read the actual codebase/environment directly, trace all dependencies, and evaluate architectural trade-offs. Never guess APIs, file paths, or command flags. Verify every fact with real tool outputs before drawing conclusions.`r`n`r`n"
+        . "2. Detailed Implementation Plan: Formulate a structured step-by-step roadmap covering scope, failure modes, compatibility invariants, and edge-case testing matrices. Present the plan and confirm alignment before modifying code or making irreversible changes.`r`n`r`n"
+        . "3. Defensive Execution and Double-Checking: Execute methodically using test-driven development (TDD) and precision edits. Preserve existing architecture, comments, and docstrings. Sanity-check every change, audit surrounding logic, and ensure no unintended side effects or regressions are introduced.`r`n`r`n"
+        . "4. Automated Testing and Concrete Proof: Run comprehensive automated test suites, build checks, and validation commands to verify correctness end-to-end. Provide actual command outputs as proof of verification. Ensure all changes are verified and error-free before declaring completion.`r`n`r`n"
+        . "Task: "
+    PasteText(prompt)
+}
+
+; =============================================================================
+; APP LAUNCHERS AND SHORTCUTS
+; =============================================================================
 
 ; Example: launch a Windows Store (UWP) app by AppID if not already running, activate if it is
 OpenSamsungNotes(){
@@ -38,8 +100,8 @@ OpenSamsungNotes(){
     else{
         Run, shell:AppsFolder\YourPackageFamilyName!App
     }
+    return
 }
-#^!n:: OpenSamsungNotes() ; example binding only - pick whatever combo you like
 
 ; Example: launch a desktop app by its .exe if not already active, focus it if it is
 OpenNotion(){
@@ -50,12 +112,35 @@ OpenNotion(){
     else{
         Run, shell:AppsFolder\YourPackageFamilyName
     }
+    return
 }
-#^!o:: OpenNotion() ; example binding only - pick whatever combo you like
 
-; Example: focus your browser and jump straight to its built-in password manager
+; Example: focus your password manager (Bitwarden desktop app, or browser password manager)
+; Working: Checks if Bitwarden is running, unhides and activates its window.
+; If not running, launches Bitwarden via shell:AppsFolder.
+; Previous working: Focused Brave/Chrome, opened a new tab, and navigated to chrome://password-manager/passwords.
+; (Preserved in comment block below so you can easily toggle back anytime).
 OpenPass()
 {
+    ; === Bitwarden Desktop Vault (Active) ===
+    If WinExist("ahk_class Chrome_WidgetWin_1 ahk_exe Bitwarden.exe")
+    {
+        WinShow
+        WinActivate
+    }
+    else If WinExist("ahk_exe Bitwarden.exe")
+    {
+        WinShow
+        WinActivate
+    }
+    else{
+        Run, shell:AppsFolder\8bitSolutionsLLC.bitwardendesktop_h4e712dmw3xyy!bitwardendesktop
+    }
+    return
+
+    ; === Chrome / Brave Browser Password Manager (Previous) ===
+    ; To switch back: comment out the Bitwarden block above and uncomment this block.
+    /*
     if (WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe"))
     {
         Send ^t
@@ -64,5 +149,31 @@ OpenPass()
         Sleep, 10
         Send, {Return}
     }
+    else{
+        If WinExist ("ahk_exe brave.exe")
+        {
+            WinActivate, ahk_exe brave.exe
+        }
+        else If WinExist ("ahk_exe chrome.exe")
+        {
+            WinActivate, ahk_exe chrome.exe
+        }
+        else{
+            Run, brave.exe
+            ; Run, chrome.exe
+        }
+        Sleep, 500
+        Send ^t
+        Sleep, 10
+        SendInput, chrome://password-manager/passwords
+        Sleep, 10
+        Send, {Return}
+    }
+    return
+    */
 }
-#^!p:: OpenPass() ; example binding only - pick whatever combo you like
+
+; Hotkey Bindings
+#!a:: OpenSamsungNotes()
+#!s:: OpenNotion()
+#!p:: OpenPass()

@@ -3,9 +3,9 @@
 ; ^ for Ctrl, ! for Alt, # for Win, + for Shift
 ; ~ prefix to prevent blocking native (original) functionality of that key
 
-; Alt+F4 --> Close currently active program
-; Alt+Shift+F4 --> Close specific active program
-; Alt+Ctrl+F4 --> Close All Programs
+; Alt+F4 -> Close currently active program
+; Alt+Shift+F4 -> Close specific active program
+; Alt+Ctrl+F4 -> Close All Programs
 
 ; Anydesk CiscoWebx Cortana Discord Filmora HotspotSheild IDM Opera MicrosoftTeams Skype Stremio Telegram UnityHub uTorrent wps Zoom
 
@@ -144,16 +144,16 @@ InitDone:
 isReady := true
 return
 
-; Alt+F4 --> Close currently active program
-; $!F4:: CLoseCurrentlyActiveScreen() ;{ <-- CLose Currently Active Screen
-$!F4::
+; Alt+F4 -> Close currently active program
+; $!F4:: CLoseCurrentlyActiveScreen() ;{ <- CLose Currently Active Screen
+$!F4:: ;{ <- CLose Currently Active Screen
 if (!isReady || !GetKeyState("F4", "P"))
     return
 CLoseCurrentlyActiveScreen()
 return
 
-; Alt+Shift+F4 --> Close specific active program
-$!+F4:: CLoseSpecificPrograms() ;{ <-- CLose Specific Programs
+; Alt+Shift+F4 -> Close specific active program
+$!+F4:: CLoseSpecificPrograms() ;{ <- CLose Specific Programs
 
-; Alt+Ctr+F4 --> Close All Programs
-$!^F4:: CLoseAllPrograms() ;{ <-- CLose All Program
+; Alt+Ctr+F4 -> Close All Programs
+$!^F4:: CLoseAllPrograms() ;{ <- CLose All Program

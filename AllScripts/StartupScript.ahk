@@ -3,10 +3,10 @@
 ; ^ for Ctrl, ! for Alt, # for Win, + for Shift
 ; ~ prefix to prevent blocking native (original) functionality of that key
 
-; Win+Fn+ScrollLock  --> Suspend All Scripts' Hotkeys (background timers/watchers keep running)
-; Win+Fn+Alt+Ctr+ScrollLock --> Terminate All AHK Scripts
-; Win+Ctr+Alt+R --> Reload All Scripts
-; Win+Ctr+Alt+W --> Run Window Spy Script
+; Win+Fn+ScrollLock  -> Suspend All Scripts' Hotkeys (background timers/watchers keep running)
+; Win+Fn+Alt+Ctr+ScrollLock -> Terminate All AHK Scripts
+; Win+Ctr+Alt+R -> Reload All Scripts
+; Win+Ctr+Alt+W -> Run Window Spy Script
 
 ; AHK Startup
 ; Fanatic Guru
@@ -226,10 +226,10 @@ TrayIconRemove(10)
 ; SuspendAllToggle below only ever PostMessages to the 12 managed child scripts (Scripts[]) - it never touches this master script's own native suspend flag.
 ; So none of these 4 hotkeys can ever actually become suspended in the first place.
 ;Win+ScrollLock Suspend All Scripts' Hotkeys
-#ScrollLock::gosub SuspendAllToggle ;{ +Fn <-- Suspend All Scripts' Hotkeys
-#^!ScrollLock::ExitApp ;{ +Fn <-- Terminate All Scripts
-#^!R::gosub ReloadAll ;{ <-- Reload All Scripts Cleanly
-#^!W::Run "C:\Program Files\AutoHotkey\WindowSpy.ahk" ;{ <-- Run Window Spy Script
+#ScrollLock::gosub SuspendAllToggle ;{ +Fn <- Suspend All Scripts' Hotkeys
+#^!ScrollLock::ExitApp ;{ +Fn <- Terminate All Scripts
+#^!R::gosub ReloadAll ;{ <- Reload All Scripts Cleanly
+#^!W::Run "C:\Program Files\AutoHotkey\WindowSpy.ahk" ;{ <- Run Window Spy Script
 ;}
 
 ; SUBROUTINES
@@ -351,7 +351,7 @@ MenuBuild:
 			Menu, SubMenu_%PID%, Add, Restart, ScriptCommand
 			Menu, SubMenu_%PID%, Add, Exit, ScriptCommand
 
-			; Mirror any custom tray items this script has published for itself (generic -- no per-script names/IDs hardcoded here; see SharedHelpers.ahk for the publishing side of this).
+			; Mirror any custom tray items this script has published for itself (generic: no per-script names/IDs hardcoded here; see SharedHelpers.ahk for the publishing side of this).
 			; Supports horizontal separator lines when "-" is published.
 			; Scripts that don't publish a manifest are unaffected.
 			CustomManifest := A_Temp "\ahk_traymenu_" Script_Name ".txt"
@@ -494,7 +494,7 @@ ScriptCommand_Restart:
 return
 
 ; Handles clicks on custom items mirrored in from a script's published manifest (see MenuBuild above and BackgroundAutomations.ahk's publishing side).
-; Generic -- doesn't know or care which script or which items; just re-reads that PID's manifest to find which line matches the clicked text, then posts that line's 1-based number to the script's own registered remote-trigger message so it can Gosub the right label itself.
+; Generic: does not know or care which script or which items; just re-reads that PID's manifest to find which line matches the clicked text, then posts that line's 1-based number to the script's own registered remote-trigger message so it can Gosub the right label itself.
 RemoteMenuCommand:
 	Pid := RegExReplace(A_ThisMenu,"SubMenu_(\d*)$","$1")
 	for Script_Name, Script in Scripts
@@ -593,6 +593,15 @@ AHK_NOTIFYICON(wParam, lParam, uMsg, hWnd) ; OnMessage(0x404, "AHK_NOTIFYICON")
 	; Both left-click and right-click open the master tray context menu.
 	else if (lParam = 0x202 || lParam = 0x205) ; WM_LBUTTONUP or WM_RBUTTONUP
 	{
+		; CoordMode, Mouse, Screen
+		; CoordMode, Menu, Screen
+		; MouseGetPos, mX, mY
+		; ; Windows 10/11 toast notifications occupy the bottom-right ~380-420px.
+		; ; If clicked near the tray, shift menu anchor left (~620px from right edge)
+		; ; so the menu body stays clear of incoming toast notifications.
+		; safeX := (mX > A_ScreenWidth - 450) ? (A_ScreenWidth - 620) : mX
+		; Menu, Tray, Show, %safeX%, %mY%
+
 		Menu, Tray, Show
 		return 0
 	}

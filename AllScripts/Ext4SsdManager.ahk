@@ -139,8 +139,8 @@ return
 ;   Win+Alt+M -> Mount ext4 SSD & Open in Explorer
 ;   Win+Alt+U -> Unmount ext4 SSD safely
 
-#!m::MountExt4Ssd(true, true) ; Win+Alt+M -> Manual Mount & Open (openExplorer + tooltip feedback)
-#!u::UnmountExt4Ssd(true)     ; Win+Alt+U -> Manual Unmount (tooltip feedback)
+#!m::MountExt4Ssd(true, true) ;{ <- Manual Mount & Open (openExplorer + tooltip feedback)
+#!u::UnmountExt4Ssd(true)     ;{ <- Manual Unmount (tooltip feedback)
 ; [END: WSL ext4 Backup SSD Management Hotkeys]
 
 ; =============================================================================

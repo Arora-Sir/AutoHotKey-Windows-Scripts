@@ -269,6 +269,26 @@ ShowSkillsStatusBadge(msg) {
 
 
 ; -----------------------------------------------------------------------------
+; SKILLS VAULT PHYSICAL STATE PROBE - read-test via PATH_SKILLS_TEST_FILE
+; -----------------------------------------------------------------------------
+; Probes whether personal skills are currently readable or blocked by NTFS Deny ACLs.
+; Returns true if unlocked (readable), false if locked (Access Denied) or unconfigured.
+IsSkillsVaultUnlocked() {
+    global PATH_SKILLS_TEST_FILE
+    if (!PATH_SKILLS_TEST_FILE)
+        return false
+    try {
+        f := FileOpen(PATH_SKILLS_TEST_FILE, "r")
+        if (f) {
+            f.Close()
+            return true
+        }
+    }
+    return false
+}
+
+
+; -----------------------------------------------------------------------------
 ; DRM STREAMING STATUS BADGE - color-coded toast over ShowBottomRightBadge
 ; -----------------------------------------------------------------------------
 ShowDRMStatusBadge(msg) {

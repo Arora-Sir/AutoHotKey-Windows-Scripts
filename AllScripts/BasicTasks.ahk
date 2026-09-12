@@ -6,44 +6,45 @@
 ; NumLock AlwaysOn && ScrollLock Always Off
 ; Double tap Caps lock to activate/deactivate Caps lock
 ; Taskbar Mouse Scroll to Increase/Decrease volume
-; Volume_Up / Volume_Down --> Adjust system volume
+; Volume_Up / Volume_Down -> Adjust system volume
 
-; Win+F --> Run FireFox
-; Win+C --> Run Calculator
-; Win+M --> Minimize Active window
-; Win+F8 --> Bluetooth On/Off
-; Win+Del --> Empty Recycle Bin
-; Win+Shift+A --> Open Notification center
-; Win+Shift+E --> (Folder) Open Downloads (My Screenshots) folder
-; Win+Shift+J --> (Folder) Open Java Course
-; Win+Shift+P --> Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)
-; Win+Alt+C --> Run Alarm Clock
-; Win+Alt+Ctr+C --> Open PowerShell
-; Win+Alt+Ctr+K --> Click Center of Screen (Disabled)
-; Win+Alt+X --> (Script) Reconnect Cloudflare Network
-; Win+Alt+N --> Clear Notification center
-; Win+Alt+L --> (Script) Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)
-; Alt+X --> Open Today Calendar
-; Alt+D --> Open ChatGPT
-; Alt+Shift+T --> Active window Always on Top (Disabled -> Using PowerToys)
+; Win+F -> Run FireFox
+; Win+C -> Run Calculator
+; Win+M -> Minimize Active window
+; Win+F8 -> Bluetooth On/Off
+; Win+Del -> Empty Recycle Bin
+; Win+Shift+A -> Open Notification center
+; Win+Shift+E -> (Folder) Open Downloads (My Screenshots) folder
+; Win+Shift+J -> (Folder) Open Java Course
+; Win+Shift+P -> Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)
+; Win+Alt+C -> Run Alarm Clock
+; Win+Alt+Ctr+C -> Open PowerShell
+; Win+Alt+Ctr+K -> Click Center of Screen (Disabled)
+; Win+Alt+X -> (Script) Reconnect Cloudflare Network
+; Win+Alt+N -> Clear Notification center
+; Win+Alt+L -> (Script) Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)
+; Win+Alt+T -> Send selected files to S24 Ultra (Double-tap within 500ms: Tab S10 Ultra) -> Download/_LaptopTransfers
+; Alt+X -> Open Today Calendar
+; Alt+D -> Open ChatGPT
+; Alt+Shift+T -> Active window Always on Top (Disabled -> Using PowerToys)
 
-; Alt+G --> Copy the content, Open Monica & Grammar Correction
-; Alt+Shift+S ---> Copy the content, Open Monica & Summarize Content
+; Alt+G -> Copy the content, Open Monica & Grammar Correction
+; Alt+Shift+S -> Copy the content, Open Monica & Summarize Content
 
-; Alt+Ctr+D --> Sort Folder content by date
-; Alt+Ctr+E --> Enable/Disable file extension
-; Alt+Ctr+H --> Enable/Disable hidden files
-; Alt+Ctr+MouseLButton --> Move Background Apps
-; Ctr+G --> Search the selected/clipboard text
-; Ctr+C --> OneNote copy text instead of SS of some text
-; Ctr+T+T --> Open new Tab from anywhere (In browser)
-; Ctr+J+J --> (Chrome) Close downloads bar at bottom
-; Ctr+Y+T --> Open Youtube (In browser: maximum 0.15s second gap between Y & T)
-; Win+X+X --> Sleep Laptop
-; Ctr+Shift+V --> Browser to go to previous tab when taking a screenshot
-; MouseLButton --> Double Click Functions (Taskbar Show/Hide; ) -->> Doing this with WindHawk Now
-; Ctr+Shift+WheelUp --> (VS Code) Increase Whole UI Zoom (+0.05)
-; Ctr+Shift+WheelDown --> (VS Code) Decrease Whole UI Zoom (-0.05)
+; Alt+Ctr+D -> Sort Folder content by date
+; Alt+Ctr+E -> Enable/Disable file extension
+; Alt+Ctr+H -> Enable/Disable hidden files
+; Alt+Ctr+MouseLButton -> Move Background Apps
+; Ctr+G -> Search the selected/clipboard text
+; Ctr+C -> OneNote copy text instead of SS of some text
+; Ctr+T+T -> Open new Tab from anywhere (In browser)
+; Ctr+J+J -> (Chrome) Close downloads bar at bottom
+; Ctr+Y+T -> Open Youtube (In browser: maximum 0.15s second gap between Y & T)
+; Win+X+X -> Sleep Laptop
+; Ctr+Shift+V -> Browser to go to previous tab when taking a screenshot
+; MouseLButton -> Double Click Functions (Taskbar Show/Hide; ) ->> Doing this with WindHawk Now
+; Ctr+Shift+WheelUp -> (VS Code) Increase Whole UI Zoom (+0.05)
+; Ctr+Shift+WheelDown -> (VS Code) Decrease Whole UI Zoom (-0.05)
 
 #NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
 SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
@@ -113,18 +114,21 @@ SetTimer, UpdateDRMTrayStatus, -100 ; Fast initial update
 global g_LastManualDisplaySwitch := 0
 OnMessage(0x007E, "OnDisplayChange_LidRecovery")
 
+; Win32 WM_POWERBROADCAST (0x0218) - auto-recovery on wake from hibernate / sleep
+OnMessage(0x0218, "OnPowerBroadcast_WakeRecovery")
+
 ; Automatically align Simple Sticky Notes to current display mode on startup
 AutoApplyStickyNotesLayout(1500)
 
 #If MouseIsOver("ahk_class Shell_TrayWnd")
     ;   WheelUp::SoundSet +1   ;Hide OSD
     ;   WheelDown::SoundSet -1 ;Hide OSD
-    WheelUp::Send {Volume_Up}
-    WheelDown::Send {Volume_Down}
+    WheelUp::Send {Volume_Up} ;{ <- (Taskbar) Volume Up
+    WheelDown::Send {Volume_Down} ;{ <- (Taskbar) Volume Down
 #If
 
-Volume_Up::SoundSet, +10 ;{ <-- Volume Up
-Volume_Down::SoundSet, -10 ;{ <-- Volume Down
+Volume_Up::SoundSet, +10 ;{ <- Volume Up
+Volume_Down::SoundSet, -10 ;{ <- Volume Down
 
 ; Text box created (UI) see in ToggleFileExt or HideFiles
 text(a,t:="",x:="",y:="")
@@ -153,57 +157,37 @@ MouseIsOver(WinTitle)
 HideFiles()
 {
     RegRead, ValorHidden, HKEY_CURRENT_USER, Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced, Hidden
-    if ValorHidden = 2
+    if (ValorHidden = 2)
     {
         RegWrite, REG_DWORD, HKEY_CURRENT_USER, Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced, Hidden, 1
         RefreshExplorer()
-        text("Show Files",1)
-        RegWrite, REG_DWORD, HKEY_CURRENT_USER, Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced, Hidden, 1
-        RefreshExplorer()
+        ShowBottomRightBadge("Hidden Files: [SHOWN]", "1A6E3C", 1500)
     }
     else
     {
-
         RegWrite, REG_DWORD, HKEY_CURRENT_USER, Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced, Hidden, 2
         RefreshExplorer()
-        text("Hide Files",1)
-        RegWrite, REG_DWORD, HKEY_CURRENT_USER, Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced, Hidden, 2
-        RefreshExplorer()
-
+        ShowBottomRightBadge("Hidden Files: [HIDDEN]", "555555", 1500)
     }
     return
 }
 
 ToggleFileExt()
 {
-    Global lang_ToggleFileExt, lang_ShowFileExt, lang_HideFileExt
     RootKey = HKEY_CURRENT_USER
     SubKey = Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced
-    RegRead, HideFileExt , % RootKey, % SubKey, HideFileExt
-    if HideFileExt = 1
+    RegRead, HideFileExt, % RootKey, % SubKey, HideFileExt
+    if (HideFileExt = 1)
     {
-        ;MsgBox, Show Extentions
-        ;IfMsgBox Yes
-        ;{
         RegWrite, REG_DWORD, % RootKey, % SubKey, HideFileExt, 0
         RefreshExplorer()
-        text("Show Extentions",1)
-        RegWrite, REG_DWORD, % RootKey, % SubKey, HideFileExt, 0
-        RefreshExplorer()
-        ;}
+        ShowBottomRightBadge("File Extensions: [SHOWN]", "1A6E3C", 1500)
     }
     else
     {
-        ;MsgBox, Hide Extentions
-        ;MsgBox, 4131,, Hide Extentions
-        ;IfMsgBox Yes
-        ;{
         RegWrite, REG_DWORD, % RootKey, % SubKey, HideFileExt, 1
         RefreshExplorer()
-        text("Hide Extentions",1)
-        RegWrite, REG_DWORD, % RootKey, % SubKey, HideFileExt, 1
-        RefreshExplorer()
-        ;}
+        ShowBottomRightBadge("File Extensions: [HIDDEN]", "555555", 1500)
     }
     return
 }
@@ -308,6 +292,114 @@ SleepLaptop()
     }
     return
 }
+
+; =============================================================================
+; [START: Direct Wireless Share to Phone / Tablet via Dual-IP ADB & Sefirah]
+; Single tap Win+Alt+T: Send selected file(s) to S24 Ultra
+; Double tap Win+Alt+T+T (within 500ms): Send selected file(s) to Tab S10 Ultra
+; Target folder: /sdcard/Download/_LaptopTransfers/
+; =============================================================================
+SendToPhoneOrTablet()
+{
+    KeyWait, t
+    KeyWait, t, D T0.50
+    if (ErrorLevel)
+    {
+        ; Single tap Win+Alt+T: Send to Phone (S24 Ultra)
+        SendFilesViaTailscaleAdb("phone")
+    }
+    else
+    {
+        ; Double tap Win+Alt+T+T: Send to Tablet (Tab S10 Ultra)
+        SendFilesViaTailscaleAdb("tab")
+    }
+    return
+}
+
+SendFilesViaTailscaleAdb(target)
+{
+    global PATH_ADB_EXE, ADB_PHONE_TAILSCALE_IP, ADB_PHONE_LAN_IP, ADB_TABLET_TAILSCALE_IP, ADB_TABLET_LAN_IP
+
+    if (target = "tab" || target = "tablet")
+    {
+        targetName := "Tab S10 Ultra"
+        tsIp  := ADB_TABLET_TAILSCALE_IP
+        lanIp := ADB_TABLET_LAN_IP
+    }
+    else
+    {
+        targetName := "S24 Ultra"
+        tsIp  := ADB_PHONE_TAILSCALE_IP
+        lanIp := ADB_PHONE_LAN_IP
+    }
+
+    ; 1. Resolve selected files: if active window is Explorer, require an explicit selection
+    isExplorer := WinActive("ahk_class CabinetWClass") || WinActive("ahk_class ExploreWClass")
+    files := []
+
+    if (isExplorer)
+    {
+        files := GetExplorerSelectedFilePaths()
+        if (files.Length() = 0 || files.Length() = "")
+        {
+            ShowBottomRightBadge("No file selected in Explorer to send to " . targetName . "!", "B86200", 2500)
+            return
+        }
+    }
+    else
+    {
+        ; Outside Explorer: check if clipboard contains valid file paths
+        Loop, Parse, Clipboard, `n, `r
+        {
+            candidate := Trim(A_LoopField, """")
+            if (candidate != "" && FileExist(candidate))
+                files.Push(candidate)
+        }
+
+        if (files.Length() = 0 || files.Length() = "")
+        {
+            ShowBottomRightBadge("No file selected or copied to send to " . targetName . "!", "B86200", 2500)
+            return
+        }
+    }
+
+    ; 2. Launch background transfer engine with instant visual feedback
+    ShowBottomRightBadge("Dispatching " . files.Length() . " file(s) to " . targetName . "...", "2D5A88", 2000)
+    fileArgs := ""
+    for idx, path in files
+    {
+        fileArgs .= " """ . path . """"
+    }
+
+    psScript := A_ScriptDir "\PowerShell\SendToDevice_Adb.ps1"
+    adbArg := PATH_ADB_EXE ? " -AdbPath """ . PATH_ADB_EXE . """" : ""
+    tsArg  := tsIp ? " -TailscaleIp """ . tsIp . """" : ""
+    lanArg := lanIp ? " -LanIp """ . lanIp . """" : ""
+    Run, powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "%psScript%" -Target %target%%tsArg%%lanArg%%adbArg% %fileArgs%,, Hide
+    return
+}
+
+GetExplorerSelectedFilePaths()
+{
+    selected := []
+    hwnd := WinExist("A")
+    for window in ComObjCreate("Shell.Application").Windows
+    {
+        try
+        {
+            if (window.hwnd = hwnd)
+            {
+                for item in window.Document.SelectedItems
+                {
+                    selected.Push(item.Path)
+                }
+                break
+            }
+        }
+    }
+    return selected
+}
+; [END: Direct Wireless Share to Phone / Tablet via Tailscale ADB]
 
 ClipboardSearch()
 {
@@ -517,7 +609,7 @@ RunPowerShellAsAdministrator()
     ; *RunAs on pwsh.exe or wt.exe directly, Shell.Application ShellExecute on
     ; shell:AppsFolder package identity, and a Highest-run-level Task Scheduler
     ; task were all tried and rejected: wt.exe is a packaged/MSIX app and none
-    ; of those reliably elevate it -- each either spawns and exits within a
+    ; of those reliably elevate it: each either spawns and exits within a
     ; second or two, or silently no-ops. This is a genuine Windows limitation
     ; (packaged apps generally can't be launched pre-elevated by external
     ; automation), not fixable by trying yet another external-elevation
@@ -526,19 +618,19 @@ RunPowerShellAsAdministrator()
 
     ; Launch a Windows Terminal PROFILE that is itself configured to elevate ("PowerShell
     ; (Admin)" in this Terminal install's profile list, normally reached via the dropdown
-    ; next to the + tab button, or Ctrl+Shift+6 on this machine's current profile order --
-    ; that keybinding is NOT stable across installs/reorders, which is why this targets the
+    ; next to the + tab button, or Ctrl+Shift+6 on this machine's current profile order,
+    ; as that keybinding is NOT stable across installs/reorders, which is why this targets the
     ; profile by name instead). Terminal handles the elevation internally for a
-    ; profile marked this way, the same mechanism the dropdown and Win+X use -- the
+    ; profile marked this way, the same mechanism the dropdown and Win+X use: the
     ; resulting window's title reads "Administrator: PowerShell (Admin)".
     ;
-    ; SETUP REQUIRED: none, on a reasonably current Windows Terminal -- "<Profile> (Admin)"
+    ; SETUP REQUIRED: none, on a reasonably current Windows Terminal: "<Profile> (Admin)"
     ; entries in that + dropdown are auto-generated by Terminal itself for every detected
     ; shell profile, not something manually added to settings.json. No scheduled task, no
     ; registry change, nothing to run in an elevated terminal first. If "PowerShell (Admin)"
     ; is ever missing from that dropdown on some future machine, that means Terminal itself
     ; doesn't see a "PowerShell" profile to generate the admin variant from (e.g. pwsh not
-    ; installed, or Terminal is on an old version predating this feature) -- fix that, not
+    ; installed, or Terminal is on an old version predating this feature), fix that, not
     ; this line.
     Run, wt.exe -p "PowerShell (Admin)"
 }
@@ -579,7 +671,7 @@ SortFolderByDate()
     return
 }
 
-; F8::clickEnter() ;{ <-- Delete Recycle Bin Data
+; F8::clickEnter() ;{ <- Delete Recycle Bin Data
 
 ; clickEnter(){
 ;     while,1
@@ -795,7 +887,7 @@ MonicaSummary() ;Summary
 }
 
 ; Alt+Ctr+Z ShareX Image Editor
-~!^Z:: ImageEditor() ;{ <-- ShareX Image Editor
+~!^Z:: ImageEditor() ;{ <- ShareX Image Editor
 
 ImageEditor()
 {
@@ -813,7 +905,7 @@ ImageEditor()
 }
 
 ; Ctr+Shift+V in browser to go to previous tab when taking a screenshot
-~^+v:: RevertVideoIntruption() ;{ <-- Brave AwesomeSreenshot Intruption Stop
+~^+v:: RevertVideoIntruption() ;{ <- Brave AwesomeSreenshot Intruption Stop
 
 ; #IfWinActive, ahk_exe EXCEL.EXE  ; This directive targets Microsoft Excel
 ; !f::  ; This is the hotkey Alt+F
@@ -825,108 +917,108 @@ ImageEditor()
 ; #IfWinActive  ; This closes the Excel-specific directive
 
 ; Ctr+C OneNote copy text instead of SS of some text
-$^c::CopyToClipboard() ;{ <-- OneNote Copy Mechanism Handeling (instead of SS)
+$^c::CopyToClipboard() ;{ <- OneNote Copy Mechanism Handeling (instead of SS)
 
 ; Alt+F11 Hide Window top bar
-!F11:: WinSet, Style, ^0xC00000, A ;{ <-- Hide Window top bar
+!F11:: WinSet, Style, ^0xC00000, A ;{ <- Hide Window top bar
 
 ; Win+M Minimize window
-#M::WinMinimize, A ;{ <-- Minimize Active Window
+#M::WinMinimize, A ;{ <- Minimize Active Window
 
-; Win+F8 --> Bluetooth On/Off
-; #F8::BluetoothToggle() ;{ <-- Bluetooth Toggle [Discard]
+; Win+F8 -> Bluetooth On/Off
+; #F8::BluetoothToggle() ;{ <- Bluetooth Toggle [Discard]
 
 ; MouseLButton DoubleClick Show/Hide Taskbar;
-; ~LButton::DoubleClick(hide := !hide) ;{ <-- Double Click Functions (WindHawk Now)
+; ~LButton::DoubleClick(hide := !hide) ;{ <- Double Click Functions (WindHawk Now)
 
 ; Alt+MouseLButton Move background apps
-^!LButton::MoveBGApp() ;{ <-- Move BG Apps
+^!LButton::MoveBGApp() ;{ <- Move BG Apps
 
 ; Win+F Run FireFox
-#f::Run Firefox ;{ <-- Open FireFox
+#f::Run Firefox ;{ <- Open FireFox
 
 ; Ctr+G Select text to search in browser
-^G:: ClipboardSearch() ;{ <-- Search the selected/clipboard text
+^G:: ClipboardSearch() ;{ <- Search the selected/clipboard text
 
 ; Win+C Run Calculator
-#c:: OpenCalculator() ;{ <-- Open calculaor
+#c:: OpenCalculator() ;{ <- Open calculaor
 
 ; Win+Ctr+Alt+M Mute/Unmute Microphone
-; #^!M:: MuteMic() ;{ <-- Mute/Unmute Microphone
+; #^!M:: MuteMic() ;{ <- Mute/Unmute Microphone
 
 ; Win+Alt+C Run Alarm Clock
-#!c:: Run "shell:Appsfolder\Microsoft.WindowsAlarms_8wekyb3d8bbwe!App" ;{ <-- Open clock
+#!c:: Run "shell:Appsfolder\Microsoft.WindowsAlarms_8wekyb3d8bbwe!App" ;{ <- Open clock
 
 ; Win+Alt+Ctrl+C Open Powershell
-#!^c:: RunPowerShellAsAdministrator() ;{ <-- Open Powershell
+#!^c:: RunPowerShellAsAdministrator() ;{ <- Open Powershell
 ;Run "C:\Program Files\PowerShell\7\pwsh.exe" -WorkingDirectory ~
 
-; Win+Alt+Ctrl+K --> Click Center of Screen
-;#!^k:: ClickCenterOfScreen() ;{ <-- Click Center of Screen
+; Win+Alt+Ctrl+K -> Click Center of Screen
+;#!^k:: ClickCenterOfScreen() ;{ <- Click Center of Screen
 
-; Win+Shift+E --> (Folder) Open Downloads (My Screenshots) folder
-#+e::Run "%UserProfile%\Pictures\Screenshots" ;{ <-- Open Screenshots Folder
+; Win+Shift+E -> (Folder) Open Downloads (My Screenshots) folder
+#+e::Run "%UserProfile%\Pictures\Screenshots" ;{ <- Open Screenshots Folder
 
-; Win+Shift+J --> (Folder) Open Java Course
-#+j::Run "%PATH_JAVA_COURSE%" ;{ <-- Open Java Course
+; Win+Shift+J -> (Folder) Open Java Course
+#+j::Run "%PATH_JAVA_COURSE%" ;{ <- Open Java Course
 
 ; Win+Del Empty Recycle Bin
-#Del::FileRecycleEmpty ;{ <-- Delete Recycle Bin Data
+#Del::FileRecycleEmpty ;{ <- Delete Recycle Bin Data
 
 ; Win+Shift+A Open Notification center
-#+A::OpenActionCenter() ;{ <-- Open Notification center
+#+A::OpenActionCenter() ;{ <- Open Notification center
 
 ; Win+Shift+P Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)
-#+p::ToggleTabletDisplayMode() ;{ <-- Toggle Display Mode
+#+p::ToggleTabletDisplayMode() ;{ <- Toggle Display Mode
 
 ; Win+Alt+N Clear Notification center
-#!N::ClearNotificaitons() ;{ <-- Clear Notifications (Win 11)
+#!N::ClearNotificaitons() ;{ <- Clear Notifications (Win 11)
 
 ; Alt+Shift+T Active window Always on Top
-; !+T:: Winset, Alwaysontop, , A ;{ <-- This Winodw Always on Top
+; !+T:: Winset, Alwaysontop, , A ;{ <- This Winodw Always on Top
 
 ; Alt+Ctr+J Testing Automation
-; $!^J:: TestingAutomation() ;{ <-- Testing Automation
+; $!^J:: TestingAutomation() ;{ <- Testing Automation
 
 ; Alt+G Copy the content, Open Monica & Grammar Correction
-!G:: MonicaGrammarCorrection() ;{ <-- Monica Grammar Correction
+!G:: MonicaGrammarCorrection() ;{ <- Monica Grammar Correction
 
 ; Alt+Shift+S Copy the content, Open Monica & Summarize Content
-!+S:: MonicaSummary() ;{ <-- Monica Summarize Content
+!+S:: MonicaSummary() ;{ <- Monica Summarize Content
 
 ; Alt+Ctr+E Enable/Disable file extension
-$!^E:: ToggleFileExt() ;{ <-- Show/Hide Extenstions
+$!^E:: ToggleFileExt() ;{ <- Show/Hide Extenstions
 
 ; Alt+Ctr+D Sort Folder content by date
-$!^D:: SortFolderByDate() ;{ <-- Sort Folder content by date
+$!^D:: SortFolderByDate() ;{ <- Sort Folder content by date
 
 ; Alt+Ctr+H Enable/Disable hidden files
-$!^H:: HideFiles() ;{ <-- Show/Hide Hidden Files
+$!^H:: HideFiles() ;{ <- Show/Hide Hidden Files
 
-; Alt+X --> Open Today Calendar
-$!X:: OpenCalendar() ;{ <-- Open Calender after Browser opening
+; Alt+X -> Open Today Calendar
+$!X:: OpenCalendar() ;{ <- Open Calender after Browser opening
 
-; Alt+D --> Open ChatGPT
-$!D:: OpenChatGPT() ;{ <-- Open ChatGPT
+; Alt+D -> Open ChatGPT
+$!D:: OpenChatGPT() ;{ <- Open ChatGPT
 
 ; Double Tap caps lock to on and off
-*CapsLock::DoubleTapCapsLock() ;{ <-- Double Tap To Activate/Deactivate
+*CapsLock::DoubleTapCapsLock() ;{ <- Double Tap To Activate/Deactivate
 
 ; #IfWinActive ahk_class Shell_TrayWnd
 ; Ctr+J+J (Chrome) Close downloads bar at bottom
-$^J::CloseBrowserBottomDownloadsBar() ;{ <-- (Chrome) Close browser downloads bar at bottom
+$^J::CloseBrowserBottomDownloadsBar() ;{ <- (Chrome) Close browser downloads bar at bottom
 ; #IfWinActive
 
 ; Ctr+Y+T in browser to open Youtube
-~^Y::OpenYoutube() ;{ <-- Open Youtube
+~^Y::OpenYoutube() ;{ <- Open Youtube
 
 ; Ctr+T+T in browser to open new Tab from anywhere
-~^T::OpenNewTab() ;{ <-- open browser tab from anywhere
+~^T::OpenNewTab() ;{ <- open browser tab from anywhere
 
-; Win+Alt+X --> (Script) Reconnect Cloudfare Network
-#!x::Run "%PATH_IP_ROTATOR%" ;{ <-- Reconnect Cloudfare Network
+; Win+Alt+X -> (Script) Reconnect Cloudfare Network
+#!x::Run "%PATH_IP_ROTATOR%" ;{ <- Reconnect Cloudfare Network
 
-; Win+Alt+L --> (Script) Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)
+; Win+Alt+L -> (Script) Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)
 ; Scoped MaxThreads override: the handler makes a BLOCKING shell.Run() across 14
 ; folders (tens-hundreds of ms, more under disk/AV contention). Without this,
 ; AHK's default (MaxThreadsPerHotkey=1, Buffer=Off) means a second press while
@@ -937,12 +1029,15 @@ $^J::CloseBrowserBottomDownloadsBar() ;{ <-- (Chrome) Close browser downloads ba
 ; would inherit this (positional, forward-applying).
 #MaxThreadsBuffer On
 #MaxThreadsPerHotkey 1
-#!l:: TogglePersonalSkillsLock() ;{ <-- Cycle Skills Vault Mode
+#!l:: TogglePersonalSkillsLock() ;{ <- Cycle Skills Vault Mode
 #MaxThreadsBuffer Off
 #MaxThreadsPerHotkey 1
 
-; Win+X+X --> Sleep Laptop
-$#x:: SleepLaptop() ;{ <-- Sleep Laptop (Win+X+X)
+; Win+Alt+T -> Send selected files to S24 Ultra (Single tap) / Tab S10 Ultra (Double tap within 500ms)
+#!t:: SendToPhoneOrTablet() ;{ <- Send files to S24 Ultra / Tab S10 Ultra
+
+; Win+X+X -> Sleep Laptop
+$#x:: SleepLaptop() ;{ <- Sleep Laptop (Win+X+X)
 
 ;Turn Caps Lock into a Shift key
 ; Capslock::Shift
@@ -965,9 +1060,9 @@ $#x:: SleepLaptop() ;{ <-- Sleep Laptop (Win+X+X)
 ; =========================================================================
 #IfWinActive ahk_exe Code.exe
 ; Ctr+Shift+WheelUp (VS Code) Increase Whole UI Zoom
-^+WheelUp::AdjustVsCodeZoom(0.05) ;{ <-- (VS Code) Increase Whole UI Zoom (+0.05)
+^+WheelUp::AdjustVsCodeZoom(0.05) ;{ <- (VS Code) Increase Whole UI Zoom (+0.05)
 ; Ctr+Shift+WheelDown (VS Code) Decrease Whole UI Zoom
-^+WheelDown::AdjustVsCodeZoom(-0.05) ;{ <-- (VS Code) Decrease Whole UI Zoom (-0.05)
+^+WheelDown::AdjustVsCodeZoom(-0.05) ;{ <- (VS Code) Decrease Whole UI Zoom (-0.05)
 #If
 
 AdjustVsCodeZoom(delta) {
@@ -1092,23 +1187,24 @@ CommitPersonalSkillsLock:
 
         if (targetMode = "locked") {
             if (FileExist(PATH_SKILLS_LOCK_SCRIPT)) {
-                cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_LOCK_SCRIPT . """ -Silent"
-                ; Amber "applying" badge closes the silent gap between settle and completion (real work takes ~2.3-3.5s).
-                ; No third "done" badge afterward - it would just repeat the [LOCKED] badge already shown at press time, conveying nothing new, so the applying badge is explicitly hidden the moment the real work finishes instead.
-                ; 15000ms is a safety-net ceiling only, in case the explicit hide below is ever skipped.
-                ShowBottomRightBadge("[APPLYING...] Locking Skills Vault", "6E5A00", 15000)
-                shell.Run(cmd, 0, true)
-                HideBottomRightBadge()
+                if (IsSkillsVaultUnlocked()) {
+                    cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_LOCK_SCRIPT . """ -Silent"
+                    ShowBottomRightBadge("[APPLYING...] Locking Skills Vault", "6E5A00", 15000)
+                    shell.Run(cmd, 0, true)
+                    HideBottomRightBadge()
+                }
             } else {
                 ShowSkillsStatusBadge("[ERROR] Lock script not found")
                 scriptOk := false
             }
         } else if (targetMode = "unlocked") {
             if (FileExist(PATH_SKILLS_UNLOCK_SCRIPT)) {
-                cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_UNLOCK_SCRIPT . """ -Silent"
-                ShowBottomRightBadge("[APPLYING...] Unlocking Skills Vault", "6E5A00", 15000)
-                shell.Run(cmd, 0, true)
-                HideBottomRightBadge()
+                if (!IsSkillsVaultUnlocked()) {
+                    cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_UNLOCK_SCRIPT . """ -Silent"
+                    ShowBottomRightBadge("[APPLYING...] Unlocking Skills Vault", "6E5A00", 15000)
+                    shell.Run(cmd, 0, true)
+                    HideBottomRightBadge()
+                }
             } else {
                 ShowSkillsStatusBadge("[ERROR] Unlock script not found")
                 scriptOk := false
@@ -1116,23 +1212,24 @@ CommitPersonalSkillsLock:
         } else { ; targetMode = "auto"
             ; Focus check happens HERE, at commit time, not at press time - "auto" has always meant "whatever's focused NOW" elsewhere in this codebase (WatchSkillsLock's own logic), and the toast shown at press time never promised which script would run, just [AUTO].
             ; modeFile is written to "auto" regardless of which (if any) branch below actually runs - unconditional, matching the pre-debounce behavior.
+            isUnlocked := IsSkillsVaultUnlocked()
             WinGet, curExe, ProcessName, A
             if (curExe = "claude.exe") {
-                if (FileExist(PATH_SKILLS_LOCK_SCRIPT)) {
+                if (isUnlocked && FileExist(PATH_SKILLS_LOCK_SCRIPT)) {
                     cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_LOCK_SCRIPT . """ -Silent"
                     ShowBottomRightBadge("[APPLYING...] Locking Skills Vault (Auto)", "6E5A00", 15000)
                     shell.Run(cmd, 0, true) ; blocking - keep inside the mutex's critical section
                     HideBottomRightBadge()
                 }
             } else if (curExe = "Antigravity.exe" || curExe = "agy.exe" || curExe = "Antigravity IDE.exe") {
-                if (FileExist(PATH_SKILLS_UNLOCK_SCRIPT)) {
+                if (!isUnlocked && FileExist(PATH_SKILLS_UNLOCK_SCRIPT)) {
                     cmd := """" . pwsh . """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ . PATH_SKILLS_UNLOCK_SCRIPT . """ -Silent"
                     ShowBottomRightBadge("[APPLYING...] Unlocking Skills Vault (Auto)", "6E5A00", 15000)
                     shell.Run(cmd, 0, true) ; blocking - keep inside the mutex's critical section
                     HideBottomRightBadge()
                 }
             }
-            ; Neither app focused (or its script is missing): fall through silently - no error, no script, but the mode-file write below still happens.
+            ; Neither app focused (or its script is missing, or already in requested state): fall through silently - no error, no script, but the mode-file write below still happens.
         }
 
         if (scriptOk) {
@@ -1216,16 +1313,47 @@ return
 ; [END: Personal Skills Lock/Unlock 3-Way Toggle]
 
 ; [START: Tablet Headless Display & Mouse Speed Toggle (Win+Shift+P)]
-; Toggles cleanly between PC Screen Only (laptop 1080p @ 144Hz, mouse speed 10) and
-; Second Screen Only (tablet dummy plug 2560x1600 @ 120Hz, mouse speed 20).
-; Uses native Windows 11 numeric switches (1 vs 4) with zero GUI menus, zero delays,
-; and no misplaced toast overlays.
-ToggleTabletDisplayMode() {
+; Restores the host laptop to PC Screen Only mode:
+; 1. Resets mouse speed to 10 (normal) and acceleration to 1 (Enhance pointer precision ON).
+; 2. Clears Sunshine mouse watchdog marker files (.fast_since and sunshine_manual_switch.flag).
+; 3. Native silent switch to PC Screen Only via DisplaySwitch.exe 1 (internal 1080p @ 144Hz panel).
+; 4. Re-applies Simple Sticky Notes layout for the 1080p laptop display once DWM settles.
+; 5. Cycles Suspend (On -> 50ms -> Off) to ensure the low-level keyboard hook is alive and registered, preserving manual suspend state if set.
+RestoreLaptopDisplayMode(delayNotesMs := 1200) {
     global PATH_SUNSHINE_SCRIPTS, g_LastManualDisplaySwitch
-    g_LastManualDisplaySwitch := A_TickCount
-    markerFile := PATH_SUNSHINE_SCRIPTS ? (PATH_SUNSHINE_SCRIPTS "\.fast_since") : ""
+    g_LastManualDisplaySwitch := A_TickCount ; Guard against loop re-entry from subsequent WM_DISPLAYCHANGE
 
-    ; Check if internal laptop display (DISPLAY1) is currently active on the desktop
+    ; 1. Reset mouse speed to 10 (normal) and acceleration to 1 (Enhance pointer precision ON)
+    DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
+    VarSetCapacity(accel, 12, 0)
+    NumPut(6, accel, 0, "Int")
+    NumPut(10, accel, 4, "Int")
+    NumPut(1, accel, 8, "Int")
+    DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
+
+    ; 2. Clear marker files for SunshineMouseWatchdog
+    markerFile := PATH_SUNSHINE_SCRIPTS ? (PATH_SUNSHINE_SCRIPTS "\.fast_since") : ""
+    if (markerFile)
+        FileDelete, %markerFile%
+    FileDelete, % A_Temp "\sunshine_manual_switch.flag"
+
+    ; 3. Native silent switch to PC Screen Only (1 = Internal 1080p @ 144Hz panel)
+    Run, DisplaySwitch.exe 1,, Hide
+
+    ; 4. Restore Simple Sticky Notes to exact laptop coordinates once 1080p DWM settles
+    ApplyLaptopStickyNotesLayout(delayNotesMs)
+
+    ; 5. Re-cycle keyboard hook to guarantee hotkeys are responsive after sleep/wake
+    wasSuspended := A_IsSuspended
+    Suspend, On
+    Sleep, 50
+    if (!wasSuspended)
+        Suspend, Off
+}
+
+; Checks if the system is currently displaying on a second screen (tablet dummy plug or external display)
+; True if internal laptop panel (DISPLAY1) is missing/detached OR primary monitor is DISPLAY4 (HDMI dummy plug).
+IsSecondScreenActive() {
     SysGet, monCount, MonitorCount
     hasInternal := false
     Loop, %monCount%
@@ -1241,28 +1369,22 @@ ToggleTabletDisplayMode() {
     SysGet, primIndex, MonitorPrimary
     SysGet, monName, MonitorName, %primIndex%
 
-    ; We are in Tablet Mode if internal panel (DISPLAY1) is inactive OR primary monitor is DISPLAY4 (HDMI dummy plug)
-    isTablet := (!hasInternal) || InStr(monName, "DISPLAY4")
+    return (!hasInternal) || InStr(monName, "DISPLAY4")
+}
 
-    if (isTablet) {
+; Toggles cleanly between PC Screen Only (laptop 1080p @ 144Hz, mouse speed 10) and
+; Second Screen Only (tablet dummy plug 2560x1600 @ 120Hz, mouse speed 20).
+; Uses native Windows 11 numeric switches (1 vs 4) with zero GUI menus, zero delays,
+; and no misplaced toast overlays.
+ToggleTabletDisplayMode() {
+    global PATH_SUNSHINE_SCRIPTS, g_LastManualDisplaySwitch
+    g_LastManualDisplaySwitch := A_TickCount
+    markerFile := PATH_SUNSHINE_SCRIPTS ? (PATH_SUNSHINE_SCRIPTS "\.fast_since") : ""
+
+    ; Toggle cleanly between Second Screen Only (Tablet dummy plug) and PC Screen Only (Laptop)
+    if (IsSecondScreenActive()) {
         ; --- SWITCH TO LAPTOP MODE ---
-        ; 1. Reset mouse speed to 10 (normal) and acceleration to 1 (Enhance pointer precision ON)
-        DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
-        VarSetCapacity(accel, 12, 0)
-        NumPut(6, accel, 0, "Int")
-        NumPut(10, accel, 4, "Int")
-        NumPut(1, accel, 8, "Int")
-        DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
-
-        ; 2. Clear marker files for SunshineMouseWatchdog
-        FileDelete, %markerFile%
-        FileDelete, % A_Temp "\sunshine_manual_switch.flag"
-
-        ; 3. Native silent switch to PC Screen Only (1 = Internal)
-        Run, DisplaySwitch.exe 1,, Hide
-
-        ; 4. Restore Simple Sticky Notes to exact laptop coordinates once 1080p DWM settles
-        ApplyLaptopStickyNotesLayout(1200)
+        RestoreLaptopDisplayMode(1200)
     } else {
         ; --- SWITCH TO TABLET MODE ---
         ; Bail out if there is no second display attached at all (prevents blank screen if no external monitor or dummy plug is connected).
@@ -1371,26 +1493,48 @@ OnDisplayChange_LidRecovery(wParam, lParam, msg, hwnd) {
     ; If internal panel is present while marker exists, the laptop lid was opened
     if (hasInternal)
     {
-        g_LastManualDisplaySwitch := A_TickCount ; Prevent loop re-entry
-
-        ; 1. Reset mouse speed to 10 (normal) and acceleration to 1 (Enhance pointer precision ON)
-        DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
-        VarSetCapacity(accel, 12, 0)
-        NumPut(6, accel, 0, "Int")
-        NumPut(10, accel, 4, "Int")
-        NumPut(1, accel, 8, "Int")
-        DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
-
-        ; 2. Clear marker file for SunshineMouseWatchdog
-        FileDelete, %markerFile%
-
-        ; 3. Native silent switch to PC Screen Only (1 = Internal 1080p @ 144Hz)
-        Run, DisplaySwitch.exe 1,, Hide
-
-        ; 4. Restore Simple Sticky Notes to exact laptop coordinates once 1080p DWM settles
-        ApplyLaptopStickyNotesLayout(1200)
+        RestoreLaptopDisplayMode(1200)
     }
 }
+
+; Hardware wake / resume from hibernate auto-recovery handler:
+; Fires on Win32 WM_POWERBROADCAST (0x0218) when system resumes from sleep / hibernate.
+;   wParam 18 (0x12) = PBT_APMRESUMEAUTOMATIC (any system wake, incl. Modern Standby)
+;   wParam  7 (0x07) = PBT_APMRESUMESUSPEND   (user-initiated resume after suspend)
+OnPowerBroadcast_WakeRecovery(wParam, lParam, msg, hwnd) {
+    if (wParam = 18 || wParam = 7)
+    {
+        ; Dual-wave recovery architecture:
+        ; Wave 1: 1500ms after wake to allow GPU drivers and eDP bus EDID negotiation to settle
+        SetTimer, ResumeDisplayOnWake_Wave1, -1500
+        ; Wave 2: 3500ms fail-safe verification if slow graphics driver dropped wave 1
+        SetTimer, ResumeDisplayOnWake_Wave2, -3500
+    }
+}
+
+ResumeDisplayOnWake_Wave1:
+    if (IsSecondScreenActive())
+    {
+        RestoreLaptopDisplayMode(1500)
+    }
+    else
+    {
+        ; Already on laptop display: refresh keyboard hook so hotkeys work without screen flicker
+        wasSuspended := A_IsSuspended
+        Suspend, On
+        Sleep, 50
+        if (!wasSuspended)
+            Suspend, Off
+    }
+return
+
+ResumeDisplayOnWake_Wave2:
+    ; Wave 2 fail-safe: if DISPLAY1 is still not active, re-apply restore
+    if (IsSecondScreenActive())
+    {
+        RestoreLaptopDisplayMode(1500)
+    }
+return
 ; [END: Tablet Headless Display & Mouse Speed Toggle]
 
 ; [START: DRM Video Streaming & Hardware Acceleration Toggle]

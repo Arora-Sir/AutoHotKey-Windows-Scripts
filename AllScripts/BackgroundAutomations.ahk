@@ -28,7 +28,7 @@ if (!ErrorLevel && PATH_TAILSCALE_IPN_EXE && FileExist(PATH_TAILSCALE_IPN_EXE))
 
 ; Auto-start Google Drive in the same burst, silently.
 ; Its own native Run-key entry keeps getting toggled off in Task Manager's Startup Apps behind our backs (found disabled twice now), so this no longer depends on that staying on.
-; GoogleDrivePath (LocalPaths.ahk) is the exact same registry-resolved, --startup_mode-flagged command the Run key itself uses, self-healing against Drive version bumps -- launching it here just stops relying on a Windows toggle that doesn't reliably stay where we leave it.
+; GoogleDrivePath (LocalPaths.ahk) is the exact same registry-resolved, --startup_mode-flagged command the Run key itself uses, self-healing against Drive version bumps: launching it here just stops relying on a Windows toggle that doesn't reliably stay where we leave it.
 ; Guarded the same way as Tailscale above, so a plain AHK reload doesn't relaunch an already-running copy.
 Process, Exist, GoogleDriveFS.exe
 if (!ErrorLevel && GoogleDrivePath)
@@ -72,7 +72,8 @@ SetTimer, Sefirah_PollPriorityTarget, 30000
 ; claude.exe focus -> lock personal vaults (org safe); Antigravity.exe focus -> unlock. All other apps leave vault state unchanged. Silent: no popup, no console window.
 ; Debounce: app must appear on two consecutive 1500ms ticks (~3s) before PS1 fires.
 ; Dedup: skips if the same app was already the last to trigger (state-transition only).
-global g_SkillsLastTriggered := ""   ; "claude" | "antigravity" | ""
+; Seeded at load time by probing the physical NTFS state so reloads don't trigger spurious transitions.
+global g_SkillsLastTriggered := IsSkillsVaultUnlocked() ? "antigravity" : "claude"
 global g_SkillsCandidate     := ""   ; debounce accumulator
 ; Flip to false to go back to a fully silent watcher (no popup, no console window) - the only thing WatchSkillsLock checks before showing/hiding its applying badge.
 global g_SkillsAutoWatcherShowBadge := true
@@ -292,6 +293,22 @@ WatchSkillsLock:
 
     ; Dedup: already triggered for this app, nothing changed - skip the PS1 entirely.
     if (g_SkillsLastTriggered = newApp) {
+        ReleaseNamedMutex(hMutex)
+        return
+    }
+
+    ; Physical state check: if the vault is ALREADY in the requested physical state,
+    ; adopt the state silently without running the script or flashing badges.
+    isUnlocked := IsSkillsVaultUnlocked()
+    if (newApp = "antigravity" && isUnlocked) {
+        g_SkillsLastTriggered := newApp
+        g_SkillsCandidate     := ""
+        ReleaseNamedMutex(hMutex)
+        return
+    }
+    if (newApp = "claude" && !isUnlocked) {
+        g_SkillsLastTriggered := newApp
+        g_SkillsCandidate     := ""
         ReleaseNamedMutex(hMutex)
         return
     }

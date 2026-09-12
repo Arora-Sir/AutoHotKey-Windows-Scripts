@@ -28,13 +28,14 @@ DetectHiddenWindows, On
 ; So this script also forces FAST when the marker is absent (mouse currently normal) and the log's latest event is CONNECTED - symmetric with the existing force-normal path, same log signal, same authoritative reasoning.
 ; This can never double-fire on a genuinely fresh connect: prep-cmd's own "do" always creates the marker a few seconds before CLIENT CONNECTED logs, so by the time this script would see CONNECTED, the marker already exists and the "marker absent" precondition is false.
 ;
-; RACE FIX: that same do-to-connected gap is a hazard in the OTHER direction too. If a poll lands in that gap, the marker exists (just created) but the log's latest event is still the PREVIOUS session's DISCONNECTED, which would incorrectly force-normal a session that's still starting up.
-; MinFastAgeSec below skips both disconnect-checks entirely until the marker is old enough that this can't happen.
+; RACE FIX: that same do-to-connected gap is a hazard in the OTHER direction too. If a poll lands in that gap, the marker exists (just created) but the log's latest event is still the PREVIOUS session's DISCONNECTED, which would incorrectly revert a session that's still starting up.
+; The 24-second disconnect streak requirement (RequiredLogStreak := 16 polls x 1.5s) safely absorbs this startup gap before any action is taken.
 ;
 ; DISPLAY AUTO-SWITCH ON CONNECT: tried and reverted (2026-09-08).
 ; Switching to tablet mode (DisplaySwitch.exe 4) in this same fresh-marker window caused a hang, because Sunshine's own connect-time transition briefly puts the display in Duplicate mode first and the two display changes appear to race.
 ; Connect-side switching stays manual (Win+Shift+P / the BasicTasks tray items) for this reason.
-; Only the disconnect-side auto-switch-to-laptop below survived, since a disconnect never coincides with an in-flight Sunshine display transition the same way.
+; On explicit quit (.session_quit), sustained Tailscale offline, or 8h ceiling, full display switch back to PC Screen Only (DisplaySwitch.exe 1) and Sticky Notes layout restoration are executed.
+; For transient disconnects/pauses (CLIENT DISCONNECTED without explicit quit), only the mouse speed is restored to normal 10 via SunshineWatchdog_RestoreMouseNormal (without switching display topology), keeping the tablet dummy plug display alive so resuming the stream avoids DXGI display mode thrashing or capture hangs.
 ;
 ; MANUAL OVERRIDE: BasicTasks.ahk's Win+Shift+P (ToggleTabletDisplayMode) also owns this marker, for a manual tablet-mode toggle that has nothing to do with an actual Sunshine session.
 ; It writes "manual" as the marker's content (set_fast.ps1 leaves it empty), and this script defers entirely to that - skipping the log/Tailscale checks below, which would otherwise be answering "did the OLD session end" instead of "did the user still want tablet mode" - until the user toggles back or the lid-reopen recovery in BasicTasks.ahk fires.
@@ -60,11 +61,14 @@ MaxFastHours            := 8
 MinFastAgeSec           := 5 ; grace period after marker creation before disconnect-checks may act
 RequiredLogStreak       := 16 ; 16 polls x 1.5s = 24s grace window so Pause/Back doesn't trigger a restore; Quit bypasses this via QuitFlag
 RequiredOfflineStreak   := 10 ; Tailscale is a weaker signal, require ~15s of continuous offline
-RequiredConnectStreak   := 1 ; symmetric with RequiredLogStreak -- CLIENT CONNECTED is equally authoritative
+RequiredConnectStreak   := 1 ; symmetric with RequiredLogStreak: CLIENT CONNECTED is equally authoritative
 
 LogDisconnectedStreak := 0
 OfflineStreak := 0
 ConnectStreak := 0
+
+global g_LastWakeLogSize := 0
+OnMessage(0x0218, "SunshineWatchdog_WM_POWERBROADCAST")
 
 Loop
 {
@@ -116,11 +120,35 @@ Loop
         ; If mouse is currently normal (marker absent), boost it to fast for this session
         if (!FileExist(MarkerFile))
         {
-            ConnectStreak++
-            if (ConnectStreak >= RequiredConnectStreak)
+            ; Suppress stale pre-wake CONNECTED log events until new log lines are written after wake
+            isStalePreWake := false
+            if (g_LastWakeLogSize > 0)
             {
-                SunshineWatchdog_ForceFast("sunshine.log shows CLIENT CONNECTED while mouse was normal (resume without a fresh prep-cmd do)")
+                currLogSize := 0
+                file := FileOpen(SunshineLog, "r")
+                if IsObject(file)
+                {
+                    currLogSize := file.Length
+                    file.Close()
+                }
+                if (currLogSize <= g_LastWakeLogSize)
+                    isStalePreWake := true
+                else
+                    g_LastWakeLogSize := 0 ; Fresh post-wake activity logged, clear snapshot
+            }
+
+            if (isStalePreWake)
+            {
                 ConnectStreak := 0
+            }
+            else
+            {
+                ConnectStreak++
+                if (ConnectStreak >= RequiredConnectStreak)
+                {
+                    SunshineWatchdog_ForceFast("sunshine.log shows CLIENT CONNECTED while mouse was normal (resume without a fresh prep-cmd do)")
+                    ConnectStreak := 0
+                }
             }
         }
         else
@@ -136,10 +164,10 @@ Loop
             LogDisconnectedStreak++
             if (LogDisconnectedStreak >= RequiredLogStreak)
             {
-                ; Act if mouse is fast (MarkerFile exists) OR external dummy plug is active on desktop (Tablet/Duplicate mode)
-                if (FileExist(MarkerFile) || IsExternalDisplayActive())
+                ; If mouse is fast (MarkerFile exists), restore mouse speed to 10 without forcing a display switch
+                if FileExist(MarkerFile)
                 {
-                    SunshineWatchdog_ForceNormal("sunshine.log shows CLIENT DISCONNECTED as the latest event")
+                    SunshineWatchdog_RestoreMouseNormal("sunshine.log shows CLIENT DISCONNECTED (stream paused/ended)")
                 }
                 LogDisconnectedStreak := 0
                 OfflineStreak := 0
@@ -247,11 +275,11 @@ SunshineWatchdog_LastClientEvent() {
 SunshineWatchdog_TabletReachable() {
     global SUNSHINE_TABLET_TAILSCALE_IP, PATH_TAILSCALE_EXE
     if (!SUNSHINE_TABLET_TAILSCALE_IP)
-        return true ; not configured in LocalPaths.ahk -- fail open, rely on the other signals
+        return true ; not configured in LocalPaths.ahk - fail open, rely on the other signals
 
     TailscaleExe := PATH_TAILSCALE_EXE
     if (!TailscaleExe || !FileExist(TailscaleExe))
-        return true ; can't check -- fail open rather than false-trigger
+        return true ; can't check - fail open rather than false-trigger
 
     TmpFile := A_Temp "\sunshine_watchdog_ts_status.tmp"
     RunWait, %ComSpec% /c ""%TailscaleExe%" status > "%TmpFile%" 2>&1",, Hide
@@ -260,7 +288,7 @@ SunshineWatchdog_TabletReachable() {
     FileDelete, %TmpFile%
 
     if !InStr(StatusOutput, SUNSHINE_TABLET_TAILSCALE_IP)
-        return true ; peer not found in status output at all -- fail open
+        return true ; peer not found in status output at all - fail open
 
     Loop, Parse, StatusOutput, `n, `r
         if InStr(A_LoopField, SUNSHINE_TABLET_TAILSCALE_IP)
@@ -325,4 +353,43 @@ SunshineWatchdog_ForceFast(reason) {
 
     FileAppend, % A_Now " - forced FAST: " reason "`n", %LogFile%
 }
+
+; Restores mouse speed to 10 and acceleration ON (pointer precision ON) without touching displays or Sticky Notes layout.
+; Used during Sunshine pause / disconnect streaks so the host laptop mouse is immediately usable at normal speed.
+SunshineWatchdog_RestoreMouseNormal(reason) {
+    global LogFile, MarkerFile
+
+    ; 1. Instant Win32 restore of mouse speed to 10 and acceleration ON (avoids PowerShell startup delay)
+    DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
+    VarSetCapacity(accel, 12, 0)
+    NumPut(6, accel, 0, "Int")
+    NumPut(10, accel, 4, "Int")
+    NumPut(1, accel, 8, "Int")
+    DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
+
+    ; 2. Clean up marker and manual grace files immediately
+    if (MarkerFile)
+        FileDelete, %MarkerFile%
+    FileDelete, % A_Temp "\sunshine_manual_switch.flag"
+
+    FileAppend, % A_Now " - mouse restored normal: " reason "`n", %LogFile%
+}
+
+; Win32 WM_POWERBROADCAST (0x0218) handler: snapshots log file size on wake to suppress stale pre-wake CONNECTED events
+SunshineWatchdog_WM_POWERBROADCAST(wParam, lParam) {
+    global g_LastWakeLogSize, SunshineLog
+    if (wParam = 18 || wParam = 7)
+    {
+        if (SunshineLog && FileExist(SunshineLog))
+        {
+            file := FileOpen(SunshineLog, "r")
+            if IsObject(file)
+            {
+                g_LastWakeLogSize := file.Length
+                file.Close()
+            }
+        }
+    }
+}
+
 

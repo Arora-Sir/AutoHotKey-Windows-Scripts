@@ -208,7 +208,7 @@ OnExit, SaveSettings
 ;{-----------------------------------------------
 ;
 
-#f1::	;{ <-- Display Help
+#f1::	;{ <- Display Help
 Refresh:
     Help := {}				; Main Array for Storing Help Information
     Scripts_Scan := {}		; AHK Scripts to Scan
@@ -589,18 +589,18 @@ Recursive:
 return
 ;}
 
-#!f1::	;{ <-- Settings
+#!f1::	;{ <- Settings
     Gui, Set:Show,, Hotkey Help - Settings
 return
 ;}
 
-#^f1::	;{ <-- Excluded Files, Hotkeys, and Hotstrings
+#^f1::	;{ <- Excluded Files, Hotkeys, and Hotstrings
     Gui, Excluded:Show, AutoSize, Hotkey Help - Excluded
     Send ^{Home}
 return
 ;}
 
-#!^f1::	;{ <-- Raw Hotkey List
+#!^f1::	;{ <- Raw Hotkey List
     Scripts_List := AHKScripts(Scripts)	; Get Path of all AHK Scripts
     Raw_Hotkeys := {}
     for index, Script in Scripts	; Loop Through All AHK Script Files
@@ -663,7 +663,7 @@ return
 ;}
 
 #if WinActive("ahk_id " idDisplayWin)
-^f:: ;{ <-- Find in Hotkey Help
+^f:: ;{ <- Find in Hotkey Help
 SearchEdit.Dialog(idDisplay,3+Floor(5*A_ScreenDPI/96))
 return
 #if
