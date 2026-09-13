@@ -433,8 +433,10 @@ MenuBuild:
 
 	; Master StartupScript entry tucked inside Additional Scripts for occasional maintenance
 	try Menu, SubMenu_StartupScript, DeleteAll
-	Menu, SubMenu_StartupScript, Add, Edit, MenuEditStartupScript
+	Menu, SubMenu_StartupScript, Add, Reload All, ReloadAll
 	Menu, SubMenu_StartupScript, Add, Recompile && Relaunch, MenuRecompileStartup
+	Menu, SubMenu_StartupScript, Add
+	Menu, SubMenu_StartupScript, Add, Edit, MenuEditStartupScript
 	Menu, SubMenu_StartupScript, Add, View Key History, MenuViewKeyHistoryMaster
 
 	if (HasAdditionalScripts)
@@ -456,8 +458,6 @@ MenuBuild:
 		Menu, Tray, Add, Load, :SubMenu_Load
 	}
 	Menu, Tray, Add
-	Menu, Tray, Add, Reload All, ReloadAll
-	Menu, Tray, Add, Recompile Startup, MenuRecompileStartup
 	Menu, Tray, Add, %MenuText_SuspendAll%, SuspendAllToggle
 	Menu, Tray, Add, %MenuText_ExitAll%, ExitAll
 	gosub SuspendAllCheckSync ; must come AFTER the Add above - Check on a not-yet-added item errors

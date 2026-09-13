@@ -247,7 +247,7 @@ The AutoHotkey fleet is launched on Windows boot via a dedicated scheduled task 
 
 - **Recompilation & Relaunch Integration**:
   - `build_startup_exe.ps1` checks for the existence of `"AHK Startup Script"` in Task Scheduler.
-  - When invoked with `-Relaunch` (or when triggered via the tray menu's "Recompile Startup" item), it first stops `StartupScript.exe` to release file locks, compiles a fresh binary via `Ahk2Exe`, and triggers `schtasks /run /tn "AHK Startup Script"` to restart the master process seamlessly in the user's active session without command prompt flashes. If the scheduled task is not registered on that machine, it gracefully falls back to `Start-Process`.
+  - When invoked with `-Relaunch` (or when triggered via the `StartupScript` submenu's "Recompile & Relaunch" item), it first stops `StartupScript.exe` to release file locks, compiles a fresh binary via `Ahk2Exe`, and triggers `schtasks /run /tn "AHK Startup Script"` to restart the master process seamlessly in the user's active session without command prompt flashes. If the scheduled task is not registered on that machine, it gracefully falls back to `Start-Process`.
 
 ## DRM Video Streaming Mode architecture
 
@@ -286,7 +286,7 @@ When streaming desktop video to a tablet (such as Samsung Galaxy Tab S10 Ultra) 
   - **Pinned Scripts**: Scripts listed in `PinnedScripts` (`BasicTasks`, `PersonalKeywords`, `SunshineDisplayWatchdog`) are rendered directly at the top level of the master tray menu for immediate 1-click submenu access.
   - **Additional Scripts Submenu**: All remaining active background scripts (`BackgroundAutomations`, `Brightness`, `ClosePrograms`, `Ext4SsdManager`, `HotkeyHelp`, `Watchdog`) are cleanly consolidated into an expandable "Additional Scripts" submenu, preventing vertical menu overflow.
   - **Child Submenu Structure**: Each managed script submenu provides standard management actions (`View Key History`, `Edit`, `Restart`, `Exit`), followed by a horizontal separator line and any custom items published by that script.
-  - **Global Actions**: Positioned at the bottom of the master menu: "Reload All", "Recompile Startup", "Suspend Hotkeys" (global cascade toggle), and "Exit".
+  - **Global Actions**: Positioned at the bottom of the master menu: "Suspend Hotkeys" (global cascade toggle) and "Exit". Fleet maintenance actions ("Reload All", "Recompile & Relaunch") are housed inside the "Additional Scripts -> StartupScript" submenu to keep the top-level tray menu concise.
 
 ## Sunshine & Moonlight display topology and watchdog lifecycle architecture
 

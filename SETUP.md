@@ -149,8 +149,8 @@ All fleet scripts run under a single master tray icon:
   3. SunshineDisplayWatchdog (display switcher with dynamic active-mode checkmark)
 - **Additional scripts**:
   - BackgroundAutomations, Brightness, ClosePrograms, Ext4SsdManager, HotkeyHelp, LocalPaths, SharedHelpers, Watchdog.
-  - StartupScript submenu located inside Additional Scripts: provides Edit, Recompile & Relaunch, and View Key History without cluttering the main tray menu.
-- **Global actions**: Reload All, Recompile Startup, Suspend Hotkeys, Exit.
+  - StartupScript submenu located inside Additional Scripts: provides Reload All, Recompile & Relaunch, Edit, and View Key History without cluttering the main tray menu.
+- **Global actions**: Suspend Hotkeys, Exit.
 
 ---
 

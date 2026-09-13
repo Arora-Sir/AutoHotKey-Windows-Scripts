@@ -52,9 +52,9 @@ Once your local paths are configured, compile and register the fleet:
 
 Windows Task Scheduler launches the compiled binary `StartupScript.exe`, not the `.ahk` source file. A source edit to `StartupScript.ahk` takes effect only after recompiling:
 
-- **Recompile Command**: Run `.\build_startup_exe.ps1` (or click **"Recompile Startup"** in the master tray menu).
+- **Recompile Command**: Run `.\build_startup_exe.ps1` (or click **"Recompile & Relaunch"** under Additional Scripts -> StartupScript in the tray menu).
 - **Safe Recompilation**: Automatically terminates the running `StartupScript.exe` to release file locks, compiles a fresh binary via `Ahk2Exe`, and restarts the fleet seamlessly via Task Scheduler.
-- **Child Script Edits**: All managed child scripts (`BasicTasks.ahk`, `Brightness.ahk`, etc.) require only an instant fleet reload (`Win+Ctrl+Alt+R` or click **"Reload All"** in the tray menu), no recompilation needed.
+- **Child Script Edits**: All managed child scripts (`BasicTasks.ahk`, `Brightness.ahk`, etc.) require only an instant fleet reload (`Win+Ctrl+Alt+R` or click **"Reload All"** under Additional Scripts -> StartupScript), no recompilation needed.
 
 ---
 
@@ -194,7 +194,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
 - **Pinned Scripts**: Pinned scripts (`SunshineDisplayWatchdog`, `BasicTasks`, `PersonalKeywords`) sit at the top level of the menu for instant access.
 - **Additional Scripts Submenu**: All remaining background scripts (`BackgroundAutomations`, `Brightness`, `ClosePrograms`, `Ext4SsdManager`, `HotkeyHelp`, `Watchdog`) are collapsed into an expandable **"Additional Scripts"** submenu to prevent vertical clutter.
 - **Submenu Separator Lines**: Child script submenus cleanly separate standard controls (`View Key History`, `Edit`, `Restart`, `Exit`) from custom published actions using native horizontal separator bars (`-|`).
-- **Global Fleet Actions**: Positioned at the bottom: **"Reload All"**, **"Recompile Startup"**, **"Suspend Hotkeys"** (global cascade toggle), and **"Exit"**.
+- **Global Fleet Actions**: Positioned at the bottom: **"Suspend Hotkeys"** (global cascade toggle) and **"Exit"**. Fleet maintenance controls (**"Reload All"** and **"Recompile & Relaunch"**) live inside **"Additional Scripts -> StartupScript"** to prevent top-level menu clutter.
 
 ---
 
