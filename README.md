@@ -281,6 +281,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
     | `e1.`         | `demo@example.com` (Email 1)                                  |
     | `e2.`         | `demo2@example.com` (Email 2)                                 |
     | `c1.`         | `+1-555-0100` (Contact 1)                                     |
+    | `thnk.`       | Universal autonomous 5-phase engineering reasoning prompt     |
     | `Win+Alt+A`   | Open Samsung Notes / Notes App                                |
     | `Win+Alt+S`   | Open Notion                                                   |
     | `Win+Shift+P` | Open Bitwarden Vault                                          |
