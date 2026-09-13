@@ -213,6 +213,8 @@ SwitchToTabletOnlyMode(delayNotesMs := 1200) {
     ; 2. Create marker files with "manual" content and grace window
     FileDelete, %MarkerFile%
     FileAppend, manual, %MarkerFile%
+    if (QuitFlag)
+        FileDelete, %QuitFlag%
     manualFlag := A_Temp "\sunshine_manual_switch.flag"
     FileDelete, %manualFlag%
     FileAppend, % A_TickCount, %manualFlag%
@@ -639,15 +641,14 @@ return
 ; =============================================================================
 
 SunshineWatchdogTick:
-    ; PRIORITY 0: Sunshine undo hook fired = explicit session Quit
+    ; PRIORITY 0: Sunshine undo hook fired (stream session ended)
     if FileExist(QuitFlag)
     {
         FileDelete, %QuitFlag%
-        SunshineWatchdog_ForceNormal("Sunshine executed undo hook: explicit Quit", true)
         LogDisconnectedStreak := 0
         OfflineStreak := 0
+        SunshineDisplay_Log("Sunshine session ended (undo hook processed)")
         UpdateTrayStatusAndTooltip()
-        return
     }
 
     ; Query current hardware display topology via native Windows engine
@@ -883,11 +884,7 @@ SunshineDisplay_Log(msg) {
 SunshineWatchdog_ForceNormal(reason, skipScript := false) {
     global NormalScript, MarkerFile
 
-    ; 1. Immediate native display switch back to PC Screen Only
-    DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000081, "UInt")
-    Run, %A_WinDir%\System32\DisplaySwitch.exe /internal,, Hide
-
-    ; 2. Instant Win32 restore of mouse speed to 10
+    ; 1. Instant Win32 restore of mouse speed to 10
     DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
     VarSetCapacity(accel, 12, 0)
     NumPut(6, accel, 0, "Int")
@@ -895,19 +892,16 @@ SunshineWatchdog_ForceNormal(reason, skipScript := false) {
     NumPut(1, accel, 8, "Int")
     DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
 
-    ; 3. Clean up marker files
+    ; 2. Clean up marker files
     if (MarkerFile)
         FileDelete, %MarkerFile%
     FileDelete, % A_Temp "\sunshine_manual_switch.flag"
 
-    ; 4. Asynchronously invoke set_normal.ps1
+    ; 3. Asynchronously invoke set_normal.ps1
     if (!skipScript && NormalScript && FileExist(NormalScript))
         RunSilentPowerShell(NormalScript)
 
-    ; 5. Restore Simple Sticky Notes layout
-    ApplyLaptopStickyNotesLayout(1200)
-
-    SunshineDisplay_Log("Forced normal: " reason)
+    SunshineDisplay_Log("Forced normal mouse speed: " reason)
 }
 
 SunshineWatchdog_ForceFast(reason) {
@@ -1082,10 +1076,6 @@ SunshineDisplay_WM_WTSSESSION_CHANGE(wParam, lParam, msg, hwnd) {
     ; wParam 8 = WTS_SESSION_UNLOCK
     if (wParam = 8)
     {
-        if (IsSecondScreenActive()) {
-            SunshineDisplay_Log("Session Unlock (wParam=8): Second screen active. Restoring laptop display mode.")
-            SwitchToLaptopOnlyMode(1200)
-        }
         ; Re-cycle keyboard hook to guarantee hotkeys respond after unlock
         wasSuspended := A_IsSuspended
         Suspend, On
