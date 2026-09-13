@@ -3,7 +3,7 @@ Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class Mou
 [MouseSpeed]::SetSpeed(0x0071, 0, 20, 3) | Out-Null
 # 0x0004 = SPI_SETMOUSE, pvParam = [Threshold1, Threshold2, Acceleration]; 0 = disable "Enhance pointer precision"
 [MouseSpeed]::SetAccel(0x0004, 0, @(6, 10, 0), 3) | Out-Null
-# Marker for SunshineMouseWatchdog.ahk: its mtime is the "fast since" timestamp, deleted by set_normal.ps1
+# Marker for SunshineDisplayWatchdog.ahk: its mtime is the "fast since" timestamp, deleted by set_normal.ps1
 New-Item -ItemType File -Path "$PSScriptRoot\.fast_since" -Force | Out-Null
 # Clean up any leftover quit flag from a previous session before the new one starts
 Remove-Item -Path "$PSScriptRoot\.session_quit" -Force -ErrorAction SilentlyContinue

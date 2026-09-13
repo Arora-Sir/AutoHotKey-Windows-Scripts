@@ -210,20 +210,20 @@ A local, gitignored `CLAUDE.md` at the repo root carries additional contributor/
 
 ## Cross-file state via a shared marker file
 
-Not every shared state goes through `SharedHelpers.ahk`. `AllScripts/SunshineMouseWatchdog.ahk` and `AllScripts/BasicTasks.ahk` (Win+Alt+P's `ToggleTabletDisplayMode`) coordinate the Sunshine fast/normal mouse-speed state through plain marker files instead, since Sunshine's own prep-cmd hooks: `AllScripts/PowerShell/Sunshine/set_fast.ps1` (`do`) / `set_normal.ps1` (`undo`), run directly by Sunshine on stream start/end, independent of any AHK script: already owned this convention before the AHK-side manual toggle existed.
+Not every shared state goes through `SharedHelpers.ahk`. `AllScripts/SunshineDisplayWatchdog.ahk` coordinates the Sunshine fast/normal mouse-speed state through plain marker files, since Sunshine's own prep-cmd hooks: `AllScripts/PowerShell/Sunshine/set_fast.ps1` (`do`) / `set_normal.ps1` (`undo`), run directly by Sunshine on stream start/end, independent of any AHK script: already owned this convention before the AHK-side manual toggle existed.
 
 - **`.fast_since`**: the marker's mere existence means "fast mode"; its content distinguishes *why*: empty means a real Sunshine session set it (`set_fast.ps1`), `"manual"` means the Win+Alt+P toggle did.
-- **`sunshine_manual_switch.flag`** (in `%A_Temp%`, separate from `.fast_since`): a 20-second-bounded grace window armed by the manual toggle itself. `SunshineMouseWatchdog.ahk` skips its sunshine.log/Tailscale disconnect checks entirely while this flag is younger than 20s. Those checks answer "did the old session end," not "has the user had time to open Moonlight yet," and would otherwise revert a deliberate toggle before the user connects. Bounded rather than indefinite, so toggling to tablet mode and never streaming does not permanently disable the disconnect checks. See that file's own `MANUAL OVERRIDE` comments for the full reasoning.
-- **`.session_quit`**: written by `set_normal.ps1` only when Sunshine's own `undo` prep-cmd hook fires (an explicit Moonlight quit), never by the watchdog. Lets `SunshineMouseWatchdog.ahk` short-circuit straight to a ~1.5s display restore instead of waiting out the normal multi-poll debounce/settle window that exists to avoid reacting to a transient back-gesture/app-switch.
+- **`sunshine_manual_switch.flag`** (in `%A_Temp%`, separate from `.fast_since`): a 20-second-bounded grace window armed by manual toggles. `SunshineDisplayWatchdog.ahk` skips its sunshine.log/Tailscale disconnect checks entirely while this flag is younger than 20s. Those checks answer "did the old session end," not "has the user had time to open Moonlight yet," and would otherwise revert a deliberate toggle before the user connects. Bounded rather than indefinite, so toggling to tablet mode and never streaming does not permanently disable the disconnect checks. See that file's own `MANUAL OVERRIDE` comments for the full reasoning.
+- **`.session_quit`**: written by `set_normal.ps1` only when Sunshine's own `undo` prep-cmd hook fires (an explicit Moonlight quit), never by the watchdog. Lets `SunshineDisplayWatchdog.ahk` short-circuit straight to a ~1.5s display restore instead of waiting out the normal multi-poll debounce/settle window that exists to avoid reacting to a transient back-gesture/app-switch.
 
-## Why ToggleTabletDisplayMode() is bound to Win+Alt+P
+## Why Display Mode hotkeys are bound in SunshineDisplayWatchdog.ahk
 
-`BasicTasks.ahk` binds `Win+Alt+P` to `ToggleTabletDisplayMode()`. Previously, alternate bindings (`Ctrl+Shift+P` and `Win+Shift+P`) were tested in an attempt to trigger the toggle remotely from the Galaxy Tab S10 Ultra during a Moonlight session without walking over to the PC:
+`SunshineDisplayWatchdog.ahk` binds `Win+Alt+P` (`#!p`) to toggle between PC Screen Only and Tablet Only, and `Win+Alt+Shift+P` (`#!+p`) to toggle between Extend and Duplicate. Previously, alternate bindings (`Ctrl+Shift+P` and `Win+Shift+P`) were tested in an attempt to trigger the toggle remotely from the Galaxy Tab S10 Ultra during a Moonlight session without walking over to the PC:
 
 - Android intercepts recognized modifier-key combos (Alt+Tab, the Windows key, Ctrl+S, etc.) at the OS level before any app (Moonlight included) ever sees them, redirecting to Android's own system actions instead. This is a documented, still-open limitation in Moonlight Android (see its GitHub issues #840 and #975), not something fixable from this repo's side.
 - This applies to both a physical/case Bluetooth keyboard and the tablet's own on-screen Samsung Keyboard: the latter's own Ctrl+A/Ctrl+C-style "shortcuts" are local Android text-editing actions, not genuine key events that would traverse to a remote session at all.
-- Alternate keybinds like `Ctrl+Shift+P` also collided with universal editor shortcuts (Command Palette in VS Code / Antigravity). `Win+Shift+P` is dedicated to Bitwarden Vault (Password Manager) in `PersonalKeywords.ahk`, leaving `Win+Alt+P` as the sole dedicated host display toggle.
-- The confirmed-working remote path remains touching the PC's tray items (Toggle Display Mode, Duplicate Only, under `BasicTasks.ahk`'s tray submenu) directly through the Moonlight stream, since that involves no keyboard at all.
+- Alternate keybinds like `Ctrl+Shift+P` also collided with universal editor shortcuts (Command Palette in VS Code / Antigravity). `Win+Shift+P` is dedicated to Bitwarden Vault (Password Manager) in `PersonalKeywords.ahk`, leaving `Win+Alt+P` as the dedicated host display toggle.
+- The confirmed-working remote path remains touching the PC's tray items (PC Screen Only, Tablet Only, Extend Displays, Duplicate Displays under `SunshineDisplayWatchdog.ahk`'s dedicated tray menu) directly through the Moonlight stream, since that involves no keyboard at all.
 
 ## Windows Task Scheduler boot architecture
 
@@ -283,14 +283,14 @@ When streaming desktop video to a tablet (such as Samsung Galaxy Tab S10 Ultra) 
     - **Hover Tooltip (`WM_MOUSEMOVE` `0x200`)**: Displays a dynamic sorted list of all active scripts and cleans up any ghost tray icons.
 
 - **Menu Hierarchy & Pinned Scripts**:
-  - **Pinned Scripts**: Scripts listed in `PinnedScripts` (`BasicTasks`, `PersonalKeywords`) are rendered directly at the top level of the master tray menu for immediate 1-click submenu access.
-  - **Additional Scripts Submenu**: All remaining active background scripts (`BackgroundAutomations`, `Brightness`, `ClosePrograms`, `Ext4SsdManager`, `HotkeyHelp`, `SunshineMouseWatchdog`, `Watchdog`) are cleanly consolidated into an expandable "Additional Scripts" submenu, preventing vertical menu overflow.
+  - **Pinned Scripts**: Scripts listed in `PinnedScripts` (`SunshineDisplayWatchdog`, `BasicTasks`, `PersonalKeywords`) are rendered directly at the top level of the master tray menu for immediate 1-click submenu access.
+  - **Additional Scripts Submenu**: All remaining active background scripts (`BackgroundAutomations`, `Brightness`, `ClosePrograms`, `Ext4SsdManager`, `HotkeyHelp`, `Watchdog`) are cleanly consolidated into an expandable "Additional Scripts" submenu, preventing vertical menu overflow.
   - **Child Submenu Structure**: Each managed script submenu provides standard management actions (`View Key History`, `Edit`, `Restart`, `Exit`), followed by a horizontal separator line and any custom items published by that script.
   - **Global Actions**: Positioned at the bottom of the master menu: "Reload All", "Recompile Startup", "Suspend Hotkeys" (global cascade toggle), and "Exit".
 
 ## Sunshine & Moonlight display topology and watchdog lifecycle architecture
 
-This system orchestrates high-performance, low-latency remote desktop streaming from the host laptop to a Samsung Galaxy Tab S10 Ultra using Sunshine, Moonlight, and an HDMI dummy plug, coordinated by `SunshineMouseWatchdog.ahk` and `BasicTasks.ahk`.
+This system orchestrates high-performance, low-latency remote desktop streaming from the host laptop to a Samsung Galaxy Tab S10 Ultra using Sunshine, Moonlight, and an HDMI dummy plug, managed entirely by `SunshineDisplayWatchdog.ahk` with a dynamic checkmark tray interface in `StartupScript` and direct hotkeys (`Win+Alt+P` and `Win+Alt+Shift+P`).
 
 ### Hardware topology & display modes
 
@@ -306,14 +306,17 @@ flowchart TD
     end
 
     subgraph Modes ["Display Topologies"]
-        PC_Only["PC Screen Only (DisplaySwitch 1): DISPLAY1 Active, DISPLAY4 Off, Mouse Speed 10"]
-        Tab_Only["Tablet Mode / Second Screen Only (DisplaySwitch 4): DISPLAY1 Off, DISPLAY4 Active, Mouse Speed 20"]
-        Duplicate["Duplicate Mode (DisplaySwitch 2): DISPLAY1 Cloned with DISPLAY4, Mouse Speed 20"]
+        PC_Only["PC Screen Only (Win+Alt+P): DISPLAY1 Active, DISPLAY4 Off, Mouse Speed 10"]
+        Tab_Only["Tablet Mode / Second Screen Only (Win+Alt+P): DISPLAY1 Off, DISPLAY4 Active, Mouse Speed 20"]
+        Extend["Extend Displays (Win+Alt+Shift+P): Laptop Main (DISPLAY1) + Tablet Extended (DISPLAY4), Mouse Speed 10"]
+        Duplicate["Duplicate Mode (Win+Alt+Shift+P): DISPLAY1 Cloned with DISPLAY4, Mouse Speed 20"]
     end
 
     DummyPlug -. Matches Aspect Ratio .-> TabletScreen
     PC_Only --> Internal
     Tab_Only --> DummyPlug
+    Extend --> Internal
+    Extend --> DummyPlug
     Duplicate --> Internal
     Duplicate --> DummyPlug
 ```
@@ -326,12 +329,12 @@ sequenceDiagram
     actor User as User (Tablet / Laptop)
     participant Moonlight as Moonlight (Tab S10 Ultra)
     participant Sunshine as Sunshine Server (Windows Service)
-    participant Watchdog as SunshineMouseWatchdog.ahk (Interactive Session)
-    participant Win11 as Windows 11 Display Engine (DisplaySwitch)
+    participant Watchdog as SunshineDisplayWatchdog.ahk (Interactive Session & Display Manager)
+    participant Win11 as Windows 11 Display Engine (DisplaySwitch & SetDisplayConfig)
 
     Note over User,Win11: Phase 1: Initiation & Streaming
     User->>Win11: Win+Alt+P or Tray Menu (Toggle Tablet Mode)
-    Win11-->>User: DisplaySwitch 4 (DISPLAY4 2560x1600 Active, Laptop Screen OFF, mouse speed boosted to 20 and 20s manual grace window armed directly by the toggle itself - not the Watchdog)
+    Win11-->>User: DisplaySwitch 4 (DISPLAY4 2560x1600 Active, Laptop Screen OFF, mouse speed boosted to 20 and 20s manual grace window armed directly by the toggle itself)
     User->>Moonlight: Open Desktop Stream
     Moonlight->>Sunshine: Connect Stream (Tailscale 100.x.y.z)
     Sunshine->>Sunshine: DXGI Desktop Duplication on DISPLAY4 (2560x1600 @ 60/120Hz)
@@ -363,7 +366,7 @@ sequenceDiagram
     Note over User,Win11: Phase 3: Hardware Lid-Open Safety Net
     User->>Host: Physically lift laptop lid while streaming
     Host->>Watchdog: WM_DISPLAYCHANGE (0x007E) triggered by DISPLAY1 wake
-    Watchdog->>Win11: DisplaySwitch 1 (Restores PC Screen Only, mouse speed 10)
+    Watchdog->>Win11: DisplaySwitch 1 (Restores PC Screen Only, mouse speed 10 if monCount <= 1)
 ```
 
 ### State matrix and trade-off analysis
@@ -371,11 +374,13 @@ sequenceDiagram
 | State / Event | Trigger | Intended Outcome | Potential Hazard / Consequence | Design Mitigation |
 | :--- | :--- | :--- | :--- | :--- |
 | **Manual Tablet Toggle** | `Win+Alt+P` / Tray Menu | Switches to `DisplaySwitch 4`, mouse speed 20. | Sunshine log tail still shows old `CLIENT DISCONNECTED`. | 20s manual grace window (`sunshine_manual_switch.flag`) prevents watchdog revert. |
-| **Moonlight Connect** | Moonlight app taps "Desktop" | Sunshine captures `DISPLAY4` at 2560x1600. | Auto-switching to `DisplaySwitch 4` on connect races with Sunshine DXGI and hangs. | Connect-side stays manual; watchdog only auto-boosts mouse speed if normal. |
+| **Manual Laptop Toggle** | `Win+Alt+P` / Tray Menu | Switches to `DisplaySwitch 1`, mouse speed 10 in 0 ms. | Watchdog might re-boost mouse speed if Sunshine is still connected. | Topology check: if `monCount == 1 && hasInternal`, watchdog strictly suppresses fast speed. |
+| **Extend / Duplicate Toggle** | `Win+Alt+Shift+P` / Tray Menu | Toggles between Extend (dual screen, speed 10) and Duplicate (mirror, speed 20). | Watchdog might treat multi-monitor as headless streaming. | Multi-monitor isolation: `IsSecondScreenOnly()` returns false, preserving extended workspace. |
+| **Moonlight Connect** | Moonlight app taps "Desktop" | Sunshine captures `DISPLAY4` at 2560x1600. | Auto-switching to `DisplaySwitch 4` on connect races with Sunshine DXGI and hangs. | Connect-side stays manual; watchdog only auto-boosts mouse speed if normal and not on laptop-only. |
 | **Transient Disconnect** | Android back gesture / app switch | User intends to pause or check another tablet app for 5-15s. | Watchdog immediately reverts to `DisplaySwitch 1` in 3s, deactivating `DISPLAY4`. | Disconnect debounce / settle period prevents flap hang on prompt reconnect. |
 | **Permanent Disconnect** | User finishes work, closes Moonlight | Laptop screen turns back on (`DisplaySwitch 1`), mouse speed 10. | Laptop screen stays black if watchdog fails to detect disconnect. | Multi-signal detection: Sunshine log (`CLIENT DISCONNECTED`), Tailscale peer offline, and 8h ceiling. |
 | **Explicit Quit** | Sunshine's own undo prep-cmd hook fires (`set_normal.ps1`) | `.session_quit` written, mouse speed and display restored almost immediately. | The normal ~24s debounce (`RequiredLogStreak` polls) would otherwise delay an already-confirmed quit for no reason. | Watchdog treats `.session_quit` as an instant (~1.5s) signal, bypassing the debounce entirely, and deletes it immediately after consuming it so it can't re-trigger. |
-| **Lid Open While Streaming** | User opens laptop lid | Immediate return to Laptop Mode (`DisplaySwitch 1`), mouse speed 10. | Infinite loop if display change re-triggers lid handler. | Guard 1 (4s manual toggle lock) + Guard 2 (only acts if `.fast_since` exists). |
+| **Lid Open While Streaming** | User opens laptop lid | Immediate return to Laptop Mode (`DisplaySwitch 1`), mouse speed 10. | Infinite loop if display change re-triggers lid handler, or breaking multi-monitor setups. | Guard 1 (4s manual toggle lock) + Guard 2 (only acts if `monCount <= 1`). |
 | **System Resume from Wake** | Win32 `WM_POWERBROADCAST` (`0x0218`) | Triple-wave recovery (1000ms, 3000ms, 5000ms) restores laptop display mode and mouse speed 10 if second screen remained active. | Slow GPU bus re-enumeration after Modern Standby can drop single-shot display switches. | Triple-wave staggered timers guarantee GPU driver settles before final confirmation pass. |
 | **Workstation Session Unlock** | Win32 `WM_WTSSESSION_CHANGE` (`0x02B1`, `WTS_SESSION_UNLOCK` `wParam=8`) | Restores laptop display mode if second screen active; recycles keyboard hook. | User wakes laptop, unlocks with biometric/PIN while virtual display is still engaged, or keyboard hook hangs. | Immediate display state check on session unlock + keyboard hook refresh ensuring hotkeys respond. |
 
@@ -383,7 +388,7 @@ sequenceDiagram
 
 ## Simple Sticky Notes Multi-Resolution Layout Architecture
 
-This section documents the dual deterministic desktop positioning system for Simple Sticky Notes (`ssn.exe`), implemented in `AllScripts/PowerShell/apply_ssn_layout.ps1` and wired into `AllScripts/SharedHelpers.ahk`, `AllScripts/BasicTasks.ahk`, and `AllScripts/SunshineMouseWatchdog.ahk`.
+This section documents the dual deterministic desktop positioning system for Simple Sticky Notes (`ssn.exe`), implemented in `AllScripts/PowerShell/apply_ssn_layout.ps1` and wired into `AllScripts/SharedHelpers.ahk` and `AllScripts/SunshineDisplayWatchdog.ahk`.
 
 ### Display Geometry & Mathematical Model
 
@@ -433,14 +438,14 @@ Instead of dynamic runtime snapshots (which capture corrupted positions during t
 
 The positioning engine is triggered automatically across all display transition pathways:
 
-1. **Manual Hotkey (`Win+Alt+P`)**:
-   - `ToggleTabletDisplayMode()` in `AllScripts/BasicTasks.ahk`: Executes `DisplaySwitch 4` or `1`, and calls `ApplyTabletStickyNotesLayout(1500)` or `ApplyLaptopStickyNotesLayout(1500)`.
-2. **Duplicate Mode (`Win+Ctrl+Shift+P`)**:
-   - `SwitchToDuplicateDisplayMode()`: Sets `DisplaySwitch 2` and re-applies layout.
+1. **Manual Hotkeys (`Win+Alt+P` and `Win+Alt+Shift+P`)**:
+   - `SwitchToTabletOnlyMode()` and `SwitchToLaptopOnlyMode()` in `SunshineDisplayWatchdog.ahk`: Executes display switch and calls `ApplyTabletStickyNotesLayout(1500)` or `ApplyLaptopStickyNotesLayout(1500)`.
+2. **Duplicate & Extend Modes**:
+   - `SwitchToDuplicateMode()` and `SwitchToExtendMode()` in `SunshineDisplayWatchdog.ahk`: Re-applies primary display layout once DWM settles.
 3. **Sunshine Watchdog Auto-Revert**:
-   - `SunshineWatchdog_ForceNormal()` in `AllScripts/SunshineMouseWatchdog.ahk`: When Moonlight disconnects or session times out, reverts to `DisplaySwitch 1` and calls `ApplyLaptopStickyNotesLayout(2000)`.
+   - `SunshineWatchdog_ForceNormal()` in `SunshineDisplayWatchdog.ahk`: When Moonlight disconnects or session times out, reverts to laptop mode and calls `ApplyLaptopStickyNotesLayout(2000)`.
 4. **Hardware Lid Reopen (`WM_DISPLAYCHANGE 0x007E`)**:
-   - `OnDisplayChange_LidRecovery` in `AllScripts/BasicTasks.ahk`: Catches physical lid reopening during stream and restores laptop layout.
+   - `SunshineDisplay_WM_DISPLAYCHANGE` in `SunshineDisplayWatchdog.ahk`: Catches physical lid reopening during stream and restores laptop layout.
 5. **Fleet Startup / User Logon**:
    - `StartupScript.ahk` auto-execute: Evaluates current screen width and applies the matching layout.
 
@@ -479,7 +484,7 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 - **Context**: Providing a single kill-switch hotkey (`Win+ScrollLock`) to disable productivity hotkeys during gaming or full-screen apps.
 - **Alternative**: Pausing all child scripts (`Pause, Toggle`).
 - **Decision**: Cascading hotkey suspension (`PostMessage, 0x111, 65305`) while keeping script event loops running.
-- **Rationale**: Pausing a script freezes its underlying timers, watchdog threads, and window message handlers. Background watchdogs (such as `SunshineMouseWatchdog.ahk` and `WatchSkillsLock`) must continue monitoring system state even when typing shortcuts are suspended. Hotkey suspension disables keyboard hooks while leaving background automation fully operational.
+- **Rationale**: Pausing a script freezes its underlying timers, watchdog threads, and window message handlers. Background watchdogs (such as `SunshineDisplayWatchdog.ahk` and `WatchSkillsLock`) must continue monitoring system state even when typing shortcuts are suspended. Hotkey suspension disables keyboard hooks while leaving background automation fully operational.
 
 ### 5. Debounced Commit Pattern for Slow Workflows
 - **Context**: Operations requiring slow disk or permission changes (such as the 2.3-3.5 second `icacls` folder sweep).
@@ -523,6 +528,21 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
      - `HotkeyHelp.ahk` splits output into two columns: Hotkey Name (padded to 25 characters on the left) and Description (on the right). The single-hyphen left arrow `<-` visually points back toward the hotkey name, preserving intuitive layout cues with zero double-hyphens.
      - Multi-line hotkeys and context-sensitive directives require an explicit inline comment on the hotkey declaration line so `RegExMatch(File_Line, "::.*?;(.*)", Match)` captures the intended description.
 
+### 10. Unified Display Management and Multi-Monitor Isolation (`SunshineDisplayWatchdog.ahk`)
+- **Context**: Managing transitions between single-monitor laptop display (DISPLAY1), headless tablet streaming (DISPLAY4 dummy plug), and multi-monitor extended or duplicated desktop layouts.
+- **Problem**: Previously, display switching was coupled into `BasicTasks.ahk` while the mouse watchdog was in a separate script (`SunshineMouseWatchdog.ahk`). When switching back to PC Screen Only, the watchdog would frequently re-boost mouse speed to 20 because it saw active Sunshine log entries without checking the active display topology. In addition, when extending displays, the streaming client suffered because Windows 11 only shows system tray icons on the primary display.
+- **Decision**: Consolidated all display switching, multi-monitor topology, and watchdog logic into `SunshineDisplayWatchdog.ahk`:
+  1. **Second Screen Only Isolation (`IsSecondScreenOnly()`)**:
+     - Queries all active monitors via `SysGet` and returns true only if the internal laptop panel (`DISPLAY1`) is completely absent.
+     - In Extend or Duplicate mode, `DISPLAY1` remains attached and active, so `IsSecondScreenOnly()` reliably returns false.
+  2. **Active Display Topology Guard**:
+     - Watchdog actively inspects display topology (`monCount == 1 && hasInternal`). When on PC Screen Only, it strictly suppresses fast mouse speed, ensuring mouse speed 10 is maintained with 0 ms latency upon switching.
+  3. **Dedicated Sunshine Extended Display Profile**:
+     - Configured `"Desktop (Extended Tab)"` targeting `\\.\DISPLAY4` in Sunshine `apps.json`.
+     - Enables streaming the extended canvas to the tablet while preserving the laptop screen as Primary Display with all taskbar notification icons intact.
+  4. **Multi-Monitor Immunity for Watchdog and Lid Recovery**:
+     - Watchdog and lid-open handlers guard restorations with `monCount <= 1`. In Extend mode, multi-monitor layouts are never disrupted.
+
 ---
 
 ## Developer Tooling & Quality Standards
@@ -554,3 +574,24 @@ Configured via `git config core.hooksPath .githooks`. Runs three validation chec
 1. **Check 1: Private Path & Secret Leak Protection**: Scans staged content against `LocalPaths.ahk.example` to ensure personal absolute paths, usernames, and private credentials are never committed.
 2. **Check 2: Prohibited File Staging**: Prevents staging unencrypted sensitive files, lock files, or temporary manifests.
 3. **Check 3: Dash Linting & Anti-Slop Enforcement**: Runs `python scripts/clean_dashes.py --check` across staged files. If violations exist, commit is blocked with instructions to run `python scripts/clean_dashes.py --staged`.
+
+---
+
+## Repository Code Conventions
+
+To keep all scripts maintainable and prevent regressions across AI assistants and manual edits, adhere to the following code patterns:
+
+### 1. HotkeyHelp Comment and Parsing Syntax
+`AllScripts/HotkeyHelp.ahk` parses `.ahk` files via regular expressions to build its two-column GUI. To ensure hotkeys render accurately:
+- **Right arrow for headers**: Use `->` in section header comments (`Key -> Action`).
+- **Left arrow for inline descriptions**: Use `<-` in inline comments (`Key::Action ;{ <- Description}`). The left arrow visually and syntactically links the description back to the hotkey in the GUI.
+- **Explicit comment on multi-line hotkeys**: Hotkeys spanning multiple lines (e.g. `$!F4::`) or defined within `#If` context blocks (e.g. `WheelUp::Send {Volume_Up}`) must have an inline semicolon comment on the declaration line itself. Without this, Hotkey Help cannot determine the intended description and renders the entry blank.
+
+### 2. Chromium Omnibox Settle Delay
+When automating string expansions or URL navigation via `:X*:key.::PasteText("...")` in Chromium-based browsers (Chrome, Brave), AutoHotkey's simulated backspaces race against clipboard paste operations.
+- Always include a 50ms settle delay (`Sleep, 50`) inside clipboard paste helpers between setting clipboard data and executing `SendInput, ^v`.
+
+### 3. Strict Path Decoupling
+- **No hardcoded fallback leaks**: Never write ternary fallbacks like `PATH_VAR ? PATH_VAR : "C:\Program Files\..."` in tracked scripts. Even behind a conditional check, the string literal leaks machine-specific paths into the public git log.
+- **Fail open or query registry**: If an optional path variable in `LocalPaths.ahk` is unset, fail open, skip gracefully, or resolve the executable name directly via Windows registry `App Paths` or the system `PATH`.
+

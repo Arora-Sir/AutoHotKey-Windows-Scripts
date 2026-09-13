@@ -132,52 +132,40 @@ ShowBottomRightBadge(msg, bgColorHex, displayMs := 0) {
     hFont := ErrorLevel
     hOldFont := DllCall("SelectObject", "ptr", hDC, "ptr", hFont, "ptr")
 
-    ; Measure single-line extent first (DT_CALCRECT | DT_SINGLELINE = 0x420)
-    VarSetCapacity(RECT_SINGLE, 16, 0)
-    DllCall("DrawTextW", "ptr", hDC, "wstr", msg, "int", -1, "ptr", &RECT_SINGLE, "uint", 0x420)
-    measuredW_single := NumGet(RECT_SINGLE, 8, "int") - NumGet(RECT_SINGLE, 0, "int")
-    measuredH_single := NumGet(RECT_SINGLE, 12, "int") - NumGet(RECT_SINGLE, 4, "int")
+    ; 2. Measure text dimensions via GDI DrawText
+    isMultiLine := InStr(msg, "`n") ? true : false
+    dtFormat := isMultiLine ? 0x400 : 0x420 ; 0x400 = DT_CALCRECT (multi-line), 0x420 = DT_CALCRECT | DT_SINGLELINE
 
-    ; Max inline single-line width: generous 60% of monitor width (e.g. 1150px on 1080p, 1530px on 2560x1600)
-    maxInlineBadgeW := Floor(monW * 0.60)
-    if (maxInlineBadgeW < 450)
-        maxInlineBadgeW := 450
+    VarSetCapacity(RECT_TEXT, 16, 0)
+    DllCall("DrawTextW", "ptr", hDC, "wstr", msg, "int", -1, "ptr", &RECT_TEXT, "uint", dtFormat)
+    measuredW := NumGet(RECT_TEXT, 8, "int") - NumGet(RECT_TEXT, 0, "int")
+    measuredH := NumGet(RECT_TEXT, 12, "int") - NumGet(RECT_TEXT, 4, "int")
 
-    ; Scale padding, height, and corner radius proportionally with measured single-line text height
-    padX := Max(26, Floor(measuredH_single * 1.15))
-    padY := Max(13, Floor(measuredH_single * 0.45))
-    badgeH := Max(50, measuredH_single + (padY * 2))
-    cornerR := Max(11, Floor(badgeH * 0.22))
-
-    if (measuredW_single + (padX * 2) <= maxInlineBadgeW) {
-        ; --- PREFERRED: SLEEK SINGLE-LINE INLINE PILL ---
-        GuiControl, BottomRightBadge: -Wrap, %hTextCtl%
-        badgeW := measuredW_single + (padX * 2)
-        minBadgeW := Max(220, Floor(monW * 0.12))
-        if (badgeW < minBadgeW)
-            badgeW := minBadgeW
-        textW := measuredW_single + 10 ; extra breathing room prevents subpixel word wrap
-        textH := measuredH_single
-        textX := Floor((badgeW - textW) / 2)
-        textY := Floor((badgeH - textH) / 2)
+    ; Proportional padding and sizing
+    if (isMultiLine) {
+        padX := 24
+        padY := 12
+        badgeW := measuredW + (padX * 2)
+        badgeH := Max(52, measuredH + (padY * 2))
+        cornerR := Max(10, Floor(badgeH * 0.18))
+        GuiControl, BottomRightBadge: +Center, %hTextCtl%
     } else {
-        ; --- FALLBACK: MULTI-LINE WORD-WRAPPED BOX (only for extreme strings) ---
-        GuiControl, BottomRightBadge: +Wrap, %hTextCtl%
-        maxWrapTextW := maxInlineBadgeW - (padX * 2)
-        VarSetCapacity(RECT_WRAP, 16, 0)
-        NumPut(maxWrapTextW, RECT_WRAP, 8, "int")
-        DllCall("DrawTextW", "ptr", hDC, "wstr", msg, "int", -1, "ptr", &RECT_WRAP, "uint", 0x410)
-        measuredW_wrap := NumGet(RECT_WRAP, 8, "int") - NumGet(RECT_WRAP, 0, "int")
-        measuredH_wrap := NumGet(RECT_WRAP, 12, "int") - NumGet(RECT_WRAP, 4, "int")
-
-        badgeW := measuredW_wrap + (padX * 2)
-        badgeH := measuredH_wrap + (padY * 2)
-        cornerR := Max(10, Floor(badgeH * 0.15))
-        textW := measuredW_wrap + 4
-        textH := measuredH_wrap
-        textX := padX
-        textY := padY
+        padX := Max(24, Floor(measuredH * 1.1))
+        padY := Max(12, Floor(measuredH * 0.45))
+        badgeH := Max(48, measuredH + (padY * 2))
+        badgeW := measuredW + (padX * 2)
+        cornerR := Max(10, Floor(badgeH * 0.22))
+        GuiControl, BottomRightBadge: -Wrap +Center, %hTextCtl%
     }
+
+    minBadgeW := 220
+    if (badgeW < minBadgeW)
+        badgeW := minBadgeW
+
+    textW := measuredW + 8
+    textH := measuredH
+    textX := Floor((badgeW - textW) / 2)
+    textY := Floor((badgeH - textH) / 2)
 
     DllCall("SelectObject", "ptr", hDC, "ptr", hOldFont)
     DllCall("ReleaseDC", "ptr", hGui, "ptr", hDC)
@@ -402,6 +390,19 @@ IsExternalDisplayActive() {
         NumPut(840, dispDev, 0, "UInt")
     }
     return false
+}
+
+; Checks if the system is currently in Second Screen Only mode (headless tablet display).
+; True ONLY when internal laptop panel (DISPLAY1) is missing/detached.
+; In Extend or Duplicate mode, DISPLAY1 is active, so this returns false.
+IsSecondScreenOnly() {
+    SysGet, monCount, MonitorCount
+    Loop, %monCount% {
+        SysGet, mName, MonitorName, %A_Index%
+        if InStr(mName, "DISPLAY1")
+            return false
+    }
+    return true
 }
 
 

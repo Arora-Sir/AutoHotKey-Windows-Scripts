@@ -16,7 +16,6 @@
 ; Win+Shift+A -> Open Notification center
 ; Win+Shift+E -> (Folder) Open Downloads (My Screenshots) folder
 ; Win+Shift+J -> (Folder) Open Java Course
-; Win+Alt+P -> Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)
 ; Win+Alt+C -> Run Alarm Clock
 ; Win+Alt+Ctr+C -> Open PowerShell
 ; Win+Alt+Ctr+K -> Click Center of Screen (Disabled)
@@ -97,13 +96,9 @@ global g_LastActiveBrowserTime := 0
 ; Publish for StartupScript.ahk's master submenu mirroring (see SharedHelpers.ahk).
 ; Logical feature groups are divided by horizontal separators (["-"]):
 ;   Group 1: Skills Vault Status & Cycle Mode
-;   Group 2: Sunshine & Project Display Toggles
-;   Group 3: Browser DRM Streaming Mode
+;   Group 2: Browser DRM Streaming Mode
 PublishTrayMenuManifest([ ["Skills: Vault Status (Show Toast)", "TraySkillsVaultStatus"]
                         , ["Skills: Cycle Skills Vault Mode (Win+Alt+L)", "TraySkillsVaultCycle"]
-                        , ["-"]
-                        , ["Project: Toggle Display Mode (Win+Alt+P)", "TrayToggleDisplayMode"]
-                        , ["Project: Duplicate Display Only", "TrayDuplicateDisplayMode"]
                         , ["-"]
                         , ["Browser: Toggle DRM Streaming Mode", "TrayDRMStreamingModeToggle"] ])
 
@@ -112,18 +107,6 @@ SetTimer, UpdateSkillsTrayStatus, -100 ; Fast initial update
 SetTimer, UpdateDRMTrayStatus, 3000
 SetTimer, UpdateDRMTrayStatus, -100 ; Fast initial update
 SetTimer, TrackActiveBrowser, 250
-
-; Win32 WM_DISPLAYCHANGE (0x007E) - auto-recovery on laptop lid open
-global g_LastManualDisplaySwitch := 0
-OnMessage(0x007E, "OnDisplayChange_LidRecovery")
-
-; Win32 WM_POWERBROADCAST (0x0218) for sleep/wake and WM_WTSSESSION_CHANGE (0x02B1) for unlock
-OnMessage(0x0218, "OnPowerBroadcast_WakeRecovery")
-DllCall("wtsapi32.dll\WTSRegisterSessionNotification", "Ptr", A_ScriptHwnd, "UInt", 0)
-OnMessage(0x02B1, "OnSessionChange_DisplayCheck")
-
-; Automatically align Simple Sticky Notes to current display mode on startup
-AutoApplyStickyNotesLayout(1500)
 
 #If MouseIsOver("ahk_class Shell_TrayWnd")
     ;   WheelUp::SoundSet +1   ;Hide OSD
@@ -973,9 +956,6 @@ $^c::CopyToClipboard() ;{ <- OneNote Copy Mechanism Handeling (instead of SS)
 ; Win+Shift+A Open Notification center
 #+A::OpenActionCenter() ;{ <- Open Notification center
 
-; Win+Alt+P Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet 2560x1600 @ 120Hz)
-#!p::ToggleTabletDisplayMode() ;{ <- Toggle Display Mode
-
 ; Win+Alt+N Clear Notification center
 #!N::ClearNotificaitons() ;{ <- Clear Notifications (Win 11)
 
@@ -1276,14 +1256,6 @@ TraySkillsVaultCycle:
     TogglePersonalSkillsLock()
 return
 
-TrayToggleDisplayMode:
-    ToggleTabletDisplayMode()
-return
-
-TrayDuplicateDisplayMode:
-    SwitchToDuplicateDisplayMode()
-return
-
 UpdateSkillsTrayStatus:
     global g_SkillsTrayStatusLabel
     modeFile := A_Temp "\skills_vault_mode.flag"
@@ -1316,297 +1288,6 @@ return
 ; file and BackgroundAutomations.ahk's WatchSkillsLock call it, so the
 ; [LOCKED]/[UNLOCKED]/[AUTO]/error color mapping is defined exactly once.
 ; [END: Personal Skills Lock/Unlock 3-Way Toggle]
-
-LogDisplayRecovery(msg) {
-    logsDir := A_ScriptDir "\Logs"
-    if !FileExist(logsDir)
-        FileCreateDir, %logsDir%
-    logFile := logsDir "\display_recovery.log"
-    FormatTime, ts, , yyyy-MM-dd HH:mm:ss
-    FileAppend, % "[" ts "] " msg "`n", %logFile%
-}
-
-; [START: Tablet Headless Display & Mouse Speed Toggle (Win+Alt+P)]
-; Restores the host laptop to PC Screen Only mode:
-; 1. Resets mouse speed to 10 (normal) and acceleration to 1 (Enhance pointer precision ON).
-; 2. Clears Sunshine mouse watchdog marker files (.fast_since and sunshine_manual_switch.flag).
-; 3. Native Win32 SetDisplayConfig driver call (0x81 = SDC_APPLY | SDC_TOPOLOGY_INTERNAL) plus DisplaySwitch.exe 1 companion.
-; 4. Re-applies Simple Sticky Notes layout for the 1080p laptop display once DWM settles (can be skipped during pre-sleep).
-; 5. Cycles Suspend (On -> 50ms -> Off) to ensure the low-level keyboard hook is alive and registered, preserving manual suspend state if set.
-RestoreLaptopDisplayMode(delayNotesMs := 1200, skipNotes := false) {
-    global PATH_SUNSHINE_SCRIPTS, g_LastManualDisplaySwitch
-    g_LastManualDisplaySwitch := A_TickCount ; Guard against loop re-entry from subsequent WM_DISPLAYCHANGE
-
-    ; 1. Reset mouse speed to 10 (normal) and acceleration to 1 (Enhance pointer precision ON)
-    DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
-    VarSetCapacity(accel, 12, 0)
-    NumPut(6, accel, 0, "Int")
-    NumPut(10, accel, 4, "Int")
-    NumPut(1, accel, 8, "Int")
-    DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
-
-    ; 2. Clear marker files for SunshineMouseWatchdog
-    markerFile := PATH_SUNSHINE_SCRIPTS ? (PATH_SUNSHINE_SCRIPTS "\.fast_since") : ""
-    if (markerFile)
-        FileDelete, %markerFile%
-    FileDelete, % A_Temp "\sunshine_manual_switch.flag"
-
-    ; 3. Native silent switch to PC Screen Only (1 = Internal 1080p @ 144Hz panel)
-    ; Direct Win32 SetDisplayConfig call bypasses Modern Shell flyout blocks on locked desktops
-    DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000081, "UInt")
-    Run, DisplaySwitch.exe 1,, Hide
-
-    ; 4. Restore Simple Sticky Notes to exact laptop coordinates once 1080p DWM settles (skipped during pre-sleep)
-    if (!skipNotes)
-        ApplyLaptopStickyNotesLayout(delayNotesMs)
-
-    ; 5. Re-cycle keyboard hook to guarantee hotkeys are responsive after sleep/wake
-    wasSuspended := A_IsSuspended
-    Suspend, On
-    Sleep, 50
-    if (!wasSuspended)
-        Suspend, Off
-}
-
-; Checks if the system is currently displaying on a second screen (tablet dummy plug or external display)
-; True if internal laptop panel (DISPLAY1) is missing/detached OR primary monitor is DISPLAY4 (HDMI dummy plug).
-IsSecondScreenActive() {
-    SysGet, monCount, MonitorCount
-    hasInternal := false
-    Loop, %monCount%
-    {
-        SysGet, mName, MonitorName, %A_Index%
-        if InStr(mName, "DISPLAY1")
-        {
-            hasInternal := true
-            break
-        }
-    }
-
-    SysGet, primIndex, MonitorPrimary
-    SysGet, monName, MonitorName, %primIndex%
-
-    return (!hasInternal) || InStr(monName, "DISPLAY4")
-}
-
-; Toggles cleanly between PC Screen Only (laptop 1080p @ 144Hz, mouse speed 10) and
-; Second Screen Only (tablet dummy plug 2560x1600 @ 120Hz, mouse speed 20).
-; Uses native Windows 11 numeric switches (1 vs 4) with zero GUI menus, zero delays,
-; and no misplaced toast overlays.
-ToggleTabletDisplayMode() {
-    global PATH_SUNSHINE_SCRIPTS, g_LastManualDisplaySwitch
-    g_LastManualDisplaySwitch := A_TickCount
-    markerFile := PATH_SUNSHINE_SCRIPTS ? (PATH_SUNSHINE_SCRIPTS "\.fast_since") : ""
-
-    ; Toggle cleanly between Second Screen Only (Tablet dummy plug) and PC Screen Only (Laptop)
-    if (IsSecondScreenActive()) {
-        ; --- SWITCH TO LAPTOP MODE ---
-        RestoreLaptopDisplayMode(1200)
-    } else {
-        ; --- SWITCH TO TABLET MODE ---
-        ; Bail out if there is no second display attached at all (prevents blank screen if no external monitor or dummy plug is connected).
-        if (!HasSecondDisplayConnected()) {
-            ShowTimedToolTip("No second display detected - staying on current display.", 2000)
-            return
-        }
-
-        ; 1. Boost mouse speed to 20 (fast) and acceleration to 0 (Enhance pointer precision OFF)
-        DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 20, "UInt", 3)
-        VarSetCapacity(accel, 12, 0)
-        NumPut(6, accel, 0, "Int")
-        NumPut(10, accel, 4, "Int")
-        NumPut(0, accel, 8, "Int")
-        DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
-
-        ; 2. Create marker files for SunshineMouseWatchdog: "manual" content in the main marker
-        ; (rather than the empty file set_fast.ps1 creates) lets it tell a deliberate manual
-        ; toggle apart from a real Sunshine session, and the separate manualFlag below adds a
-        ; 20s grace window so the watchdog doesn't act on a stale sunshine.log/Tailscale reading
-        ; before the user has had a chance to actually open Moonlight (see SunshineMouseWatchdog.ahk's
-        ; own MANUAL OVERRIDE comment for the full reasoning).
-        FileDelete, %markerFile%
-        FileAppend, manual, %markerFile%
-        manualFlag := A_Temp "\sunshine_manual_switch.flag"
-        FileDelete, %manualFlag%
-        FileAppend, % A_TickCount, %manualFlag%
-
-        ; 3. Native silent switch to Second Screen Only (4 = External)
-        ; Direct Win32 SetDisplayConfig call (SDC_APPLY | SDC_TOPOLOGY_EXTERNAL = 0x88)
-        DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000088, "UInt")
-        Run, DisplaySwitch.exe 4,, Hide
-
-        ; 4. Apply Simple Sticky Notes tablet layout once 2560x1600 DWM settles
-        ApplyTabletStickyNotesLayout(1200)
-    }
-}
-
-; Switches to Duplicate display mode (mirrors the laptop screen onto the tablet's dummy plug).
-; Treated the same as ToggleTabletDisplayMode()'s Tablet/Second-screen-only branch for mouse speed and the SunshineMouseWatchdog marker, since the tablet's dummy-plug display is still active while duplicated.
-; Self-contained rather than sharing code with that function, so its own behavior stays untouched.
-SwitchToDuplicateDisplayMode() {
-    global PATH_SUNSHINE_SCRIPTS, g_LastManualDisplaySwitch
-
-    ; Bail out if there is no second display attached at all.
-    if (!HasSecondDisplayConnected()) {
-        ShowTimedToolTip("No second display detected - staying on current display.", 2000)
-        return
-    }
-
-    g_LastManualDisplaySwitch := A_TickCount
-    markerFile := PATH_SUNSHINE_SCRIPTS ? (PATH_SUNSHINE_SCRIPTS "\.fast_since") : ""
-
-    ; Boost mouse speed to 20 (fast) and acceleration to 0 (Enhance pointer precision OFF) - same treatment as ToggleTabletDisplayMode()'s tablet branch.
-    DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 20, "UInt", 3)
-    VarSetCapacity(accel, 12, 0)
-    NumPut(6, accel, 0, "Int")
-    NumPut(10, accel, 4, "Int")
-    NumPut(0, accel, 8, "Int")
-    DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
-
-    ; Create marker files for SunshineMouseWatchdog - same "manual" + 20s-grace-window convention
-    ; as ToggleTabletDisplayMode()'s tablet branch (see that function's own comment for why).
-    FileDelete, %markerFile%
-    FileAppend, manual, %markerFile%
-    manualFlag := A_Temp "\sunshine_manual_switch.flag"
-    FileDelete, %manualFlag%
-    FileAppend, % A_TickCount, %manualFlag%
-
-    ; Native silent switch to Duplicate (2 = Duplicate, matching the existing 1/4 convention ToggleTabletDisplayMode() already uses for PC-only/Second-screen-only).
-    ; Direct Win32 SetDisplayConfig call (SDC_APPLY | SDC_TOPOLOGY_CLONE = 0x82)
-    DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000082, "UInt")
-    Run, DisplaySwitch.exe 2,, Hide
-
-    ; Apply tablet layout for dummy-plug mirror mode once DWM settles
-    ApplyTabletStickyNotesLayout(1200)
-}
-
-; Hardware lid-open auto-recovery handler:
-; Fires instantaneously on Win32 WM_DISPLAYCHANGE (0x007E) whenever displays change.
-; Detects when the laptop lid opens (DISPLAY1 returns) while in tablet streaming mode, restoring mouse speed to 10 and resetting display to PC Screen Only silently.
-OnDisplayChange_LidRecovery(wParam, lParam, msg, hwnd) {
-    global PATH_SUNSHINE_SCRIPTS, g_LastManualDisplaySwitch
-    markerFile := PATH_SUNSHINE_SCRIPTS ? (PATH_SUNSHINE_SCRIPTS "\.fast_since") : ""
-
-    ; Always re-align sticky notes whenever the display topology changes (both manual Win+Alt+P and lid events)
-    AutoApplyStickyNotesLayout(1200)
-
-    ; Guard 1: Ignore display events triggered by manual Win+Alt+P toggles (within 4s)
-    if (g_LastManualDisplaySwitch && (A_TickCount - g_LastManualDisplaySwitch < 4000))
-        return
-
-    ; Guard 2: Only act if tablet streaming mode was active (fast marker present)
-    if (!markerFile || !FileExist(markerFile))
-        return
-
-    ; Check if DISPLAY1 (internal laptop panel) has returned
-    SysGet, monCount, MonitorCount
-    hasInternal := false
-    Loop, %monCount%
-    {
-        SysGet, mName, MonitorName, %A_Index%
-        if InStr(mName, "DISPLAY1")
-        {
-            hasInternal := true
-            break
-        }
-    }
-
-    ; If internal panel is present while marker exists, the laptop lid was opened
-    if (hasInternal)
-    {
-        RestoreLaptopDisplayMode(1200)
-    }
-}
-
-; Hardware sleep / wake / resume auto-recovery handler:
-; Fires on Win32 WM_POWERBROADCAST (0x0218) for sleep preparation and resume from hibernate/sleep.
-;   wParam  4 (0x04) = PBT_APMSUSPEND         (system is preparing to suspend / hibernate)
-;   wParam 18 (0x12) = PBT_APMRESUMEAUTOMATIC (any system wake, incl. Modern Standby)
-;   wParam  7 (0x07) = PBT_APMRESUMESUSPEND   (user-initiated resume after suspend)
-OnPowerBroadcast_WakeRecovery(wParam, lParam, msg, hwnd) {
-    if (wParam = 4)
-    {
-        ; Intercept hibernate while system is still unlocked so hiberfil.sys saves DISPLAY1 as active.
-        ; Skip sticky notes repositioning so system enters sleep without delay.
-        if (IsSecondScreenActive())
-        {
-            LogDisplayRecovery("Pre-suspend (wParam=4): Second screen active. Restoring laptop panel before hibernate.")
-            RestoreLaptopDisplayMode(0, true)
-        }
-        else
-        {
-            LogDisplayRecovery("Pre-suspend (wParam=4): Laptop panel already active. No switch required.")
-        }
-    }
-    else if (wParam = 18 || wParam = 7)
-    {
-        LogDisplayRecovery("Wake broadcast (wParam=" wParam "): Arming 3-wave recovery timers.")
-        ; Triple-wave recovery architecture:
-        ; Wave 1: 1000ms after wake for initial GPU bus and EDID negotiation
-        SetTimer, ResumeDisplayOnWake_Wave1, -1000
-        ; Wave 2: 3000ms fail-safe verification if slow graphics driver dropped wave 1
-        SetTimer, ResumeDisplayOnWake_Wave2, -3000
-        ; Wave 3: 5000ms final confirmation
-        SetTimer, ResumeDisplayOnWake_Wave3, -5000
-    }
-}
-
-ResumeDisplayOnWake_Wave1:
-    if (IsSecondScreenActive())
-    {
-        LogDisplayRecovery("Wake Wave 1 (1000ms): Second screen active. Restoring laptop display mode.")
-        RestoreLaptopDisplayMode(1200)
-    }
-    else
-    {
-        ; Already on laptop display: refresh keyboard hook so hotkeys work without screen flicker
-        wasSuspended := A_IsSuspended
-        Suspend, On
-        Sleep, 50
-        if (!wasSuspended)
-            Suspend, Off
-    }
-return
-
-ResumeDisplayOnWake_Wave2:
-    if (IsSecondScreenActive())
-    {
-        LogDisplayRecovery("Wake Wave 2 (3000ms): Second screen still active. Re-applying restore.")
-        RestoreLaptopDisplayMode(1200)
-    }
-return
-
-ResumeDisplayOnWake_Wave3:
-    if (IsSecondScreenActive())
-    {
-        LogDisplayRecovery("Wake Wave 3 (5000ms): Second screen still active. Final fail-safe restore.")
-        RestoreLaptopDisplayMode(1200)
-    }
-return
-
-; Hardware session change handler:
-; Fires on Win32 WM_WTSSESSION_CHANGE (0x02B1) when session state transitions.
-;   wParam 8 (0x08) = WTS_SESSION_UNLOCK (user unlocked workstation with PIN, face, or fingerprint)
-OnSessionChange_DisplayCheck(wParam, lParam, msg, hwnd) {
-    if (wParam = 8)
-    {
-        if (IsSecondScreenActive())
-        {
-            LogDisplayRecovery("Session Unlock (wParam=8): Second screen active. Restoring laptop display mode.")
-            RestoreLaptopDisplayMode(1200)
-        }
-        else
-        {
-            ; Refresh keyboard hook on unlock to ensure Win+Alt+P and fleet hotkeys are responsive
-            wasSuspended := A_IsSuspended
-            Suspend, On
-            Sleep, 50
-            if (!wasSuspended)
-                Suspend, Off
-        }
-    }
-}
-; [END: Tablet Headless Display & Mouse Speed Toggle]
 
 ; [START: DRM Video Streaming & Hardware Acceleration Toggle]
 ; Toggles Chromium hardware acceleration so DRM video streams without black screen.

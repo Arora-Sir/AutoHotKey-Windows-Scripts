@@ -126,8 +126,12 @@ check_sync() {
         return 0
     fi
     real_vars=$(grep -oE "$pattern" "$real" 2>/dev/null | eval "$cleanup" | sort -u)
-    example_vars=$(grep -oE "$pattern" "$example" 2>/dev/null | eval "$cleanup" | sort -u)
-    missing=$(comm -23 <(echo "$real_vars") <(echo "$example_vars") 2>/dev/null)
+    real_tmp=$(mktemp 2>/dev/null || echo "/tmp/sync_real_$$")
+    example_tmp=$(mktemp 2>/dev/null || echo "/tmp/sync_example_$$")
+    echo "$real_vars" > "$real_tmp"
+    echo "$example_vars" > "$example_tmp"
+    missing=$(comm -23 "$real_tmp" "$example_tmp" 2>/dev/null)
+    rm -f "$real_tmp" "$example_tmp"
     if [ -n "$missing" ]; then
         echo "WARNING: '$real' has entries not yet mirrored in '$example':" >&2
         echo "$missing" >&2

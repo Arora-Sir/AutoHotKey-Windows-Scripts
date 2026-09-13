@@ -68,7 +68,7 @@ Script_5=%a_scriptdir%\HotkeyHelp.ahk
 Script_7=%a_scriptdir%\Watchdog.ahk
 Script_8=%a_scriptdir%\BackgroundAutomations.ahk
 Script_9=%a_scriptdir%\LocalPaths.ahk
-Script_10=%a_scriptdir%\SunshineMouseWatchdog.ahk
+Script_10=%a_scriptdir%\SunshineDisplayWatchdog.ahk
 Script_11=%a_scriptdir%\Ext4SsdManager.ahk
 Script_12=%a_scriptdir%\SharedHelpers.ahk
 
@@ -88,7 +88,7 @@ Files.Push(Script_12)
 ; Scripts pinned to the top of the tray menu's per-script list, in display order.
 ; Everything else falls back to the normal (alphabetical-looking) order below them.
 ; Add or remove a name here to change what's pinned - MenuBuild: below needs no other change.
-PinnedScripts := ["BasicTasks", "PersonalKeywords"]
+PinnedScripts := ["BasicTasks", "PersonalKeywords", "SunshineDisplayWatchdog"]
 
 ; Loop, 1
 ; {
@@ -259,6 +259,20 @@ MenuRecompileStartup:
 	Run, powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "%buildScript%" -Relaunch,, Hide
 return
 
+; Opens StartupScript.ahk in default registered editor (with notepad fallback)
+MenuEditStartupScript:
+	startupAhk := A_ScriptDir "\StartupScript.ahk"
+	try {
+		Run, edit "%startupAhk%"
+	} catch {
+		Run, notepad.exe "%startupAhk%"
+	}
+return
+
+MenuViewKeyHistoryMaster:
+	KeyHistory
+return
+
 ; Cascades a real Suspend-Hotkeys toggle to every managed CHILD script (never the master itself - this cascade never targets the master's own window, so its 4 hotkeys stay reachable regardless).
 ; Targets by path+class, not ahk_pid: a script that has ever shown a SharedHelpers.ahk badge Gui (Hide, not Destroy, after use) can own a second hidden top-level window, and ahk_pid would non-deterministically match either one - only the true main window actually handles this reserved command ID.
 ; Entry point for both the tray item and the hotkey.
@@ -396,6 +410,18 @@ MenuBuild:
 			HasAdditionalScripts := true
 		}
 
+	; Master StartupScript entry tucked inside Additional Scripts for occasional maintenance
+	try Menu, SubMenu_StartupScript, DeleteAll
+	Menu, SubMenu_StartupScript, Add, Edit, MenuEditStartupScript
+	Menu, SubMenu_StartupScript, Add, Recompile && Relaunch, MenuRecompileStartup
+	Menu, SubMenu_StartupScript, Add, View Key History, MenuViewKeyHistoryMaster
+
+	if (HasAdditionalScripts)
+	{
+		Menu, SubMenu_AdditionalScripts, Add
+		Menu, SubMenu_AdditionalScripts, Add, StartupScript, :SubMenu_StartupScript
+	}
+
 	if (HasPinned && HasAdditionalScripts)
 		Menu, Tray, Add ; separator between pinned scripts and additional scripts
 
@@ -425,6 +451,52 @@ MenuBuild:
 		Menu, Tray, Icon, % A_ScriptDir "\..\Startup_Script.ico"
 	else
 		Menu, Tray, Icon
+
+	gosub UpdateSunshineDisplayMenuChecks
+return
+
+; Dynamically applies checkmarks to active display mode inside SunshineDisplayWatchdog's submenu
+UpdateSunshineDisplayMenuChecks:
+	PID := Scripts["SunshineDisplayWatchdog", "PID"]
+	if (!PID)
+		return
+
+	SysGet, monCount, MonitorCount
+	hasInternal := false
+	Loop, %monCount%
+	{
+		SysGet, mName, MonitorName, %A_Index%
+		if InStr(mName, "DISPLAY1")
+			hasInternal := true
+	}
+
+	isDuplicate := false
+	if (monCount >= 2)
+	{
+		SysGet, m1, Monitor, 1
+		SysGet, m2, Monitor, 2
+		if (m1Left = m2Left && m1Top = m2Top && m1Right = m2Right && m1Bottom = m2Bottom)
+			isDuplicate := true
+	}
+
+	itemLaptop    := "PC Screen Only (1080p @ 144Hz)`tWin+Alt+P"
+	itemTablet    := "Tablet Only (2560x1600 @ 120Hz)`tWin+Alt+P"
+	itemExtend    := "Extend Displays (Dual Screens)`tWin+Alt+Shift+P"
+	itemDuplicate := "Duplicate Displays (Mirror)`tWin+Alt+Shift+P"
+
+	try Menu, SubMenu_%PID%, Uncheck, %itemLaptop%
+	try Menu, SubMenu_%PID%, Uncheck, %itemTablet%
+	try Menu, SubMenu_%PID%, Uncheck, %itemExtend%
+	try Menu, SubMenu_%PID%, Uncheck, %itemDuplicate%
+
+	if (!hasInternal)
+		try Menu, SubMenu_%PID%, Check, %itemTablet%
+	else if (monCount >= 2 && isDuplicate)
+		try Menu, SubMenu_%PID%, Check, %itemDuplicate%
+	else if (monCount >= 2)
+		try Menu, SubMenu_%PID%, Check, %itemExtend%
+	else
+		try Menu, SubMenu_%PID%, Check, %itemLaptop%
 return
 
 ScriptCommand:
@@ -593,15 +665,7 @@ AHK_NOTIFYICON(wParam, lParam, uMsg, hWnd) ; OnMessage(0x404, "AHK_NOTIFYICON")
 	; Both left-click and right-click open the master tray context menu.
 	else if (lParam = 0x202 || lParam = 0x205) ; WM_LBUTTONUP or WM_RBUTTONUP
 	{
-		; CoordMode, Mouse, Screen
-		; CoordMode, Menu, Screen
-		; MouseGetPos, mX, mY
-		; ; Windows 10/11 toast notifications occupy the bottom-right ~380-420px.
-		; ; If clicked near the tray, shift menu anchor left (~620px from right edge)
-		; ; so the menu body stays clear of incoming toast notifications.
-		; safeX := (mX > A_ScreenWidth - 450) ? (A_ScreenWidth - 620) : mX
-		; Menu, Tray, Show, %safeX%, %mY%
-
+		gosub UpdateSunshineDisplayMenuChecks
 		Menu, Tray, Show
 		return 0
 	}
@@ -609,8 +673,8 @@ AHK_NOTIFYICON(wParam, lParam, uMsg, hWnd) ; OnMessage(0x404, "AHK_NOTIFYICON")
 
 AHK_DISPLAYCHANGE(wParam, lParam) ; OnMessage(0x7E, "AHK_DISPLAYCHANGE")
 {
-	; Cleanup Tray Icons on Resolution Change
 	TrayIconRemove(8) ; Resolution Change can take a moment so try over time
+	gosub UpdateSunshineDisplayMenuChecks
 }
 
 AHK_TASKBARCREATED(wParam, lParam)

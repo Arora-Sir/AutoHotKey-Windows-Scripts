@@ -74,24 +74,30 @@ Protects personal skills vaults, private study roadmaps, and sensitive configura
 
 ---
 
-## Tablet Headless Display & Mouse Speed Engine (Moonlight / Sunshine)
+## Tablet Headless Display & Mouse Speed Engine (SunshineDisplayWatchdog)
 
-Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or handheld device via Moonlight and Sunshine without physical monitor constraints.
+Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or handheld device via Moonlight and Sunshine without physical monitor constraints. Managed by `SunshineDisplayWatchdog.ahk`, pinned directly at the top of `StartupScript`'s master tray menu.
 
-- **Toggle Hotkey**:
-  - Press **`Win+Alt+P`** (or click **"Project: Toggle Display Mode"** in the `BasicTasks` tray submenu).
-  - **Laptop Screen Mode**: Sets internal display to 1080p @ 144Hz, mouse speed to 10 (normal), and pointer precision to ON.
-  - **Tablet Streaming Mode**: Switches to headless virtual display (2560x1600 @ 120Hz), boosts mouse speed to 20 (fast), and turns pointer precision OFF for 1:1 tablet stylus/touch tracking.
-- **Duplicate Display Tray Action**:
-  - Click **"Project: Duplicate Display Only"** in the `BasicTasks` tray submenu to mirror the laptop screen to the tablet dummy plug.
-- **Watchdog Auto-Recovery (`SunshineMouseWatchdog.ahk`)**:
-  - Monitors Sunshine streaming logs and the tablet's Tailscale IP address. If the tablet drops offline or the stream terminates while fast mode is active, it automatically restores mouse speed to 10.
+- **Display Switching Hotkeys**:
+  - Press **`Win+Alt+P`**: Toggles between **PC Screen Only** (1080p @ 144Hz, mouse speed 10, pointer precision ON) and **Tablet Only** (dummy plug 2560x1600 @ 120Hz, mouse speed 20, pointer precision OFF). Resets mouse speed in 0 milliseconds.
+  - Press **`Win+Alt+Shift+P`**: Toggles between **Extend Displays** (dual screen desktop, mouse speed 10) and **Duplicate Displays** (mirrored screen, mouse speed 20).
+- **Master Tray Submenu & Dynamic Status Checkmarks**:
+  - Pinned directly at the top level of the master AutoHotkey tray menu with zero extra standalone icons cluttering the notification area.
+  - Submenu provides 1-click switching between PC Screen Only, Tablet Only, Extend Displays, and Duplicate Displays with a dynamic checkmark (tick) highlighting the currently active display topology.
+  - Modern bottom-right rounded dark toast badge (`ShowBottomRightBadge`) displays mode transitions for 2.5 seconds with auto-calculated dimensions.
+- **Sunshine Extended Desktop Profile**:
+  - Dedicated "Desktop (Extended Tab)" profile in Sunshine (`apps.json`) targeting `\\.\DISPLAY4`.
+  - Tablet displays the extended monitor directly while the laptop remains the primary display with all taskbar notification icons intact.
+- **Watchdog Auto-Recovery (`SunshineDisplayWatchdog.ahk`)**:
+  - Fast-reacting watchdog loop checks session state every 1.5 seconds.
+  - Disconnect or pause restores normal mouse speed (10) within 1.5 seconds (streak = 1 poll).
+  - Active display topology guard: when on PC Screen Only, watchdog never forces fast mouse speed (20), preventing speed-sticking glitches.
 - **Hardware Lid-Open Auto-Recovery**:
-  - When in tablet streaming mode with the laptop lid closed, opening the lid triggers a Win32 `WM_DISPLAYCHANGE` notification.
-  - `OnDisplayChange_LidRecovery` detects the return of the internal laptop panel (`DISPLAY1`), restores mouse speed to 10, and switches display topology back to PC Screen Only.
+  - Opening laptop lid triggers a Win32 `WM_DISPLAYCHANGE` notification.
+  - Automatically restores mouse speed to 10 and switches display topology back to PC Screen Only if `monCount <= 1`. In Extend or Duplicate mode, multi-monitor configuration is preserved untouched.
 - **System Wake, Hibernate & Session Unlock Auto-Recovery**:
   - Catches Win32 `WM_POWERBROADCAST` (0x0218) system resume events.
-  - Triple-wave recovery (1000ms, 3000ms, and 5000ms) automatically switches display topology back to PC Screen Only (`DISPLAY1`), restores mouse speed to 10, cycles low-level keyboard hooks to prevent dead keys after Modern Standby, and suppresses stale pre-wake Sunshine log events.
+  - Triple-wave recovery (1000ms, 3000ms, and 5000ms) restores display topology to PC Screen Only (`DISPLAY1`), restores mouse speed to 10, cycles low-level keyboard hooks to prevent dead keys after Modern Standby, and suppresses stale pre-wake Sunshine log events.
   - Catches Win32 `WM_WTSSESSION_CHANGE` (0x02B1) `WTS_SESSION_UNLOCK` events: automatically re-checks display state upon user unlock, restores laptop mode if dummy plug remained active, and refreshes keyboard hooks.
 - **Simple Sticky Notes Multi-Resolution Auto-Arrangement (`apply_ssn_layout.ps1`)**:
   - Automatically re-arranges Simple Sticky Notes (`ssn.exe`) windows to match the active screen resolution and DPI scaling:
@@ -184,8 +190,8 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
 `StartupScript.ahk` consolidates the entire fleet into a clean, single system tray icon:
 
 - **Left-Click & Right-Click**: Both left-click and right-click on the tray icon open the master tray context menu. Nothing else.
-- **Pinned Scripts**: Pinned scripts (`BasicTasks`, `PersonalKeywords`) sit at the top level of the menu for instant access.
-- **Additional Scripts Submenu**: All remaining background scripts (`BackgroundAutomations`, `Brightness`, `ClosePrograms`, `Ext4SsdManager`, `HotkeyHelp`, `SunshineMouseWatchdog`, `Watchdog`) are collapsed into an expandable **"Additional Scripts"** submenu to prevent vertical clutter.
+- **Pinned Scripts**: Pinned scripts (`SunshineDisplayWatchdog`, `BasicTasks`, `PersonalKeywords`) sit at the top level of the menu for instant access.
+- **Additional Scripts Submenu**: All remaining background scripts (`BackgroundAutomations`, `Brightness`, `ClosePrograms`, `Ext4SsdManager`, `HotkeyHelp`, `Watchdog`) are collapsed into an expandable **"Additional Scripts"** submenu to prevent vertical clutter.
 - **Submenu Separator Lines**: Child script submenus cleanly separate standard controls (`View Key History`, `Edit`, `Restart`, `Exit`) from custom published actions using native horizontal separator bars (`-|`).
 - **Global Fleet Actions**: Positioned at the bottom: **"Reload All"**, **"Recompile Startup"**, **"Suspend Hotkeys"** (global cascade toggle), and **"Exit"**.
 
@@ -217,7 +223,6 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
   | `Win+Shift+A`           | Open Notification Center / Action Center                                                             |
   | `Win+Shift+E`           | Open Screenshots Folder (`%UserProfile%\Pictures\Screenshots`)                                       |
   | `Win+Shift+J`           | Open Java Course Folder (`%PATH_JAVA_COURSE%`)                                                       |
-  | `Win+Alt+P`             | Toggle Display Mode (Laptop 1080p @ 144Hz <-> Tablet Headless 2560x1600 @ 120Hz)                     |
   | `Win+Alt+C`             | Run Windows Alarm Clock (`Microsoft.WindowsAlarms`)                                                  |
   | `Win+Alt+Ctrl+C`        | Open PowerShell 7 as Administrator                                                                   |
   | `Win+Alt+N`             | Clear All Notifications in Windows 11 Action Center                                                  |
@@ -243,6 +248,13 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
   | `Ctrl+Shift+WheelUp`    | (In VS Code) Increase Whole UI Zoom (+0.05 zoomLevel)                                                |
   | `Ctrl+Shift+WheelDown`  | (In VS Code) Decrease Whole UI Zoom (-0.05 zoomLevel)                                                |
   | `Capslock+Capslock`     | Double-tap CapsLock to toggle CapsLock on/off (prevents accidental toggling)                         |
+
+- ### SUNSHINE DISPLAY WATCHDOG
+
+  | Key               | Usage                                                                                                       |
+  | :---------------- | :---------------------------------------------------------------------------------------------------------- |
+  | `Win+Alt+P`       | Toggle PC Screen Only (1080p @ 144Hz, mouse speed 10) <-> Tablet Only (2560x1600 @ 120Hz, mouse speed 20) |
+  | `Win+Alt+Shift+P` | Toggle Extend Displays (Dual screens, mouse speed 10) <-> Duplicate Displays (Mirrored, mouse speed 20)    |
 
 - ### EXT4 SSD MANAGER
 
