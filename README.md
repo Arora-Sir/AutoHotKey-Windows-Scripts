@@ -107,8 +107,8 @@ When streaming your desktop to a tablet or remote client via Moonlight/Sunshine,
 
 - **Toggle Action**: Click **"Toggle DRM Streaming Mode"** inside the `BasicTasks` tray submenu.
 - **How it Works**:
-  1. Detects active or running Chromium browsers (Brave and Google Chrome).
-  2. Sends `WM_CLOSE` to gracefully save open tabs and session history, then terminates background processes to unlock configuration files.
+  1. Detects active or frontmost Chromium browser (Brave or Google Chrome) via immediate focus, recent 20-second focus tracking across tray clicks, or desktop window Z-order. If neither browser is active, displays an informative badge and exits gracefully without disrupting background processes.
+  2. Sends `WM_CLOSE` to gracefully save open tabs and session history, then terminates lingering background processes to unlock configuration files.
   3. Atomically edits Chromium's `Local State` JSON file to toggle `"hardware_acceleration_mode": {"enabled": false}`.
   4. Relaunches the browser with `--disable-gpu --restore-last-session --disable-session-crashed-bubble`.
   5. Displays a color-coded bottom-right corner badge indicating the new status.

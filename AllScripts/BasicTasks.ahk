@@ -1615,8 +1615,12 @@ OnSessionChange_DisplayCheck(wParam, lParam, msg, hwnd) {
 ToggleDRMStreamingMode() {
     flagFile := A_Temp "\ahk_drm_streaming_mode.flag"
 
-    ; Target: active focused browser, or running background instances (default: Brave)
+    ; Target: active top browser window currently viewed (not background instances)
     targets := GetTargetBrowsersForDRM()
+    if (targets.Length() = 0) {
+        ShowDRMStatusBadge("[OFF] DRM: No active Chrome or Brave window")
+        return
+    }
 
     ; Toggle rule: if any target has HW acceleration ON -> turn OFF (DRM mode). Otherwise restore ON.
     anyHwEnabled := false
@@ -1646,13 +1650,15 @@ ToggleDRMStreamingMode() {
         SetTimer, UpdateDRMTrayStatus, -100
     } else {
         ; --- DEACTIVATE DRM STREAMING MODE (Restore Hardware Acceleration) ---
-        FileDelete, %flagFile%
-
         for idx, bName in targets {
             CloseBrowserGracefully(bName)
             SetBrowserHardwareAcceleration(bName, true)
             LaunchBrowserInstance(bName, "--restore-last-session --disable-session-crashed-bubble")
         }
+
+        ; Clean flag file only if no remaining browser has HW accel disabled
+        if (GetBrowserHardwareAcceleration("Brave") && GetBrowserHardwareAcceleration("Chrome"))
+            FileDelete, %flagFile%
 
         ShowDRMStatusBadge("[OFF] DRM Streaming: " targetListStr " (HW Accel ON)")
         SetTimer, UpdateDRMTrayStatus, -100
@@ -1679,6 +1685,16 @@ UpdateDRMTrayStatus:
             Menu, Tray, Rename, %g_DRMTrayStatusLabel%, %newLabel%
             g_DRMTrayStatusLabel := newLabel
         }
+    }
+return
+
+TrackActiveBrowser:
+    if WinActive("ahk_exe brave.exe") {
+        g_LastActiveBrowser := "Brave"
+        g_LastActiveBrowserTime := A_TickCount
+    } else if WinActive("ahk_exe chrome.exe") {
+        g_LastActiveBrowser := "Chrome"
+        g_LastActiveBrowserTime := A_TickCount
     }
 return
 ; [END: DRM Video Streaming & Hardware Acceleration Toggle]

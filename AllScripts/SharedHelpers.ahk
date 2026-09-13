@@ -525,10 +525,70 @@ GetBrowserMeta(browserName) {
 }
 
 GetActiveBrowser() {
-    if WinActive("ahk_exe brave.exe")
+    global g_LastActiveBrowser, g_LastActiveBrowserTime
+
+    ; Direct active window check (immediate response if browser currently has focus)
+    if WinActive("ahk_exe brave.exe") {
+        g_LastActiveBrowser := "Brave"
+        g_LastActiveBrowserTime := A_TickCount
         return "Brave"
-    if WinActive("ahk_exe chrome.exe")
+    }
+    if WinActive("ahk_exe chrome.exe") {
+        g_LastActiveBrowser := "Chrome"
+        g_LastActiveBrowserTime := A_TickCount
         return "Chrome"
+    }
+
+    ; If triggered from tray menu or notification area, the tray or taskbar window
+    ; has focus at this instant. Check if Chrome or Brave was focused recently
+    ; (within the last 20 seconds) and is still running.
+    if (g_LastActiveBrowser != "" && (A_TickCount - g_LastActiveBrowserTime < 20000)) {
+        meta := GetBrowserMeta(g_LastActiveBrowser)
+        exeName := meta.exeName
+        if (exeName) {
+            Process, Exist, %exeName%
+            if (ErrorLevel)
+                return g_LastActiveBrowser
+        }
+    }
+
+    ; Fallback: inspect desktop window Z-order (topmost to bottommost)
+    ; to find the topmost visible, unminimized browser window.
+    topBrowser := GetTopBrowserFromZOrder()
+    if (topBrowser != "") {
+        g_LastActiveBrowser := topBrowser
+        g_LastActiveBrowserTime := A_TickCount
+        return topBrowser
+    }
+
+    return ""
+}
+
+GetTopBrowserFromZOrder() {
+    hwnd := DllCall("GetTopWindow", "Ptr", 0, "Ptr")
+    while (hwnd) {
+        if DllCall("IsWindowVisible", "Ptr", hwnd) {
+            WinGetClass, cls, ahk_id %hwnd%
+            ; Ignore shell tray, secondary tray, desktop, task switcher, and context popup menus
+            if (cls != "Shell_TrayWnd" && cls != "Shell_SecondaryTrayWnd" && cls != "#32768" 
+                && cls != "Progman" && cls != "WorkerW" && cls != "NotifyIconOverflowWindow") {
+                WinGet, minMax, MinMax, ahk_id %hwnd%
+                if (minMax != -1) { ; Ensure window is not minimized
+                    WinGet, proc, ProcessName, ahk_id %hwnd%
+                    if (proc = "brave.exe")
+                        return "Brave"
+                    if (proc = "chrome.exe")
+                        return "Chrome"
+                    ; If an application window with a non-empty title is higher in Z-order,
+                    ; then neither Chrome nor Brave was the frontmost application.
+                    WinGetTitle, title, ahk_id %hwnd%
+                    if (title != "" && cls != "Windows.UI.Core.CoreWindow")
+                        return ""
+                }
+            }
+        }
+        hwnd := DllCall("GetWindow", "Ptr", hwnd, "UInt", 2, "Ptr") ; GW_HWNDNEXT = 2
+    }
     return ""
 }
 
@@ -548,11 +608,7 @@ GetTargetBrowsersForDRM() {
     if (active != "")
         return [active]
 
-    running := GetRunningBrowsers()
-    if (running.Length() > 0)
-        return running
-
-    return ["Brave"]
+    return []
 }
 
 CloseBrowserGracefully(browserName, timeoutMs := 3000) {
