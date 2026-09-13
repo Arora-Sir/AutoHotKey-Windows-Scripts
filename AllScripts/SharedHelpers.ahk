@@ -280,8 +280,8 @@ IsSkillsVaultUnlocked() {
 ; DRM STREAMING STATUS BADGE - color-coded toast over ShowBottomRightBadge
 ; -----------------------------------------------------------------------------
 ShowDRMStatusBadge(msg) {
-    if InStr(msg, "[ACTIVE]")
-        bgColor := "1A6E3C" ; Deep green for ACTIVE
+    if (InStr(msg, "[ON]") || InStr(msg, "[ACTIVE]"))
+        bgColor := "1A6E3C" ; Deep green for ON / ACTIVE
     else
         bgColor := "3A3D40" ; Dark slate grey for OFF
 
@@ -392,10 +392,46 @@ IsExternalDisplayActive() {
     return false
 }
 
+; Queries Windows Display Engine kernel for active desktop topology ID.
+; Returns:
+;   1 = SDC_TOPOLOGY_INTERNAL (PC Screen Only)
+;   2 = SDC_TOPOLOGY_CLONE (Duplicate Displays)
+;   4 = SDC_TOPOLOGY_EXTEND (Extend Displays)
+;   8 = SDC_TOPOLOGY_EXTERNAL (Second Screen / Tablet Only)
+;   0 = Query failed
+GetCurrentDisplayTopology() {
+    VarSetCapacity(numPaths, 4, 0)
+    VarSetCapacity(numModes, 4, 0)
+    ; QDC_DATABASE_CURRENT := 4
+    if DllCall("GetDisplayConfigBufferSizes", "UInt", 4, "Ptr", &numPaths, "Ptr", &numModes)
+        return 0
+
+    pCount := NumGet(numPaths, 0, "UInt")
+    mCount := NumGet(numModes, 0, "UInt")
+    if (pCount = 0)
+        return 0
+
+    VarSetCapacity(paths, pCount * 72, 0)
+    VarSetCapacity(modes, mCount * 64, 0)
+    VarSetCapacity(topologyId, 4, 0)
+
+    ret := DllCall("QueryDisplayConfig", "UInt", 4, "Ptr", &numPaths, "Ptr", &paths, "Ptr", &numModes, "Ptr", &modes, "Ptr", &topologyId)
+    if (ret != 0)
+        return 0
+
+    return NumGet(topologyId, 0, "UInt")
+}
+
 ; Checks if the system is currently in Second Screen Only mode (headless tablet display).
-; True ONLY when internal laptop panel (DISPLAY1) is missing/detached.
-; In Extend or Duplicate mode, DISPLAY1 is active, so this returns false.
+; Authoritative via QueryDisplayConfig (SDC_TOPOLOGY_EXTERNAL = 8).
+; Falls back to checking internal panel attachment if QueryDisplayConfig fails.
 IsSecondScreenOnly() {
+    topo := GetCurrentDisplayTopology()
+    if (topo == 8)
+        return true
+    if (topo == 1 || topo == 2 || topo == 4)
+        return false
+
     SysGet, monCount, MonitorCount
     Loop, %monCount% {
         SysGet, mName, MonitorName, %A_Index%
@@ -423,15 +459,25 @@ IsSecondScreenOnly() {
 PublishTrayMenuManifest(itemsArray) {
     SplitPath, A_ScriptFullPath,,,, scriptNameNoExt
     manifestPath := A_Temp "\ahk_traymenu_" scriptNameNoExt ".txt"
-    FileDelete, %manifestPath%
+    content := ""
     for idx, item in itemsArray
     {
         if (!IsObject(item) && (item = "-" || item = ""))
-            FileAppend, -|`n, %manifestPath%
+            content .= "-|`n"
         else if (item[1] = "-" || item[1] = "")
-            FileAppend, -|`n, %manifestPath%
+            content .= "-|`n"
         else
-            FileAppend, % item[1] . "|" . item[2] . "`n", %manifestPath%
+            content .= item[1] . "|" . item[2] . "`n"
+    }
+    try {
+        f := FileOpen(manifestPath, "w", "UTF-8")
+        if (f) {
+            f.Write(content)
+            f.Close()
+        }
+    } catch {
+        FileDelete, %manifestPath%
+        FileAppend, %content%, %manifestPath%, UTF-8
     }
     OnMessage(DllCall("RegisterWindowMessage", "str", "AHK_RemoteTrayMenuTrigger_v1"), "HandleRemoteTrayMenuTrigger")
 }

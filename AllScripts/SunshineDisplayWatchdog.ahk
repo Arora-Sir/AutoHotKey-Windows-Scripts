@@ -54,10 +54,14 @@ global g_LastWakeLogSize       := 0
 global g_LastManualDisplaySwitch := 0
 global g_CurrentDisplayModeLabel := "Unknown"
 
+; Closed-loop handshake state for Extend Displays mode
+global g_ExtendPendingConnect := false
+global g_ExtendTargetLogSize := 0
+global g_ExtendConnectTimeoutTicks := 0
+global g_ExtendNotesDelayMs := 1200
+
 ; Publish manifest for StartupScript master tray integration
-PublishTrayMenuManifest([ ["Show Display Toast", "TrayShowStatusToast"]
-                        , ["-"]
-                        , ["PC Screen Only (1080p @ 144Hz)`tWin+Alt+P", "Menu_SwitchLaptopOnly"]
+PublishTrayMenuManifest([ ["PC Screen Only (1080p @ 144Hz)`tWin+Alt+P", "Menu_SwitchLaptopOnly"]
                         , ["Tablet Only (2560x1600 @ 120Hz)`tWin+Alt+P", "Menu_SwitchTabletOnly"]
                         , ["Extend Displays (Dual Screens)`tWin+Alt+Shift+P", "Menu_SwitchExtend"]
                         , ["Duplicate Displays (Mirror)`tWin+Alt+Shift+P", "Menu_SwitchDuplicate"] ])
@@ -109,17 +113,18 @@ ToggleLaptopVsTablet() {
 
 ; Toggles cleanly between Extend and Duplicate
 ToggleExtendVsDuplicate() {
-    SysGet, monCount, MonitorCount
-    if (monCount < 2 && !HasSecondDisplayConnected()) {
+    if (!HasSecondDisplayConnected()) {
         ShowDisplayBadge("[ALERT]", "No Second Display Detected", "Please attach tablet dummy plug.", "7A3B00")
         return
     }
 
-    ; If internal panel is active alongside a second display, determine whether clone or extend
-    if (IsDisplayTopologyDuplicate())
-        SwitchToExtendMode(1200)
-    else
+    topo := GetCurrentDisplayTopology()
+    ; If currently in Extend mode (topo 4), switch to Duplicate
+    if (topo == 4)
         SwitchToDuplicateMode(1200)
+    ; Otherwise (whether Duplicate, PC Only, or Tablet Only), switch to Extend
+    else
+        SwitchToExtendMode(1200)
 }
 
 ; Switches host to PC Screen Only mode (1080p @ 144Hz, mouse speed 10)
@@ -142,7 +147,7 @@ SwitchToLaptopOnlyMode(delayNotesMs := 1200, skipNotes := false) {
 
     ; 3. Native Win32 SetDisplayConfig call (0x81 = SDC_APPLY | SDC_TOPOLOGY_INTERNAL)
     DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000081, "UInt")
-    Run, DisplaySwitch.exe 1,, Hide
+    Run, %A_WinDir%\System32\DisplaySwitch.exe /internal,, Hide
 
     ; 4. Visual toast notification
     ShowDisplayBadge("[PC ONLY]", "Laptop Display (1080p @ 144Hz)", "Mouse: Normal (10) | Precision: ON", "1A3A5A")
@@ -189,7 +194,7 @@ SwitchToTabletOnlyMode(delayNotesMs := 1200) {
 
     ; 3. Native Win32 SetDisplayConfig call (0x88 = SDC_APPLY | SDC_TOPOLOGY_EXTERNAL)
     DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000088, "UInt")
-    Run, DisplaySwitch.exe 4,, Hide
+    Run, %A_WinDir%\System32\DisplaySwitch.exe /external,, Hide
 
     ; 4. Visual toast notification
     ShowDisplayBadge("[TABLET ONLY]", "Tablet Display (2560x1600 @ 120Hz)", "Mouse: Fast (20) | Precision: OFF", "4A1A6E")
@@ -203,15 +208,151 @@ SwitchToTabletOnlyMode(delayNotesMs := 1200) {
 
 ; Switches host to Extend Displays mode (Laptop Primary + Tablet Secondary)
 SwitchToExtendMode(delayNotesMs := 1200) {
-    global g_LastManualDisplaySwitch, MarkerFile, LogFile
+    global g_LastManualDisplaySwitch, MarkerFile, LogFile, SunshineLog
+    global g_ExtendPendingConnect, g_ExtendTargetLogSize, g_ExtendConnectTimeoutTicks, g_ExtendNotesDelayMs
+    global PATH_ADB_EXE, SUNSHINE_TABLET_TAILSCALE_IP
+
     if (!HasSecondDisplayConnected()) {
         ShowDisplayBadge("[ALERT]", "No Second Display Detected", "Please attach tablet dummy plug.", "7A3B00")
         return
     }
 
     g_LastManualDisplaySwitch := A_TickCount
+    g_ExtendNotesDelayMs := delayNotesMs
 
-    ; 1. Normal mouse speed for precision on primary laptop display
+    topo := GetCurrentDisplayTopology()
+
+    ; Case A: If already in Second Screen Only (topo 8), or already in Extend (topo 4),
+    ; the secondary display surface is already active. Directly apply /extend.
+    if (topo == 8 || topo == 4)
+    {
+        ; 1. Normal mouse speed for precision on primary laptop display
+        DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
+        VarSetCapacity(accel, 12, 0)
+        NumPut(6, accel, 0, "Int")
+        NumPut(10, accel, 4, "Int")
+        NumPut(1, accel, 8, "Int")
+        DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
+
+        if (MarkerFile)
+            FileDelete, %MarkerFile%
+
+        manualFlag := A_Temp "\sunshine_manual_switch.flag"
+        FileDelete, %manualFlag%
+        FileAppend, % A_TickCount, %manualFlag%
+
+        Run, %A_WinDir%\System32\DisplaySwitch.exe /extend,, Hide
+
+        ShowDisplayBadge("[EXTEND]", "Dual Extended Displays", "Laptop: Main (Tray) | Tablet: Extended", "1A6E3C")
+        ApplyLaptopStickyNotesLayout(delayNotesMs)
+        UpdateTrayStatusAndTooltip()
+        SunshineDisplay_Log("Direct switch to Extend Displays (from topo=" topo ", mouse speed 10)")
+        return
+    }
+
+    ; Case B: Coming from PC Screen Only (topo 1) or Duplicate (topo 2).
+    ; Closed-loop handshake with session teardown:
+    ; 1. Convert host display to Second Screen Only (Tablet Only) so dummy plug becomes the active surface.
+    ;    Any prior tablet stream session disconnects from the laptop first, prompting Sunshine to release its
+    ;    previous DXGI capture adapter context.
+    ; 2. Record current sunshine.log position so historical connection markers are ignored.
+    ; 3. Dispatch background ADB command to wake the tablet and launch Moonlight fresh via ShortcutTrampoline.
+    ; 4. Poll until Sunshine confirms CLIENT CONNECTED and the stream window is open on the tablet.
+    ; 5. Pause 1000ms for video decoding stabilization, then switch Windows to Extend Displays (/extend).
+
+    ; Step 1: Switch host to Tablet Only mode
+    SwitchToTabletOnlyMode(delayNotesMs)
+    ShowDisplayBadge("[EXTEND]", "Connecting Tablet...", "Waking tablet and launching Moonlight", "1A3A5A")
+
+    ; Step 2: Record current sunshine.log size so we only trigger on a fresh connection
+    g_ExtendTargetLogSize := 0
+    if (SunshineLog && FileExist(SunshineLog))
+    {
+        file := FileOpen(SunshineLog, "r")
+        if IsObject(file)
+        {
+            g_ExtendTargetLogSize := file.Length
+            file.Close()
+        }
+    }
+
+    ; Step 3: Dispatch ADB wake and connect intent in background
+    if (PATH_ADB_EXE && FileExist(PATH_ADB_EXE) && SUNSHINE_TABLET_TAILSCALE_IP)
+    {
+        adbCmd := """" PATH_ADB_EXE """ -s " SUNSHINE_TABLET_TAILSCALE_IP ":5555 shell ""input keyevent KEYCODE_WAKEUP && am start -n com.limelight/.ShortcutTrampoline -e Name " A_ComputerName " -e AppName Desktop"""
+        Run, %ComSpec% /c "%adbCmd%",, Hide
+        SunshineDisplay_Log("Extend handshake: Dispatched ADB wake and connect intent to tablet.")
+    }
+    else
+    {
+        SunshineDisplay_Log("Extend handshake: ADB not configured. Waiting for tablet connection.")
+    }
+
+    ; Step 4: Arm 20-second connection watcher
+    g_ExtendPendingConnect := true
+    g_ExtendConnectTimeoutTicks := A_TickCount + 20000
+    SetTimer, SunshineDisplay_WaitTabletConnectForExtend, 500
+}
+
+; Polling timer for closed-loop Extend handshake
+SunshineDisplay_WaitTabletConnectForExtend:
+    global g_ExtendPendingConnect, g_ExtendTargetLogSize, g_ExtendConnectTimeoutTicks, g_ExtendNotesDelayMs
+    global SunshineLog, LogFile, MarkerFile
+
+    if (!g_ExtendPendingConnect)
+    {
+        SetTimer, SunshineDisplay_WaitTabletConnectForExtend, Off
+        return
+    }
+
+    ; Check timeout (20 seconds)
+    if (A_TickCount > g_ExtendConnectTimeoutTicks)
+    {
+        SetTimer, SunshineDisplay_WaitTabletConnectForExtend, Off
+        g_ExtendPendingConnect := false
+        ShowDisplayBadge("[EXTEND]", "Tablet Connection Timed Out", "Workstation remaining in Tablet Only mode", "7A3B00")
+        SunshineDisplay_Log("Extend handshake timed out after 20s. Remaining in Tablet Only mode.")
+        return
+    }
+
+    ; Check if Sunshine has logged a fresh CLIENT CONNECTED event past g_ExtendTargetLogSize
+    hasConnected := false
+    if (SunshineLog && FileExist(SunshineLog))
+    {
+        file := FileOpen(SunshineLog, "r")
+        if IsObject(file)
+        {
+            currLen := file.Length
+            if (currLen > g_ExtendTargetLogSize)
+            {
+                readBytes := currLen - g_ExtendTargetLogSize
+                file.Seek(g_ExtendTargetLogSize, 0)
+                newText := file.Read(readBytes)
+                if InStr(newText, "CLIENT CONNECTED")
+                    hasConnected := true
+            }
+            file.Close()
+        }
+    }
+
+    if (hasConnected)
+    {
+        SetTimer, SunshineDisplay_WaitTabletConnectForExtend, Off
+        g_ExtendPendingConnect := false
+
+        SunshineDisplay_Log("Extend handshake: Tablet connection confirmed! Settling 1000ms before /extend...")
+        ShowDisplayBadge("[EXTEND]", "Tablet Connected!", "Switching to Dual Extended Displays", "1A6E3C")
+
+        ; Arm a one-shot settlement timer to let the video frame presentation stabilize before /extend
+        SetTimer, SunshineDisplay_ApplyExtendAfterConnect, -1000
+    }
+return
+
+; Applies /extend once the tablet stream has stabilized
+SunshineDisplay_ApplyExtendAfterConnect:
+    global g_ExtendNotesDelayMs, MarkerFile, LogFile
+
+    ; Normal mouse speed for precision on primary laptop display
     DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
     VarSetCapacity(accel, 12, 0)
     NumPut(6, accel, 0, "Int")
@@ -221,21 +362,18 @@ SwitchToExtendMode(delayNotesMs := 1200) {
 
     if (MarkerFile)
         FileDelete, %MarkerFile%
-    FileDelete, % A_Temp "\sunshine_manual_switch.flag"
 
-    ; 2. Native Win32 SetDisplayConfig call (0x84 = SDC_APPLY | SDC_TOPOLOGY_EXTEND)
-    DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000084, "UInt")
-    Run, DisplaySwitch.exe 3,, Hide
+    manualFlag := A_Temp "\sunshine_manual_switch.flag"
+    FileDelete, %manualFlag%
+    FileAppend, % A_TickCount, %manualFlag%
 
-    ; 3. Visual toast notification
+    Run, %A_WinDir%\System32\DisplaySwitch.exe /extend,, Hide
+
     ShowDisplayBadge("[EXTEND]", "Dual Extended Displays", "Laptop: Main (Tray) | Tablet: Extended", "1A6E3C")
-
-    ; 4. Apply laptop sticky notes layout to primary display
-    ApplyLaptopStickyNotesLayout(delayNotesMs)
-
+    ApplyLaptopStickyNotesLayout(g_ExtendNotesDelayMs)
     UpdateTrayStatusAndTooltip()
-    SunshineDisplay_Log("Manual switch to Extend Displays (Dual screens, mouse speed 10)")
-}
+    SunshineDisplay_Log("Extend handshake complete: Dual extended displays active, mouse speed 10.")
+return
 
 ; Switches host to Duplicate Displays mode (Mirrors screens)
 SwitchToDuplicateMode(delayNotesMs := 1200) {
@@ -263,7 +401,7 @@ SwitchToDuplicateMode(delayNotesMs := 1200) {
 
     ; 2. Native Win32 SetDisplayConfig call (0x82 = SDC_APPLY | SDC_TOPOLOGY_CLONE)
     DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000082, "UInt")
-    Run, DisplaySwitch.exe 2,, Hide
+    Run, %A_WinDir%\System32\DisplaySwitch.exe /clone,, Hide
 
     ; 3. Visual toast notification
     ShowDisplayBadge("[DUPLICATE]", "Mirrored Displays", "Mouse: Fast (20) | Displays Cloned", "1A5A5A")
@@ -277,16 +415,7 @@ SwitchToDuplicateMode(delayNotesMs := 1200) {
 
 ; Helper to detect whether Windows is currently in Clone/Duplicate topology
 IsDisplayTopologyDuplicate() {
-    SysGet, monCount, MonitorCount
-    if (monCount < 2)
-        return false
-
-    SysGet, m1, Monitor, 1
-    SysGet, m2, Monitor, 2
-    ; In Duplicate/Clone mode, multiple active monitors share identical bounding coordinates
-    if (m1Left = m2Left && m1Top = m2Top && m1Right = m2Right && m1Bottom = m2Bottom)
-        return true
-    return false
+    return (GetCurrentDisplayTopology() == 2)
 }
 
 ; Checks if system is on Second Screen Only (laptop panel missing/detached)
@@ -301,26 +430,22 @@ IsSecondScreenActive() {
 
 UpdateTrayStatusAndTooltip() {
     global g_CurrentDisplayModeLabel
-    SysGet, monCount, MonitorCount
-    hasInternal := false
-    Loop, %monCount%
-    {
-        SysGet, mName, MonitorName, %A_Index%
-        if InStr(mName, "DISPLAY1")
-            hasInternal := true
-    }
-
-    if (!hasInternal)
+    topo := GetCurrentDisplayTopology()
+    if (topo == 8)
         modeText := "Tablet Only (2560x1600 @ 120Hz)"
-    else if (monCount >= 2)
-    {
-        if (IsDisplayTopologyDuplicate())
-            modeText := "Duplicate Displays (Mirror)"
-        else
-            modeText := "Extend Displays (Dual Screens)"
-    }
-    else
+    else if (topo == 2)
+        modeText := "Duplicate Displays (Mirror)"
+    else if (topo == 4)
+        modeText := "Extend Displays (Dual Screens)"
+    else if (topo == 1)
         modeText := "PC Screen Only (1080p @ 144Hz)"
+    else
+    {
+        if (IsSecondScreenOnly())
+            modeText := "Tablet Only (2560x1600 @ 120Hz)"
+        else
+            modeText := "PC Screen Only (1080p @ 144Hz)"
+    }
 
     g_CurrentDisplayModeLabel := modeText
 }
@@ -367,19 +492,12 @@ SunshineWatchdogTick:
         return
     }
 
-    ; Query current hardware display topology
-    SysGet, monCount, MonitorCount
-    hasInternal := false
-    Loop, %monCount%
-    {
-        SysGet, mName, MonitorName, %A_Index%
-        if InStr(mName, "DISPLAY1")
-            hasInternal := true
-    }
+    ; Query current hardware display topology via native Windows engine
+    topo := GetCurrentDisplayTopology()
 
-    ; ACTIVE TOPOLOGY GUARD: If host is in PC Screen Only mode (single internal screen),
+    ; ACTIVE TOPOLOGY GUARD: If host is in PC Screen Only mode (SDC_TOPOLOGY_INTERNAL = 1),
     ; NEVER force speed 20, even if sunshine.log records CLIENT CONNECTED.
-    if (monCount == 1 && hasInternal)
+    if (topo == 1)
     {
         ; If marker file is lingering, clear it
         if FileExist(MarkerFile)
@@ -596,7 +714,7 @@ SunshineWatchdog_ForceNormal(reason, skipScript := false) {
 
     ; 1. Immediate native display switch back to PC Screen Only
     DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000081, "UInt")
-    Run, DisplaySwitch.exe 1,, Hide
+    Run, %A_WinDir%\System32\DisplaySwitch.exe /internal,, Hide
 
     ; 2. Instant Win32 restore of mouse speed to 10
     DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
@@ -739,6 +857,11 @@ SunshineDisplay_WM_DISPLAYCHANGE(wParam, lParam, msg, hwnd) {
     if (!MarkerFile || !FileExist(MarkerFile))
         return
 
+    ; Never revert if system is intentionally in Duplicate (topo 2) or Extend (topo 4) mode
+    topo := GetCurrentDisplayTopology()
+    if (topo == 2 || topo == 4)
+        return
+
     SysGet, monCount, MonitorCount
     hasInternal := false
     Loop, %monCount%
@@ -752,7 +875,7 @@ SunshineDisplay_WM_DISPLAYCHANGE(wParam, lParam, msg, hwnd) {
     }
 
     ; If internal panel returns while single-screen tablet mode was active, laptop lid was opened
-    if (hasInternal && monCount <= 1) {
+    if (hasInternal && monCount <= 1 && topo != 2 && topo != 4) {
         SunshineDisplay_Log("Lid opened: DISPLAY1 returned while in tablet streaming mode. Restoring laptop display.")
         SwitchToLaptopOnlyMode(1200)
     }

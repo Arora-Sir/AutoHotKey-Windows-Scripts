@@ -122,7 +122,8 @@ All display modes and mouse speed settings are synchronized by SunshineDisplayWa
 ### Operational rules for extend mode
 
 1. **Laptop remains primary display**: Windows keeps DISPLAY1 as the primary screen. This ensures the Windows Shell taskbar, system tray notification area, clock, and background flyouts remain on the physical laptop.
-2. **Launch Desktop (Extended Tab) on tablet**: Connecting to this application profile in Moonlight captures DISPLAY4 directly, rendering the extended secondary screen on the tablet while the laptop shows the primary desktop.
+2. **Automated closed-loop handshake and stream teardown**: When switching to Extend Displays from PC Screen Only or Duplicate mode, the automated watchdog temporarily transitions the system through Tablet Only mode (`DisplaySwitch.exe /external`) to activate the NVIDIA dummy plug. If an existing stream session was running, the tablet display disconnects from the laptop first so Sunshine resets its capture pipeline. Moonlight then connects fresh via an automated ADB launch intent, confirming `CLIENT CONNECTED` before Windows 11 extends the desktop across both screens.
+3. **Launch Desktop (Extended Tab) on tablet**: Connecting to this application profile in Moonlight captures DISPLAY4 directly, rendering the extended secondary screen on the tablet while the laptop shows the primary desktop.
 
 ---
 
@@ -143,7 +144,7 @@ All display modes and mouse speed settings are synchronized by SunshineDisplayWa
 
 All fleet scripts run under a single master tray icon:
 - **Pinned order**:
-  1. BasicTasks (productivity launchers and hotkeys)
+  1. BasicTasks (productivity launchers, Skills Vault mode indicator, and single-line browser graphics acceleration status)
   2. PersonalKeywords (hotstrings and text expansions)
   3. SunshineDisplayWatchdog (display switcher with dynamic active-mode checkmark)
 - **Additional scripts**:
@@ -170,10 +171,10 @@ Run these diagnostic commands to verify workstation health:
    Expect 10 when on PC Screen Only or Extend mode; 20 when on Tablet Only or Duplicate mode.
 
 3. **Verify active monitor count**:
-   `powershell
-   python -c import ctypes; print('Monitors:', ctypes.windll.user32.GetSystemMetrics(80))
-   `
-   Expect 1 when on PC Screen Only or Tablet Only; 2 when on Extend or Duplicate mode.
+   ```powershell
+   python -c "import ctypes; print('Monitors:', ctypes.windll.user32.GetSystemMetrics(80))"
+   ```
+   Expect 1 when on PC Screen Only, Tablet Only, or Duplicate mode; 2 when on Extend mode.
 
 4. **Verify Sunshine service status**:
    `powershell

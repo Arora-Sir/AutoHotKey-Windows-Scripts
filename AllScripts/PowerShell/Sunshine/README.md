@@ -66,7 +66,14 @@ The remote streaming system operates across multiple distinct hardware layers an
 
 3. **Never Hardcode output_name in sunshine.conf**:
    - Setting a global output_name = \\.\DISPLAY4 in sunshine.conf causes SunshineService to crash on Windows boot if the dummy plug is detached or if the discrete GPU is in cold sleep.
-   - sunshine.conf must remain free of static display output overrides. All display targeting is handled per-application in pps.json.
+   - sunshine.conf must remain free of static display output overrides. All display targeting is handled per-application in apps.json.
+
+4. **Closed-Loop Extend Handshake and Stream Teardown**:
+   - On hybrid dual-GPU systems, extending the desktop directly across distinct GPU adapters fails unless an active stream consumer is established on the secondary discrete GPU dummy plug first.
+   - When switching to Extend Displays from PC Screen Only or Duplicate mode, SunshineDisplayWatchdog.ahk initiates Tablet Only mode (`DisplaySwitch.exe /external`).
+   - If an existing tablet stream session was active, the display disconnects from the laptop first so Sunshine releases its prior DXGI capture context.
+   - The watchdog dispatches an ADB command over Tailscale to wake the tablet and launch Moonlight.
+   - Once Sunshine logs `CLIENT CONNECTED` and the video pipeline stabilizes for 1000ms, the watchdog invokes `DisplaySwitch.exe /extend` and restores normal mouse speed 10.
 
 ## Fresh Machine Setup and Disaster Recovery Guide
 

@@ -266,7 +266,7 @@ When streaming desktop video to a tablet (such as Samsung Galaxy Tab S10 Ultra) 
      - `--disable-gpu`: Disables the GPU process, forcing software rasterization for video presentation surfaces.
      - `--restore-last-session`: Automatically restores all previously open tabs without requiring manual user intervention.
      - `--disable-session-crashed-bubble`: Suppresses the "Restore pages? Chromium didn't shut down correctly" warning bubble.
-  5. **Status Badge & Tray Menu Sync**: Displays `ShowDRMStatusBadge("[ACTIVE] DRM Streaming: ... (HW Accel OFF)")` and updates the tray menu item label dynamically via `UpdateDRMTrayStatus`.
+  5. **Status Badge & Tray Menu Sync**: Displays `ShowDRMStatusBadge(...)` with explicit `[ON]` / `[OFF]` indicators (e.g. `[ON] Graphics Accel: Brave (Normal GPU Mode)`) and updates the tray menu item label dynamically via `UpdateDRMTrayStatus` (`Graphics Accel: Brave (ON) / Chrome (OFF)`).
   6. **Reversion**: Clicking the toggle again reverses the JSON preference (`"enabled": true`), closes the browser gracefully, and relaunches with normal GPU hardware acceleration restored.
 
 ## Master tray menu architecture
@@ -283,7 +283,7 @@ When streaming desktop video to a tablet (such as Samsung Galaxy Tab S10 Ultra) 
     - **Hover Tooltip (`WM_MOUSEMOVE` `0x200`)**: Displays a dynamic sorted list of all active scripts and cleans up any ghost tray icons.
 
 - **Menu Hierarchy & Pinned Scripts**:
-  - **Pinned Scripts**: Scripts listed in `PinnedScripts` (`SunshineDisplayWatchdog`, `BasicTasks`, `PersonalKeywords`) are rendered directly at the top level of the master tray menu for immediate 1-click submenu access.
+  - **Pinned Scripts**: Scripts listed in `PinnedScripts` (`BasicTasks`, `PersonalKeywords`, `SunshineDisplayWatchdog`) are rendered directly at the top level of the master tray menu for immediate 1-click submenu access.
   - **Additional Scripts Submenu**: All remaining active background scripts (`BackgroundAutomations`, `Brightness`, `ClosePrograms`, `Ext4SsdManager`, `HotkeyHelp`, `Watchdog`) are cleanly consolidated into an expandable "Additional Scripts" submenu, preventing vertical menu overflow.
   - **Child Submenu Structure**: Each managed script submenu provides standard management actions (`View Key History`, `Edit`, `Restart`, `Exit`), followed by a horizontal separator line and any custom items published by that script.
   - **Global Actions**: Positioned at the bottom of the master menu: "Reload All", "Recompile Startup", "Suspend Hotkeys" (global cascade toggle), and "Exit".
@@ -334,7 +334,7 @@ sequenceDiagram
 
     Note over User,Win11: Phase 1: Initiation & Streaming
     User->>Win11: Win+Alt+P or Tray Menu (Toggle Tablet Mode)
-    Win11-->>User: DisplaySwitch 4 (DISPLAY4 2560x1600 Active, Laptop Screen OFF, mouse speed boosted to 20 and 20s manual grace window armed directly by the toggle itself)
+    Win11-->>User: DisplaySwitch /external (DISPLAY4 2560x1600 Active, Laptop Screen OFF, mouse speed boosted to 20 and 20s manual grace window armed directly by the toggle itself)
     User->>Moonlight: Open Desktop Stream
     Moonlight->>Sunshine: Connect Stream (Tailscale 100.x.y.z)
     Sunshine->>Sunshine: DXGI Desktop Duplication on DISPLAY4 (2560x1600 @ 60/120Hz)
@@ -349,9 +349,9 @@ sequenceDiagram
 
     alt Explicit Quit (Sunshine's own undo hook fires)
         Sunshine->>Watchdog: set_normal.ps1 (Sunshine's undo prep-cmd, not a Watchdog action) writes .session_quit
-        Watchdog->>Win11: Instant restore (~1.5s) - bypasses the debounce/settle window below entirely
+        Watchdog->>Win11: Instant restore (~1.5s): bypasses the debounce/settle window below entirely
     else Aggressive Immediate Trigger (< 3s)
-        Watchdog->>Win11: DisplaySwitch 1 (Switches back to DISPLAY1 1080p)
+        Watchdog->>Win11: DisplaySwitch /internal (Switches back to DISPLAY1 1080p)
         Win11-->>Watchdog: Internal Screen ON, DISPLAY4 Deactivated
         Note over User,Win11: Hazard: User returns to Moonlight after 3 seconds
         User->>Moonlight: Re-tap Desktop Stream
@@ -366,23 +366,38 @@ sequenceDiagram
     Note over User,Win11: Phase 3: Hardware Lid-Open Safety Net
     User->>Host: Physically lift laptop lid while streaming
     Host->>Watchdog: WM_DISPLAYCHANGE (0x007E) triggered by DISPLAY1 wake
-    Watchdog->>Win11: DisplaySwitch 1 (Restores PC Screen Only, mouse speed 10 if monCount <= 1)
+    Watchdog->>Win11: DisplaySwitch /internal (Restores PC Screen Only, mouse speed 10 if monCount <= 1)
 ```
 
 ### State matrix and trade-off analysis
 
 | State / Event | Trigger | Intended Outcome | Potential Hazard / Consequence | Design Mitigation |
 | :--- | :--- | :--- | :--- | :--- |
-| **Manual Tablet Toggle** | `Win+Alt+P` / Tray Menu | Switches to `DisplaySwitch 4`, mouse speed 20. | Sunshine log tail still shows old `CLIENT DISCONNECTED`. | 20s manual grace window (`sunshine_manual_switch.flag`) prevents watchdog revert. |
-| **Manual Laptop Toggle** | `Win+Alt+P` / Tray Menu | Switches to `DisplaySwitch 1`, mouse speed 10 in 0 ms. | Watchdog might re-boost mouse speed if Sunshine is still connected. | Topology check: if `monCount == 1 && hasInternal`, watchdog strictly suppresses fast speed. |
-| **Extend / Duplicate Toggle** | `Win+Alt+Shift+P` / Tray Menu | Toggles between Extend (dual screen, speed 10) and Duplicate (mirror, speed 20). | Watchdog might treat multi-monitor as headless streaming. | Multi-monitor isolation: `IsSecondScreenOnly()` returns false, preserving extended workspace. |
-| **Moonlight Connect** | Moonlight app taps "Desktop" | Sunshine captures `DISPLAY4` at 2560x1600. | Auto-switching to `DisplaySwitch 4` on connect races with Sunshine DXGI and hangs. | Connect-side stays manual; watchdog only auto-boosts mouse speed if normal and not on laptop-only. |
-| **Transient Disconnect** | Android back gesture / app switch | User intends to pause or check another tablet app for 5-15s. | Watchdog immediately reverts to `DisplaySwitch 1` in 3s, deactivating `DISPLAY4`. | Disconnect debounce / settle period prevents flap hang on prompt reconnect. |
-| **Permanent Disconnect** | User finishes work, closes Moonlight | Laptop screen turns back on (`DisplaySwitch 1`), mouse speed 10. | Laptop screen stays black if watchdog fails to detect disconnect. | Multi-signal detection: Sunshine log (`CLIENT DISCONNECTED`), Tailscale peer offline, and 8h ceiling. |
+| **Manual Tablet Toggle** | `Win+Alt+P` / Tray Menu | Switches to `DisplaySwitch.exe /external`, mouse speed 20. | Sunshine log tail still shows old `CLIENT DISCONNECTED`. | 20s manual grace window (`sunshine_manual_switch.flag`) prevents watchdog revert. |
+| **Manual Laptop Toggle** | `Win+Alt+P` / Tray Menu | Switches to `DisplaySwitch.exe /internal`, mouse speed 10 in 0 ms. | Watchdog might re-boost mouse speed if Sunshine is still connected. | Topology check: if `monCount == 1 && hasInternal`, watchdog strictly suppresses fast speed. |
+| **Extend / Duplicate Toggle** | `Win+Alt+Shift+P` / Tray Menu | Toggles between Extend (`DisplaySwitch.exe /extend`, speed 10) and Duplicate (`DisplaySwitch.exe /clone`, speed 20). | Direct `/extend` from PC Only or Duplicate fails on hybrid dual-GPU systems because the discrete GPU display pipe is asleep or clone-locked. | Closed-loop handshake: if coming from `topo == 1` or `topo == 2`, `SwitchToExtendMode` switches to `/external`, dispatches ADB wake and connect intent to tablet Moonlight, waits for Sunshine `CLIENT CONNECTED` confirmation, and only then applies `/extend`. |
+| **Moonlight Connect** | Moonlight app taps "Desktop" | Sunshine captures `DISPLAY4` at 2560x1600. | Auto-switching to `DisplaySwitch.exe /external` on connect races with Sunshine DXGI and hangs. | Connect-side stays manual; watchdog only auto-boosts mouse speed if normal and not on laptop-only. |
+| **Transient Disconnect** | Android back gesture / app switch | User intends to pause or check another tablet app for 5-15s. | Watchdog immediately reverts to `DisplaySwitch.exe /internal` in 3s, deactivating `DISPLAY4`. | Disconnect debounce / settle period prevents flap hang on prompt reconnect. |
+| **Permanent Disconnect** | User finishes work, closes Moonlight | Laptop screen turns back on (`DisplaySwitch.exe /internal`), mouse speed 10. | Laptop screen stays black if watchdog fails to detect disconnect. | Multi-signal detection: Sunshine log (`CLIENT DISCONNECTED`), Tailscale peer offline, and 8h ceiling. |
 | **Explicit Quit** | Sunshine's own undo prep-cmd hook fires (`set_normal.ps1`) | `.session_quit` written, mouse speed and display restored almost immediately. | The normal ~24s debounce (`RequiredLogStreak` polls) would otherwise delay an already-confirmed quit for no reason. | Watchdog treats `.session_quit` as an instant (~1.5s) signal, bypassing the debounce entirely, and deletes it immediately after consuming it so it can't re-trigger. |
-| **Lid Open While Streaming** | User opens laptop lid | Immediate return to Laptop Mode (`DisplaySwitch 1`), mouse speed 10. | Infinite loop if display change re-triggers lid handler, or breaking multi-monitor setups. | Guard 1 (4s manual toggle lock) + Guard 2 (only acts if `monCount <= 1`). |
+| **Lid Open While Streaming** | User opens laptop lid | Immediate return to Laptop Mode (`DisplaySwitch.exe /internal`), mouse speed 10. | Infinite loop if display change re-triggers lid handler, or breaking multi-monitor setups. | Guard 1 (4s manual toggle lock) + Guard 2 (only acts if `monCount <= 1 && topo != 2 && topo != 4`). |
 | **System Resume from Wake** | Win32 `WM_POWERBROADCAST` (`0x0218`) | Triple-wave recovery (1000ms, 3000ms, 5000ms) restores laptop display mode and mouse speed 10 if second screen remained active. | Slow GPU bus re-enumeration after Modern Standby can drop single-shot display switches. | Triple-wave staggered timers guarantee GPU driver settles before final confirmation pass. |
 | **Workstation Session Unlock** | Win32 `WM_WTSSESSION_CHANGE` (`0x02B1`, `WTS_SESSION_UNLOCK` `wParam=8`) | Restores laptop display mode if second screen active; recycles keyboard hook. | User wakes laptop, unlocks with biometric/PIN while virtual display is still engaged, or keyboard hook hangs. | Immediate display state check on session unlock + keyboard hook refresh ensuring hotkeys respond. |
+
+### Closed-loop Extend handshake and stream teardown lifecycle
+
+On hybrid dual-GPU laptops (Intel UHD Graphics driving `DISPLAY1` and dedicated NVIDIA GeForce GTX 1650 Ti driving `DISPLAY4`), switching directly from PC Screen Only (`topo == 1`) or Duplicate Displays (`topo == 2`) to Extend Displays (`DisplaySwitch.exe /extend`) fails silently. Windows 11 requires an active video streaming consumer established on the secondary discrete GPU display pipe before it can extend the desktop across both adapters.
+
+The automated handshake enforces a closed-loop sequence with mandatory stream teardown:
+
+1. **Topology verification**: The system queries `GetCurrentDisplayTopology()`. If already in Second Screen Only (`8`) or Extend (`4`), it executes `DisplaySwitch.exe /extend` directly.
+2. **Surface activation and stream teardown**: If starting from PC Screen Only or Duplicate mode, the system invokes `SwitchToTabletOnlyMode()` (`DisplaySwitch.exe /external`). If an existing tablet streaming session was active, the display disconnects from the laptop first. This disconnect causes Sunshine to release the previous DirectX Desktop Duplication (DXGI) adapter capture context.
+3. **Log baseline marking**: The watchdog records the current byte length of `sunshine.log` (`g_ExtendTargetLogSize`) so historical connection markers are ignored.
+4. **Automated tablet wake and client launch**: An ADB command dispatched over Tailscale wakes the Galaxy Tab S10 Ultra and launches Moonlight directly into the desktop stream via `com.limelight/.ShortcutTrampoline`.
+5. **Connection handshake polling**: A 500ms non-blocking timer (`SunshineDisplay_WaitTabletConnectForExtend`) polls `sunshine.log` for a fresh `CLIENT CONNECTED` record beyond the baseline marker.
+6. **Decoding surface stabilization**: Once `CLIENT CONNECTED` is confirmed, the system waits 1000ms for tablet video decoding to stabilize.
+7. **Extend execution**: The system invokes `DisplaySwitch.exe /extend`, restores mouse speed to 10 (normal), applies the laptop Simple Sticky Notes layout, and displays the Extend badge.
+8. **Fail-safe timeout**: If no connection is detected within 20 seconds, the handshake cancels and remains in Tablet Only mode with an informative notification badge.
 
 ---
 
