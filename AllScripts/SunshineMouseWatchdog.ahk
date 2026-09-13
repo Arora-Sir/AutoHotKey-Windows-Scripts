@@ -301,7 +301,8 @@ SunshineWatchdog_ForceNormal(reason, skipScript := false) {
     global NormalScript, LogFile, MarkerFile
 
     ; 1. Immediate native display switch back to PC Screen Only (1 = Internal 1080p @ 144Hz panel)
-    ; Runs in the interactive user session so the laptop screen re-engages the moment the stream ends
+    ; Direct Win32 SetDisplayConfig call ensures GPU topology switches even if Modern Shell flyout is blocked
+    DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000081, "UInt")
     Run, DisplaySwitch.exe 1,, Hide
 
     ; 2. Instant Win32 restore of mouse speed to 10 and acceleration ON (avoids PowerShell startup delay)

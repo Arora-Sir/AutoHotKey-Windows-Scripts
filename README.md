@@ -89,9 +89,10 @@ Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or 
 - **Hardware Lid-Open Auto-Recovery**:
   - When in tablet streaming mode with the laptop lid closed, opening the lid triggers a Win32 `WM_DISPLAYCHANGE` notification.
   - `OnDisplayChange_LidRecovery` detects the return of the internal laptop panel (`DISPLAY1`), restores mouse speed to 10, and switches display topology back to PC Screen Only.
-- **System Wake & Hibernate Auto-Recovery**:
+- **System Wake, Hibernate & Session Unlock Auto-Recovery**:
   - Catches Win32 `WM_POWERBROADCAST` (0x0218) system resume events.
-  - Dual-wave recovery (1500ms and 3500ms) automatically switches display topology back to PC Screen Only (`DISPLAY1`), restores mouse speed to 10, cycles low-level keyboard hooks to prevent dead keys after Modern Standby, and suppresses stale pre-wake Sunshine log events.
+  - Triple-wave recovery (1000ms, 3000ms, and 5000ms) automatically switches display topology back to PC Screen Only (`DISPLAY1`), restores mouse speed to 10, cycles low-level keyboard hooks to prevent dead keys after Modern Standby, and suppresses stale pre-wake Sunshine log events.
+  - Catches Win32 `WM_WTSSESSION_CHANGE` (0x02B1) `WTS_SESSION_UNLOCK` events: automatically re-checks display state upon user unlock, restores laptop mode if dummy plug remained active, and refreshes keyboard hooks.
 - **Simple Sticky Notes Multi-Resolution Auto-Arrangement (`apply_ssn_layout.ps1`)**:
   - Automatically re-arranges Simple Sticky Notes (`ssn.exe`) windows to match the active screen resolution and DPI scaling:
     - **Laptop (1536x864 DIP)**: 4 columns flush against the right bezel ($X = 1268$, $W = 268 \to 1536\text{px}$).

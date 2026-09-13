@@ -78,6 +78,8 @@ global g_SkillsPendingMode := ""
 ; given timer target, so this should never actually read true in practice.
 global g_SkillsCommitBusy := false
 global g_DRMTrayStatusLabel := "DRM Streaming: [OFF] (HW Accel ON)"
+global g_LastActiveBrowser := ""
+global g_LastActiveBrowserTime := 0
 
 ; -----------------------------------------------------------------------------
 ; TRAY MENU INTEGRATION
@@ -109,13 +111,16 @@ SetTimer, UpdateSkillsTrayStatus, 2000
 SetTimer, UpdateSkillsTrayStatus, -100 ; Fast initial update
 SetTimer, UpdateDRMTrayStatus, 3000
 SetTimer, UpdateDRMTrayStatus, -100 ; Fast initial update
+SetTimer, TrackActiveBrowser, 250
 
 ; Win32 WM_DISPLAYCHANGE (0x007E) - auto-recovery on laptop lid open
 global g_LastManualDisplaySwitch := 0
 OnMessage(0x007E, "OnDisplayChange_LidRecovery")
 
-; Win32 WM_POWERBROADCAST (0x0218) - auto-recovery on wake from hibernate / sleep
+; Win32 WM_POWERBROADCAST (0x0218) for sleep/wake and WM_WTSSESSION_CHANGE (0x02B1) for unlock
 OnMessage(0x0218, "OnPowerBroadcast_WakeRecovery")
+DllCall("wtsapi32.dll\WTSRegisterSessionNotification", "Ptr", A_ScriptHwnd, "UInt", 0)
+OnMessage(0x02B1, "OnSessionChange_DisplayCheck")
 
 ; Automatically align Simple Sticky Notes to current display mode on startup
 AutoApplyStickyNotesLayout(1500)
@@ -1312,14 +1317,23 @@ return
 ; [LOCKED]/[UNLOCKED]/[AUTO]/error color mapping is defined exactly once.
 ; [END: Personal Skills Lock/Unlock 3-Way Toggle]
 
+LogDisplayRecovery(msg) {
+    logsDir := A_ScriptDir "\Logs"
+    if !FileExist(logsDir)
+        FileCreateDir, %logsDir%
+    logFile := logsDir "\display_recovery.log"
+    FormatTime, ts, , yyyy-MM-dd HH:mm:ss
+    FileAppend, % "[" ts "] " msg "`n", %logFile%
+}
+
 ; [START: Tablet Headless Display & Mouse Speed Toggle (Win+Alt+P)]
 ; Restores the host laptop to PC Screen Only mode:
 ; 1. Resets mouse speed to 10 (normal) and acceleration to 1 (Enhance pointer precision ON).
 ; 2. Clears Sunshine mouse watchdog marker files (.fast_since and sunshine_manual_switch.flag).
-; 3. Native silent switch to PC Screen Only via DisplaySwitch.exe 1 (internal 1080p @ 144Hz panel).
-; 4. Re-applies Simple Sticky Notes layout for the 1080p laptop display once DWM settles.
+; 3. Native Win32 SetDisplayConfig driver call (0x81 = SDC_APPLY | SDC_TOPOLOGY_INTERNAL) plus DisplaySwitch.exe 1 companion.
+; 4. Re-applies Simple Sticky Notes layout for the 1080p laptop display once DWM settles (can be skipped during pre-sleep).
 ; 5. Cycles Suspend (On -> 50ms -> Off) to ensure the low-level keyboard hook is alive and registered, preserving manual suspend state if set.
-RestoreLaptopDisplayMode(delayNotesMs := 1200) {
+RestoreLaptopDisplayMode(delayNotesMs := 1200, skipNotes := false) {
     global PATH_SUNSHINE_SCRIPTS, g_LastManualDisplaySwitch
     g_LastManualDisplaySwitch := A_TickCount ; Guard against loop re-entry from subsequent WM_DISPLAYCHANGE
 
@@ -1338,10 +1352,13 @@ RestoreLaptopDisplayMode(delayNotesMs := 1200) {
     FileDelete, % A_Temp "\sunshine_manual_switch.flag"
 
     ; 3. Native silent switch to PC Screen Only (1 = Internal 1080p @ 144Hz panel)
+    ; Direct Win32 SetDisplayConfig call bypasses Modern Shell flyout blocks on locked desktops
+    DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000081, "UInt")
     Run, DisplaySwitch.exe 1,, Hide
 
-    ; 4. Restore Simple Sticky Notes to exact laptop coordinates once 1080p DWM settles
-    ApplyLaptopStickyNotesLayout(delayNotesMs)
+    ; 4. Restore Simple Sticky Notes to exact laptop coordinates once 1080p DWM settles (skipped during pre-sleep)
+    if (!skipNotes)
+        ApplyLaptopStickyNotesLayout(delayNotesMs)
 
     ; 5. Re-cycle keyboard hook to guarantee hotkeys are responsive after sleep/wake
     wasSuspended := A_IsSuspended
@@ -1414,6 +1431,8 @@ ToggleTabletDisplayMode() {
         FileAppend, % A_TickCount, %manualFlag%
 
         ; 3. Native silent switch to Second Screen Only (4 = External)
+        ; Direct Win32 SetDisplayConfig call (SDC_APPLY | SDC_TOPOLOGY_EXTERNAL = 0x88)
+        DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000088, "UInt")
         Run, DisplaySwitch.exe 4,, Hide
 
         ; 4. Apply Simple Sticky Notes tablet layout once 2560x1600 DWM settles
@@ -1453,6 +1472,8 @@ SwitchToDuplicateDisplayMode() {
     FileAppend, % A_TickCount, %manualFlag%
 
     ; Native silent switch to Duplicate (2 = Duplicate, matching the existing 1/4 convention ToggleTabletDisplayMode() already uses for PC-only/Second-screen-only).
+    ; Direct Win32 SetDisplayConfig call (SDC_APPLY | SDC_TOPOLOGY_CLONE = 0x82)
+    DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000082, "UInt")
     Run, DisplaySwitch.exe 2,, Hide
 
     ; Apply tablet layout for dummy-plug mirror mode once DWM settles
@@ -1497,25 +1518,44 @@ OnDisplayChange_LidRecovery(wParam, lParam, msg, hwnd) {
     }
 }
 
-; Hardware wake / resume from hibernate auto-recovery handler:
-; Fires on Win32 WM_POWERBROADCAST (0x0218) when system resumes from sleep / hibernate.
+; Hardware sleep / wake / resume auto-recovery handler:
+; Fires on Win32 WM_POWERBROADCAST (0x0218) for sleep preparation and resume from hibernate/sleep.
+;   wParam  4 (0x04) = PBT_APMSUSPEND         (system is preparing to suspend / hibernate)
 ;   wParam 18 (0x12) = PBT_APMRESUMEAUTOMATIC (any system wake, incl. Modern Standby)
 ;   wParam  7 (0x07) = PBT_APMRESUMESUSPEND   (user-initiated resume after suspend)
 OnPowerBroadcast_WakeRecovery(wParam, lParam, msg, hwnd) {
-    if (wParam = 18 || wParam = 7)
+    if (wParam = 4)
     {
-        ; Dual-wave recovery architecture:
-        ; Wave 1: 1500ms after wake to allow GPU drivers and eDP bus EDID negotiation to settle
-        SetTimer, ResumeDisplayOnWake_Wave1, -1500
-        ; Wave 2: 3500ms fail-safe verification if slow graphics driver dropped wave 1
-        SetTimer, ResumeDisplayOnWake_Wave2, -3500
+        ; Intercept hibernate while system is still unlocked so hiberfil.sys saves DISPLAY1 as active.
+        ; Skip sticky notes repositioning so system enters sleep without delay.
+        if (IsSecondScreenActive())
+        {
+            LogDisplayRecovery("Pre-suspend (wParam=4): Second screen active. Restoring laptop panel before hibernate.")
+            RestoreLaptopDisplayMode(0, true)
+        }
+        else
+        {
+            LogDisplayRecovery("Pre-suspend (wParam=4): Laptop panel already active. No switch required.")
+        }
+    }
+    else if (wParam = 18 || wParam = 7)
+    {
+        LogDisplayRecovery("Wake broadcast (wParam=" wParam "): Arming 3-wave recovery timers.")
+        ; Triple-wave recovery architecture:
+        ; Wave 1: 1000ms after wake for initial GPU bus and EDID negotiation
+        SetTimer, ResumeDisplayOnWake_Wave1, -1000
+        ; Wave 2: 3000ms fail-safe verification if slow graphics driver dropped wave 1
+        SetTimer, ResumeDisplayOnWake_Wave2, -3000
+        ; Wave 3: 5000ms final confirmation
+        SetTimer, ResumeDisplayOnWake_Wave3, -5000
     }
 }
 
 ResumeDisplayOnWake_Wave1:
     if (IsSecondScreenActive())
     {
-        RestoreLaptopDisplayMode(1500)
+        LogDisplayRecovery("Wake Wave 1 (1000ms): Second screen active. Restoring laptop display mode.")
+        RestoreLaptopDisplayMode(1200)
     }
     else
     {
@@ -1529,12 +1569,43 @@ ResumeDisplayOnWake_Wave1:
 return
 
 ResumeDisplayOnWake_Wave2:
-    ; Wave 2 fail-safe: if DISPLAY1 is still not active, re-apply restore
     if (IsSecondScreenActive())
     {
-        RestoreLaptopDisplayMode(1500)
+        LogDisplayRecovery("Wake Wave 2 (3000ms): Second screen still active. Re-applying restore.")
+        RestoreLaptopDisplayMode(1200)
     }
 return
+
+ResumeDisplayOnWake_Wave3:
+    if (IsSecondScreenActive())
+    {
+        LogDisplayRecovery("Wake Wave 3 (5000ms): Second screen still active. Final fail-safe restore.")
+        RestoreLaptopDisplayMode(1200)
+    }
+return
+
+; Hardware session change handler:
+; Fires on Win32 WM_WTSSESSION_CHANGE (0x02B1) when session state transitions.
+;   wParam 8 (0x08) = WTS_SESSION_UNLOCK (user unlocked workstation with PIN, face, or fingerprint)
+OnSessionChange_DisplayCheck(wParam, lParam, msg, hwnd) {
+    if (wParam = 8)
+    {
+        if (IsSecondScreenActive())
+        {
+            LogDisplayRecovery("Session Unlock (wParam=8): Second screen active. Restoring laptop display mode.")
+            RestoreLaptopDisplayMode(1200)
+        }
+        else
+        {
+            ; Refresh keyboard hook on unlock to ensure Win+Alt+P and fleet hotkeys are responsive
+            wasSuspended := A_IsSuspended
+            Suspend, On
+            Sleep, 50
+            if (!wasSuspended)
+                Suspend, Off
+        }
+    }
+}
 ; [END: Tablet Headless Display & Mouse Speed Toggle]
 
 ; [START: DRM Video Streaming & Hardware Acceleration Toggle]
