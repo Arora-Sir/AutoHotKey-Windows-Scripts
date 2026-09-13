@@ -1,4 +1,5 @@
 #Requires AutoHotkey v1.1
+#NoTrayIcon
 
 ; ^ for Ctrl, ! for Alt, # for Win, + for Shift
 ; ~ prefix to prevent blocking native (original) functionality of that key
@@ -99,11 +100,19 @@ global g_LastActiveBrowserTime := 0
 ;   Group 2: Browser Graphics Acceleration Mode (Single-line live status)
 PublishBasicTasksManifest()
 
+; Microphone Mute Tray Icon & Background Sync
+Menu, Tray, NoStandard
+Menu, Tray, Add, Unmute Microphone, TrayUnmuteMicAction
+Menu, Tray, Default, Unmute Microphone
+Menu, Tray, Click, 1
+
 SetTimer, UpdateSkillsTrayStatus, 2000
 SetTimer, UpdateSkillsTrayStatus, -100 ; Fast initial update
 SetTimer, UpdateDRMTrayStatus, 3000
 SetTimer, UpdateDRMTrayStatus, -100 ; Fast initial update
 SetTimer, TrackActiveBrowser, 250
+SetTimer, WatchMicrophoneMuteState, 1500
+SetTimer, WatchMicrophoneMuteState, -100 ; Fast initial check
 
 #If MouseIsOver("ahk_class Shell_TrayWnd")
     ;   WheelUp::SoundSet +1   ;Hide OSD
@@ -669,26 +678,30 @@ SortFolderByDate()
 ;         }
 ; }
 
-; Already working through PowerToys!
-; MuteMic()
-; {
-; local MM
-; SoundSet, +1, MASTER:1, MUTE, 2
-; SoundGet, MM, MASTER:1, MUTE, 2
-; #Persistent
-; ToolTip, % (MM == "On" ? "Microphone muted" : "Microphone online")
-; SetTimer, RemoveMuteMicTooltip, 700
-; return
+; MuteMic: backward-compatible wrapper delegating to ToggleMicrophoneMute() in SharedHelpers.ahk
+MuteMic()
+{
+    return ToggleMicrophoneMute()
+}
 
-; nircmd.exe waitprocess firefox.exe speak text "Firefox was closed"
+TrayUnmuteMicAction:
+    SetMicrophoneMute(0, true)
+return
 
-; Run nircmd.exe mutesysvolume 2 microphone
-;     Return
-; }
-; RemoveMuteMicTooltip:
-; 	SetTimer, RemoveMuteMicTooltip, Off
-; 	ToolTip
-; 	return
+WatchMicrophoneMuteState:
+    WatchMicrophoneMute()
+return
+
+WatchMicrophoneMute() {
+    static s_lastObservedState := -1
+    currState := GetMicrophoneMute()
+    if (currState == -1)
+        return
+    if (currState != s_lastObservedState) {
+        s_lastObservedState := currState
+        UpdateMicrophoneTrayIcon(currState)
+    }
+}
 
 ; YugenAnime()
 ; {
@@ -928,8 +941,8 @@ $^c::CopyToClipboard() ;{ <- OneNote Copy Mechanism Handeling (instead of SS)
 ; Win+C Run Calculator
 #c:: OpenCalculator() ;{ <- Open calculaor
 
-; Win+Ctr+Alt+M Mute/Unmute Microphone
-; #^!M:: MuteMic() ;{ <- Mute/Unmute Microphone
+; Win+Ctrl+Alt+M Mute/Unmute Microphone
+#^!M:: ToggleMicrophoneMute() ;{ <- Mute/Unmute Microphone
 
 ; Win+Alt+C Run Alarm Clock
 #!c:: Run "shell:Appsfolder\Microsoft.WindowsAlarms_8wekyb3d8bbwe!App" ;{ <- Open clock

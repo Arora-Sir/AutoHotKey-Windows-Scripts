@@ -84,7 +84,7 @@ Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or 
 - **Master Tray Submenu & Dynamic Status Checkmarks**:
   - Pinned directly at the top level of the master AutoHotkey tray menu with zero extra standalone icons cluttering the notification area.
   - Submenu provides 1-click switching between PC Screen Only, Tablet Only, Extend Displays, and Duplicate Displays with a dynamic checkmark (tick) highlighting the currently active display topology.
-  - Modern bottom-right rounded dark toast badge (`ShowBottomRightBadge`) displays mode transitions for 2.5 seconds with auto-calculated dimensions.
+  - Modern bottom-right rounded dark toast badge (`ShowBottomRightBadge`) displays mode transitions for 5.5 seconds with auto-calculated dimensions.
 - **Sunshine Extended Desktop Profile**:
   - Dedicated "Desktop (Extended Tab)" profile in Sunshine (`apps.json`) targeting `\\.\DISPLAY4`.
   - Tablet displays the extended monitor directly while the laptop remains the primary display with all taskbar notification icons intact.
@@ -137,6 +137,23 @@ Shared toast notification surface (`AllScripts/SharedHelpers.ahk`) providing cle
   - Dark Slate Grey (`#3A3D40`): Off / inactive state.
   - Amber (`#6E5A00`): In-progress / applying changes.
   - Dark Orange (`#7A3B00`): Error.
+
+---
+
+## Native Core Audio Microphone Mute & Dynamic Tray Indicator
+
+Global system-wide microphone mute toggle with real-time HUD feedback and an intelligent system tray indicator (`AllScripts/SharedHelpers.ahk` and `AllScripts/BasicTasks.ahk`).
+
+- **Toggle Hotkey**: Press **`Win+Ctrl+Alt+M`** to toggle microphone mute state instantly.
+- **Direct WASAPI Execution**: Calls Windows Core Audio COM interfaces (`IMMDeviceEnumerator`, `IAudioEndpointVolume`) directly via Win32 `DllCall`. Executes in under 5ms with zero process-spawning overhead.
+- **Dual Endpoint Synchronization**: Simultaneously targets both `eConsole` (0) and `eCommunications` (2) capture endpoints so Discord, Zoom, Microsoft Teams, Google Meet, and browser calls are all muted in sync.
+- **Dynamic System Tray Indicator**:
+  - **Mute-Only Visibility**: The tray icon appears in the notification area only when the microphone is muted (`mic_muted.ico`). When unmuted, it hides completely for zero taskbar clutter.
+  - **Option 1 High-Contrast Icon**: Features a solid pure-white (`#FFFFFF`) microphone body for maximum luminance contrast on dark taskbars (`#202020`), crossed by a vivid neon-red (`#FF2D55`) diagonal slash. Pixel-perfect at 16x16 (96 DPI) up to 64x64 high-DPI scaling.
+  - **1-Click Unmuting**: Left-clicking the muted tray icon immediately unmutes the microphone and dismisses the icon.
+- **Hardware & OS State Synchronization**:
+  - A lightweight 1500ms background watcher (`WatchMicrophoneMuteState`) keeps the tray icon synchronized if the microphone is muted or unmuted externally via hardware buttons or third-party meeting software, without triggering disruptive toast notifications.
+- **Visual HUD Feedback**: Displays an instant bottom-right rounded corner badge (`ShowBottomRightBadge`): deep red (`#8B1A1A`) for "Microphone Muted" and deep green (`#1A6E3C`) for "Microphone Unmuted".
 
 ---
 
@@ -229,6 +246,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
   | `Win+Alt+N`             | Clear All Notifications in Windows 11 Action Center                                                  |
   | `Win+Alt+X`             | Reconnect Cloudflare WARP / Run IP Rotator (`%PATH_IP_ROTATOR%`)                                     |
   | `Win+Alt+L`             | Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)                                     |
+  | `Win+Ctrl+Alt+M`        | Toggle Microphone Mute state across all endpoints with HUD badge and dynamic tray indicator          |
   | `Win+Alt+T`             | Wirelessly send selected file(s) to S24 Ultra (Double-tap within 500ms sends to Tab S10 Ultra)       |
   | `Alt+Ctrl+Z`            | Capture selection and open in ShareX Image Editor                                                    |
   | `Ctrl+C`                | (In OneNote) Intercepts OneNote copy to extract clean text instead of pasting as an image/screenshot |

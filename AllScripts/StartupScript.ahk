@@ -673,7 +673,8 @@ TrayIconRemove(Attempts)
 	Loop, % Attempts	; Try To Remove Over Time Because Icons May Lag Especially During Bootup
 	{
 		for Script_Name, Script in Scripts
-			if Script.Status
+			; BasicTasks owns its own dynamic microphone mute tray icon, so do not kill it
+			if (Script.Status && Script_Name != "BasicTasks")
 			{
 				WinGet, hWnds, List, % "ahk_pid " Script.Pid
 				Loop % hWnds

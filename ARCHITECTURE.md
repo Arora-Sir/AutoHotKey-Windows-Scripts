@@ -86,9 +86,23 @@ Every script that needs one of these includes it with an **explicit** `%A_Script
   - Cross-cutting utility functions providing graceful session-preserving shutdown, preference parsing, and headless/GPU flag manipulation for Chromium-based browsers (Brave and Google Chrome).
   - Used by `BasicTasks.ahk` for the DRM Video Streaming Mode toggle.
 
-- **`RunSilentPowerShell(scriptPath, args := "")`** - launches a PowerShell script with zero visible window.
+- **Core Audio Microphone helpers (`ToggleMicrophoneMute`, `GetMicrophoneMute`, `SetMicrophoneMute`, `UpdateMicrophoneTrayIcon`)**
+  - Native Windows Core Audio WASAPI COM interfaces (`IMMDeviceEnumerator` and `IAudioEndpointVolume`) called directly via Win32 `DllCall`.
+  - Replaces legacy mixer and external dependencies (`nircmd.exe`, PowerToys VCM). Executes in under 5ms without spawning external processes.
+  - Automatically targets both `eConsole` (0) and `eCommunications` (2) capture endpoints so Discord, Zoom, Teams, and browser calls are all muted in sync.
+  - Integrates with `ShowBottomRightBadge` for instant DPI-scaled on-screen HUD toast notifications (deep red `#8B1A1A` for Muted, deep green `#1A6E3C` for Unmuted).
+  - Drives a dynamic system tray indicator: when unmuted, the tray icon is completely hidden (`Menu, Tray, NoIcon`) for zero clutter. When muted, a dedicated high-contrast white microphone icon with a vivid neon-red diagonal slash (`AutoHotkey Companion Files\mic_muted.ico`) appears in the notification area.
+  - Left-clicking the muted tray icon immediately unmutes the microphone and dismisses the icon.
+  - A lightweight 1500ms background watcher (`WatchMicrophoneMuteState` in `BasicTasks.ahk`) quietly detects external hardware/system mute changes and keeps the tray icon synchronized without firing disruptive toasts.
+  - `StartupScript.ahk`'s `TrayIconRemove` explicitly exempts `BasicTasks` so mouseover events over the notification area do not wipe out the active mute icon.
 
-`MountExt4Ssd`/`UnmountExt4Ssd` do **not** live here - the ext4 SSD feature (hotkeys, auto-mount watcher, tray items, and these two functions) is fully self-contained in `AllScripts/Ext4SsdManager.ahk`, matching the single-feature-script convention `Brightness.ahk`/`ClosePrograms.ahk` already use.
+- **`RunSilentPowerShell(scriptPath, args := "")` and `RunSilentProcess(targetExe, args := "")`**
+  - Launches PowerShell scripts or console binaries with zero visible window on Windows 11.
+  - Prefers `run_silent.exe` (a C# GUI subsystem launcher built with `CREATE_NO_WINDOW = 0x08000000` and `UseShellExecute = false`).
+  - Completely prevents the Windows Console Subsystem (`conhost.exe` and Windows Terminal) from allocating or flashing a top-level console window onto the desktop.
+  - Used for Simple Sticky Notes geometry repositioning (`apply_ssn_layout.ps1`), mouse speed synchronization (`set_normal.ps1`, `set_fast.ps1`), ADB tablet intent dispatches, and WSL ext4 disk management.
+
+`MountExt4Ssd`/`UnmountExt4Ssd` do **not** live here: the ext4 SSD feature (hotkeys, auto-mount watcher, tray items, and these two functions) is fully self-contained in `AllScripts/Ext4SsdManager.ahk`, matching the single-feature-script convention `Brightness.ahk`/`ClosePrograms.ahk` already use.
 They only ever lived in this shared file because two other generic scripts happened to both need them, not because the feature is genuinely cross-cutting the way the debounce pattern or badge system are.
 
 ## The debounce pattern
@@ -557,6 +571,17 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
      - Enables streaming the extended canvas to the tablet while preserving the laptop screen as Primary Display with all taskbar notification icons intact.
   4. **Multi-Monitor Immunity for Watchdog and Lid Recovery**:
      - Watchdog and lid-open handlers guard restorations with `monCount <= 1`. In Extend mode, multi-monitor layouts are never disrupted.
+
+### 11. Native Windows Core Audio Microphone Mute Engine & Dynamic Indicator
+- **Context**: Global microphone mute hotkey (`Win+Ctrl+Alt+M`) with visual feedback on Windows 10 and 11.
+- **Problem**: Microsoft deprecated PowerToys Video Conference Mute (VCM) in v0.88.0 due to virtual camera driver instability and testing overhead. Legacy solutions like `nircmd.exe` spawn external console processes, add 100-200ms latency, and fail to mute communications endpoints (leaving Zoom, Teams, or Discord calls unmuted). Furthermore, an always-on microphone tray icon adds unnecessary visual clutter, whereas having no indicator leaves users uncertain whether their microphone is active.
+- **Decision**:
+  1. **Direct WASAPI COM calls via Win32 `DllCall`**: Implemented in `AllScripts/SharedHelpers.ahk` using `IMMDeviceEnumerator` and `IAudioEndpointVolume`. Simultaneously targets both `eConsole` (0) and `eCommunications` (2) capture endpoints in under 5ms with zero external process spawning.
+  2. **Dynamic Tray Indicator (Mute-Only Visibility)**: The tray icon (`mic_muted.ico`) appears in the notification area strictly when the microphone is muted (`Menu, Tray, Icon`), and is completely hidden when unmuted (`Menu, Tray, NoIcon`). This eliminates taskbar clutter during normal operation while providing an unmistakable indicator when the microphone is muted.
+  3. **Single-Click Unmuting**: Configured `Menu, Tray, Click, 1` with a default action that directly unmutes the microphone on a single left-click.
+  4. **Background State Watcher (`WatchMicrophoneMuteState`)**: A lightweight 1500ms timer in `BasicTasks.ahk` synchronizes the tray icon with hardware mute buttons or third-party app toggles without firing disruptive notifications.
+  5. **High-Contrast Option 1 Icon Design**: Created a custom multi-resolution `.ico` (16px to 64px) featuring a solid pure-white (`#FFFFFF`) microphone body for maximum luminance contrast on dark taskbars (`#202020`), crossed by a vivid neon-red (`#FF2D55`) diagonal slash with dark borders. Ensures instant silhouette recognition at arm length on 100% scale displays (16 physical pixels).
+  6. **StartupScript Tray Exemption**: `StartupScript.ahk` (`TrayIconRemove`) explicitly exempts `BasicTasks` to prevent mouseover sweeps from removing the active mute indicator.
 
 ---
 

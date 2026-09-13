@@ -497,13 +497,20 @@ HandleRemoteTrayMenuTrigger(wParam, lParam) {
 
 
 ; -----------------------------------------------------------------------------
-; RUN SILENT POWERSHELL
+; RUN SILENT POWERSHELL & CONSOLE LAUNCHER
 ; -----------------------------------------------------------------------------
-; Launches a PowerShell script with zero visible window (no conhost flash, no focus theft).
+; Launches a PowerShell script or console binary with zero visible window (no conhost flash, no focus theft).
 ; Prefers run_silent.exe (true CREATE_NO_WINDOW) when present next to the calling script; falls back to WScript.Shell.Run's hidden-window flag, then to a plain hidden Run as a last resort if COM creation itself fails.
-RunSilentPowerShell(scriptPath, args := "") {
+GetRunSilentExe() {
     runSilentExe := A_ScriptDir "\PowerShell\run_silent.exe"
-    if FileExist(runSilentExe) {
+    if !FileExist(runSilentExe)
+        runSilentExe := A_LineFile "\..\PowerShell\run_silent.exe"
+    return FileExist(runSilentExe) ? runSilentExe : ""
+}
+
+RunSilentPowerShell(scriptPath, args := "") {
+    runSilentExe := GetRunSilentExe()
+    if (runSilentExe) {
         cmd := """" runSilentExe """ powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ scriptPath """" (args != "" ? " " args : "")
         Run, %cmd%,, Hide
         return true
@@ -519,7 +526,25 @@ RunSilentPowerShell(scriptPath, args := "") {
     }
 }
 
-; MountExt4Ssd/UnmountExt4Ssd now live in AllScripts/Ext4SsdManager.ahk - the ext4 SSD feature is single-owner (that one script), not shared across multiple consumers, so it no longer belongs in this shared-helpers file.
+RunSilentProcess(targetExe, args := "") {
+    runSilentExe := GetRunSilentExe()
+    if (runSilentExe) {
+        cmd := """" runSilentExe """ """ targetExe """" (args != "" ? " " args : "")
+        Run, %cmd%,, Hide
+        return true
+    }
+    cmd := """" targetExe """" (args != "" ? " " args : "")
+    try {
+        shell := ComObjCreate("WScript.Shell")
+        shell.Run(cmd, 0, false)
+        return true
+    } catch {
+        Run, %cmd%,, Hide
+        return false
+    }
+}
+
+; MountExt4Ssd/UnmountExt4Ssd now live in AllScripts/Ext4SsdManager.ahk: the ext4 SSD feature is single-owner (that one script), not shared across multiple consumers, so it no longer belongs in this shared-helpers file.
 
 
 ; -----------------------------------------------------------------------------
@@ -842,23 +867,17 @@ _SSN_Sort(arr, prop, ascending := true) {
 
 ApplyLaptopStickyNotesLayout(delayMs := 0) {
     psScript := A_ScriptDir "\PowerShell\apply_ssn_layout.ps1"
-    cmd := "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ psScript """ -Mode Laptop -DelayMs " delayMs
-    Run, %cmd%,, Hide
-    return true
+    return RunSilentPowerShell(psScript, "-Mode Laptop -DelayMs " delayMs)
 }
 
 ApplyTabletStickyNotesLayout(delayMs := 0) {
     psScript := A_ScriptDir "\PowerShell\apply_ssn_layout.ps1"
-    cmd := "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ psScript """ -Mode Tablet -DelayMs " delayMs
-    Run, %cmd%,, Hide
-    return true
+    return RunSilentPowerShell(psScript, "-Mode Tablet -DelayMs " delayMs)
 }
 
 AutoApplyStickyNotesLayout(delayMs := 0) {
     psScript := A_ScriptDir "\PowerShell\apply_ssn_layout.ps1"
-    cmd := "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ psScript """ -Mode Auto -DelayMs " delayMs
-    Run, %cmd%,, Hide
-    return true
+    return RunSilentPowerShell(psScript, "-Mode Auto -DelayMs " delayMs)
 }
 
 ; Backward compatibility shims
@@ -871,5 +890,155 @@ RestoreSimpleStickyNotesPositions(delayMs := 0) {
     ; Fallback redirection to deterministic laptop profile
     return ApplyLaptopStickyNotesLayout(delayMs)
 }
+
+
+; -----------------------------------------------------------------------------
+; CORE AUDIO MICROPHONE HELPERS: Windows WASAPI endpoint volume controls
+; -----------------------------------------------------------------------------
+; Uses Windows Core Audio COM interfaces directly via Win32 DllCall:
+; 1. IMMDeviceEnumerator (CLSID {BCDE0395-E52F-467C-8E3D-C4579291692E}, IID {A95664D2-9614-4F35-A746-DE8DB63617E6})
+; 2. IAudioEndpointVolume (IID {5CDF2C82-841E-4546-9722-0CF74078229A})
+;
+; Why this approach:
+; - Native in-process COM call (<5ms execution time, zero process spawning overhead).
+; - Bypasses legacy winmm mixer quirks and eliminates any need for NirCmd or PowerToys.
+; - Simultaneously targets both eConsole (0) and eCommunications (2) capture endpoints
+;   to ensure meetings in Zoom, Teams, Discord, and browsers are all muted together.
+; - Reuses ShowBottomRightBadge() for DPI-scaled on-screen HUD feedback.
+
+GetMicrophoneMute() {
+    static CLSID_MMDeviceEnumerator := "{BCDE0395-E52F-467C-8E3D-C4579291692E}"
+    static IID_IMMDeviceEnumerator := "{A95664D2-9614-4F35-A746-DE8DB63617E6}"
+    static IID_IAudioEndpointVolume := "{5CDF2C82-841E-4546-9722-0CF74078229A}"
+
+    enumerator := ComObjCreate(CLSID_MMDeviceEnumerator, IID_IMMDeviceEnumerator)
+    if (!enumerator)
+        return -1
+
+    device := 0
+    ; Try eConsole (0) first, fallback to eCommunications (2)
+    hr := DllCall(NumGet(NumGet(enumerator+0) + 4*A_PtrSize), "ptr", enumerator, "int", 1, "int", 0, "ptr*", device)
+    if (hr != 0 || !device)
+        hr := DllCall(NumGet(NumGet(enumerator+0) + 4*A_PtrSize), "ptr", enumerator, "int", 1, "int", 2, "ptr*", device)
+    ObjRelease(enumerator)
+
+    if (hr != 0 || !device)
+        return -1
+
+    VarSetCapacity(iidVolume, 16, 0)
+    DllCall("ole32\CLSIDFromString", "wstr", IID_IAudioEndpointVolume, "ptr", &iidVolume)
+
+    endpointVolume := 0
+    hr := DllCall(NumGet(NumGet(device+0) + 3*A_PtrSize), "ptr", device, "ptr", &iidVolume, "uint", 7, "ptr", 0, "ptr*", endpointVolume)
+    ObjRelease(device)
+
+    if (hr != 0 || !endpointVolume)
+        return -1
+
+    isMuted := 0
+    hr := DllCall(NumGet(NumGet(endpointVolume+0) + 15*A_PtrSize), "ptr", endpointVolume, "int*", isMuted)
+    ObjRelease(endpointVolume)
+
+    return (hr == 0) ? isMuted : -1
+}
+
+SetMicrophoneMute(bMute, showBadge := true, displayMs := 1200) {
+    static CLSID_MMDeviceEnumerator := "{BCDE0395-E52F-467C-8E3D-C4579291692E}"
+    static IID_IMMDeviceEnumerator := "{A95664D2-9614-4F35-A746-DE8DB63617E6}"
+    static IID_IAudioEndpointVolume := "{5CDF2C82-841E-4546-9722-0CF74078229A}"
+
+    enumerator := ComObjCreate(CLSID_MMDeviceEnumerator, IID_IMMDeviceEnumerator)
+    if (!enumerator) {
+        if (showBadge)
+            ShowBottomRightBadge("Microphone Enumerator Error", "7A3B00", displayMs)
+        return -1
+    }
+
+    VarSetCapacity(iidVolume, 16, 0)
+    DllCall("ole32\CLSIDFromString", "wstr", IID_IAudioEndpointVolume, "ptr", &iidVolume)
+
+    deviceConsole := 0
+    deviceComm := 0
+    endpointConsole := 0
+    endpointComm := 0
+
+    hrConsole := DllCall(NumGet(NumGet(enumerator+0) + 4*A_PtrSize), "ptr", enumerator, "int", 1, "int", 0, "ptr*", deviceConsole)
+    hrComm := DllCall(NumGet(NumGet(enumerator+0) + 4*A_PtrSize), "ptr", enumerator, "int", 1, "int", 2, "ptr*", deviceComm)
+    ObjRelease(enumerator)
+
+    if (hrConsole != 0 && hrComm != 0) {
+        if (showBadge)
+            ShowBottomRightBadge("Microphone Not Found", "7A3B00", displayMs)
+        return -1
+    }
+
+    if (hrConsole == 0 && deviceConsole) {
+        DllCall(NumGet(NumGet(deviceConsole+0) + 3*A_PtrSize), "ptr", deviceConsole, "ptr", &iidVolume, "uint", 7, "ptr", 0, "ptr*", endpointConsole)
+        ObjRelease(deviceConsole)
+    }
+
+    if (hrComm == 0 && deviceComm) {
+        DllCall(NumGet(NumGet(deviceComm+0) + 3*A_PtrSize), "ptr", deviceComm, "ptr", &iidVolume, "uint", 7, "ptr", 0, "ptr*", endpointComm)
+        ObjRelease(deviceComm)
+    }
+
+    successCount := 0
+    if (endpointConsole) {
+        hr := DllCall(NumGet(NumGet(endpointConsole+0) + 14*A_PtrSize), "ptr", endpointConsole, "int", bMute, "ptr", 0)
+        if (hr == 0)
+            successCount++
+        ObjRelease(endpointConsole)
+    }
+
+    if (endpointComm) {
+        hr := DllCall(NumGet(NumGet(endpointComm+0) + 14*A_PtrSize), "ptr", endpointComm, "int", bMute, "ptr", 0)
+        if (hr == 0)
+            successCount++
+        ObjRelease(endpointComm)
+    }
+
+    if (successCount == 0) {
+        if (showBadge)
+            ShowBottomRightBadge("Microphone Mute Failed", "7A3B00", displayMs)
+        return -1
+    }
+
+    UpdateMicrophoneTrayIcon(bMute)
+
+    if (showBadge) {
+        if (bMute)
+            ShowBottomRightBadge("Microphone Muted", "8B1A1A", displayMs)
+        else
+            ShowBottomRightBadge("Microphone Unmuted", "1A6E3C", displayMs)
+    }
+
+    return bMute
+}
+
+ToggleMicrophoneMute(showBadge := true, displayMs := 1200) {
+    currMute := GetMicrophoneMute()
+    if (currMute = -1) {
+        newMute := 1
+    } else {
+        newMute := currMute ? 0 : 1
+    }
+    return SetMicrophoneMute(newMute, showBadge, displayMs)
+}
+
+UpdateMicrophoneTrayIcon(isMuted) {
+    if (isMuted = 1) {
+        iconPath := A_ScriptDir "\..\AutoHotkey Companion Files\mic_muted.ico"
+        if (!FileExist(iconPath))
+            iconPath := A_ScriptDir "\AutoHotkey Companion Files\mic_muted.ico"
+        if (FileExist(iconPath))
+            Menu, Tray, Icon, %iconPath%
+        Menu, Tray, Tip, Microphone Muted (Click or Win+Ctrl+Alt+M to unmute)
+        Menu, Tray, Icon
+    } else {
+        Menu, Tray, NoIcon
+    }
+}
+
+
 
 
