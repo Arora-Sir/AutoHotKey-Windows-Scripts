@@ -13,6 +13,11 @@ try {
     Add-Content -Path $logFile -Value ('[' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '] Starting apps update...')
     $appsPath = 'C:\Program Files\Sunshine\config\apps.json'
     
+    $runSilentExe = (Join-Path $PSScriptRoot '..\run_silent.exe')
+    if (-not (Test-Path $runSilentExe)) {
+        $runSilentExe = 'D:\Software\Programming\AutoHotKey\AllScripts\PowerShell\run_silent.exe'
+    }
+    $runSilentCmd = ($runSilentExe.Replace('\', '\\'))
     $fastScript = (Join-Path $PSScriptRoot 'set_fast.ps1').Replace('\', '\\')
     $normalScript = (Join-Path $PSScriptRoot 'set_normal.ps1').Replace('\', '\\')
 
@@ -28,9 +33,9 @@ try {
             "name": "Desktop",
             "prep-cmd": [
                 {
-                    "do": "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"$fastScript\"",
+                    "do": "\"$runSilentCmd\" powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"$fastScript\"",
                     "elevated": false,
-                    "undo": "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"$normalScript\""
+                    "undo": "\"$runSilentCmd\" powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"$normalScript\""
                 }
             ],
             "wait-all": true
@@ -46,9 +51,9 @@ try {
             "output": "\\\\.\\DISPLAY4",
             "prep-cmd": [
                 {
-                    "do": "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"$fastScript\"",
+                    "do": "\"$runSilentCmd\" powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"$fastScript\"",
                     "elevated": false,
-                    "undo": "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"$normalScript\""
+                    "undo": "\"$runSilentCmd\" powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"$normalScript\""
                 }
             ],
             "wait-all": true

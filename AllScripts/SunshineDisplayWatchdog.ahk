@@ -97,10 +97,12 @@ return
 ; DISPLAY SWITCHING FUNCTIONS & TOASTS
 ; =============================================================================
 
-; Renders an elegant bottom-right toast badge using SharedHelpers
-ShowDisplayBadge(modeTag, titleText, detailText, bgColorHex := "1A3A5A") {
+; Renders an elegant bottom-right toast badge using SharedHelpers.
+; Display mode transitions hold for 5500ms so the user can read the new resolution,
+; mouse speed, and topology feedback before the toast auto-dismisses.
+ShowDisplayBadge(modeTag, titleText, detailText, bgColorHex := "1A3A5A", displayMs := 5500) {
     fullMsg := modeTag " " titleText "`n" detailText
-    ShowBottomRightBadge(fullMsg, bgColorHex, 2500)
+    ShowBottomRightBadge(fullMsg, bgColorHex, displayMs)
 }
 
 ; Toggles cleanly between Laptop Only and Tablet Only
@@ -279,8 +281,8 @@ SwitchToExtendMode(delayNotesMs := 1200) {
     ; Step 3: Dispatch ADB wake and connect intent in background
     if (PATH_ADB_EXE && FileExist(PATH_ADB_EXE) && SUNSHINE_TABLET_TAILSCALE_IP)
     {
-        adbCmd := """" PATH_ADB_EXE """ -s " SUNSHINE_TABLET_TAILSCALE_IP ":5555 shell ""input keyevent KEYCODE_WAKEUP && am start -n com.limelight/.ShortcutTrampoline -e Name " A_ComputerName " -e AppName Desktop"""
-        Run, %ComSpec% /c "%adbCmd%",, Hide
+        adbArgs := "-s " SUNSHINE_TABLET_TAILSCALE_IP ":5555 shell ""input keyevent KEYCODE_WAKEUP && am start -n com.limelight/.ShortcutTrampoline -e Name " A_ComputerName " -e AppName Desktop"""
+        RunSilentProcess(PATH_ADB_EXE, adbArgs)
         SunshineDisplay_Log("Extend handshake: Dispatched ADB wake and connect intent to tablet.")
     }
     else
@@ -731,7 +733,7 @@ SunshineWatchdog_ForceNormal(reason, skipScript := false) {
 
     ; 4. Asynchronously invoke set_normal.ps1
     if (!skipScript && NormalScript && FileExist(NormalScript))
-        Run, powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%NormalScript%",, Hide
+        RunSilentPowerShell(NormalScript)
 
     ; 5. Restore Simple Sticky Notes layout
     ApplyLaptopStickyNotesLayout(1200)
@@ -758,7 +760,7 @@ SunshineWatchdog_ForceFast(reason) {
 
     ; 3. Asynchronously invoke set_fast.ps1
     if (FileExist(FastScript))
-        Run, powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%FastScript%",, Hide
+        RunSilentPowerShell(FastScript)
 
     SunshineDisplay_Log("Forced FAST: " reason)
 }

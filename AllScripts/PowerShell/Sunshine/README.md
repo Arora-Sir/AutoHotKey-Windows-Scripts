@@ -37,7 +37,7 @@ The remote streaming system operates across multiple distinct hardware layers an
   - Creates the .session_quit signal file, enabling an instant display restore without debounce delay.
 
 - update_sunshine_apps.ps1: Automated profile generator.
-  - Writes the complete pps.json profile structure directly to C:\Program Files\Sunshine\config\apps.json.
+  - Writes the complete apps.json profile structure directly to C:\Program Files\Sunshine\config\apps.json.
   - Automatically isolates display output bindings between Desktop (primary) and Desktop (Extended Tab) (\\.\DISPLAY4).
   - Automatically restarts SunshineService to apply changes immediately.
 
