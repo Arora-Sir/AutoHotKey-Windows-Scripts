@@ -583,6 +583,35 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
   5. **High-Contrast Option 1 Icon Design**: Created a custom multi-resolution `.ico` (16px to 64px) featuring a solid pure-white (`#FFFFFF`) microphone body for maximum luminance contrast on dark taskbars (`#202020`), crossed by a vivid neon-red (`#FF2D55`) diagonal slash with dark borders. Ensures instant silhouette recognition at arm length on 100% scale displays (16 physical pixels).
   6. **StartupScript Tray Exemption**: `StartupScript.ahk` (`TrayIconRemove`) explicitly exempts `BasicTasks` to prevent mouseover sweeps from removing the active mute indicator.
 
+### 12. Dynamic Tablet Hibernate Indicator & Pre-Hibernation Display Restoration (`SunshineDisplayWatchdog.ahk`)
+- **Context**: When streaming to the tablet in Tablet Only mode (`SDC_TOPOLOGY_EXTERNAL = 8`, HDMI dummy plug active at 2560x1600 @ 120Hz, laptop internal screen powered off) and the system enters S4 hibernation, waking or turning on the laptop left the internal screen pitch black.
+- **Problem**: The Windows lock screen (Winlogon) was displayed on the headless dummy HDMI plug. The user was forced to connect on the tablet via Moonlight just to enter their Windows password.
+- **Empirical Findings & Root Causes**:
+  1. Direct `SetDisplayConfig(..., 0x81)` calls from standard user sessions fail with Win32 Error 5 (`ERROR_ACCESS_DENIED`).
+  2. While the secure lock screen (`Winlogon`) owns the display, the DirectX graphics kernel (`dxgkrnl.sys`) actively blocks and times out user-mode display topology changes, generating LiveKernelEvent `0x1A8` (`VIDEO_DXGKRNL_LIVEDUMP`) and `0x1B8`. Consequently, user-space software cannot restore the display once the lock screen is active.
+  3. When the user initiates hibernation from the native Start Menu on the tablet stream, `StartMenuExperienceHost.exe` triggers `SetSuspendState` immediately. `DisplaySwitch.exe /internal` takes ~1.12 seconds, exceeding the OS kernel pre-suspend freeze window.
+- **Decision**: Implemented pre-hibernation display restoration driven by a dynamic Tablet Only tray indicator:
+  1. **Dynamic Taskbar Tray Indicator**: The watchdog displays a custom high-contrast power icon (`tablet_hibernate.ico`) in the notification area strictly while in Tablet Only mode (`topo == 8`). In all other modes (`PC Screen Only`, `Extend`, `Duplicate`), the icon is completely hidden (`Menu, Tray, NoIcon`) to prevent taskbar clutter. `StartupScript.ahk` (`TrayIconRemove`) explicitly exempts `SunshineDisplayWatchdog` from mouseover cleanup sweeps.
+  2. **Double-Click Confirmation with 5-Second Countdown HUD**: Double-clicking the tray icon initiates a live 5-second countdown HUD badge (`[HIBERNATE] Workstation Hibernating in 5s... Press Esc, Del, or click to Cancel`). Tapping `Esc`, `Delete` (essential on tablet keyboards lacking an Esc key), or clicking the badge immediately aborts the timer.
+  3. **Pre-Hibernation Display Restoration**: When the 5-second countdown expires, `ExecuteSafeHibernate()` synchronously runs `SwitchToLaptopOnlyMode(0, true, true)` (`RunWait, DisplaySwitch.exe /internal`), allows a 200ms driver settle delay, and then invokes `shutdown.exe /h`.
+  4. **Guaranteed Wake Experience**: Because the hardware display topology is transitioned to `SDC_TOPOLOGY_INTERNAL` before `hiberfil.sys` is written, turning on the laptop immediately illuminates the internal 144Hz panel with the Windows lock screen, requiring zero tablet interaction.
+  5. **Elimination of Flawed Reversion Heuristics**: Purged both the timer-gap heuristic (`nowTick - g_LastTickCount > 4500`) and the legacy 'lid opened' check (`hasInternal && monCount <= 1`) in `WM_DISPLAYCHANGE`. In Windows DWM, the dummy plug in Tablet Only mode is automatically assigned device name `\\.\DISPLAY1`, which previously caused `WM_DISPLAYCHANGE` to falsely assume the laptop lid had been opened and revert to PC Screen Only every 4 seconds. Purging these heuristics ensures Tablet Only mode remains completely stable.
+
+### 13. Active Tablet Topology Guard & Failsafe Mouse Speed Tray Toggle (`SunshineDisplayWatchdog.ahk`)
+- **Context**: When streaming to the tablet in Tablet Only mode (`SDC_TOPOLOGY_EXTERNAL = 8`) or waking from S4 hibernation into tablet mode, Windows pointer ballistics occasionally re-initialized back to the OS registry default of 10 instead of the required tablet streaming speed of 20.
+- **Root Causes**:
+  1. Windows DWM and GPU driver adapter handshakes (Intel UHD to NVIDIA GTX 1650 Ti driving the dummy plug) during `DisplaySwitch.exe /external` re-evaluate mouse parameters back to registry defaults, overriding speed 20 set prior to the switch.
+  2. Prior watchdog logic relied on an asymmetric topology guard: it polled `curSpeed > 10` in Laptop Only mode (`topo == 1`), but lacked a corresponding check for Tablet Only mode (`topo == 8`) or Duplicate mode (`topo == 2`).
+  3. Stale `.fast_since` marker files blinded client connection checks: if `.fast_since` already existed from a manual switch, the watchdog assumed speed was already 20 and skipped verifying Win32 speed.
+- **Architectural Solution**:
+  1. **Continuous Active Topology Guard**: `SunshineWatchdogTick` polls `GetCurrentMouseSpeed()` every 1.5s. If in Tablet Only (`topo == 8`) or Duplicate (`topo == 2`) mode and `curSpeed != 20` (outside a 30s manual toggle grace window), it immediately restores speed 20 and disables pointer precision acceleration.
+  2. **Post-Switch Settling Enforcement**: `SwitchToTabletOnlyMode` schedules settling timers (`-1200ms` and `-2500ms`) via `SunshineDisplay_EnforceTabletMouseSpeed` to re-assert speed 20 after DWM re-enumeration finishes.
+  3. **Blind MarkerFile Elimination**: Streaming connect checks verify `(!FileExist(MarkerFile) || GetCurrentMouseSpeed() < 20)`, ensuring lingering marker files never block fast speed enforcement.
+  4. **Dual-Tray Failsafe Toggle**:
+     - **Tablet Tray Icon**: `UpdateTabletHibernateTrayIcon` adds a dynamic menu item (`Mouse Speed: Fast (20) [Click for Normal]` or `Mouse Speed: Normal (10) [Click for Fast]`) that allows 1-click toggling directly from the tablet taskbar in Moonlight.
+     - **Master Tray Menu**: `PublishSunshineTrayManifest()` publishes the live speed label to `A_Temp\ahk_traymenu_SunshineDisplayWatchdog.txt`. `StartupScript.ahk` (`UpdateSunshineDisplayMenuChecks`) dynamically tracks and updates the label inside the master submenu.
+     - **Manual Grace Window**: Manual toggles set `g_LastManualMouseSwitch := A_TickCount` (30-second window), preventing the background topology guard from overriding intentional user choices.
+
 ---
 
 ## Developer Tooling & Quality Standards

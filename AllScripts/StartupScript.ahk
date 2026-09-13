@@ -91,6 +91,7 @@ Files.Push(Script_12)
 PinnedScripts := ["BasicTasks", "PersonalKeywords", "SunshineDisplayWatchdog"]
 global g_CurrentBasicTasksSkillsItem := ""
 global g_CurrentBasicTasksDrmItem := ""
+global g_CurrentSunshineMouseSpeedItem := ""
 
 ; Loop, 1
 ; {
@@ -399,6 +400,11 @@ MenuBuild:
 							else if (InStr(CustomItem1, "Graphics Accel") || InStr(CustomItem1, "DRM Streaming"))
 								g_CurrentBasicTasksDrmItem := CustomItem1
 						}
+						else if (Script_Name = "SunshineDisplayWatchdog")
+						{
+							if InStr(CustomItem1, "Mouse Speed:")
+								g_CurrentSunshineMouseSpeedItem := CustomItem1
+						}
 					}
 				}
 			}
@@ -509,6 +515,25 @@ UpdateSunshineDisplayMenuChecks:
 			try Menu, SubMenu_%PID%, Check, %itemExtend%
 		else
 			try Menu, SubMenu_%PID%, Check, %itemLaptop%
+	}
+
+	; Dynamically synchronize mouse speed menu label with live manifest
+	manifest := A_Temp "\ahk_traymenu_SunshineDisplayWatchdog.txt"
+	if FileExist(manifest)
+	{
+		Loop, Read, %manifest%
+		{
+			delimPos := InStr(A_LoopReadLine, "|", false, 0)
+			item1 := (delimPos > 0) ? SubStr(A_LoopReadLine, 1, delimPos - 1) : A_LoopReadLine
+			if InStr(item1, "Mouse Speed:")
+			{
+				if (g_CurrentSunshineMouseSpeedItem && g_CurrentSunshineMouseSpeedItem != item1)
+				{
+					try Menu, SubMenu_%PID%, Rename, %g_CurrentSunshineMouseSpeedItem%, %item1%
+					g_CurrentSunshineMouseSpeedItem := item1
+				}
+			}
+		}
 	}
 return
 
@@ -630,7 +655,8 @@ RemoteMenuCommand:
 		if (CustomItem1 = A_ThisMenuItem
 			|| (InStr(CustomItem1, "Skills: Cycle Vault Mode") && InStr(A_ThisMenuItem, "Skills: Cycle Vault Mode"))
 			|| (InStr(CustomItem1, "Graphics Accel") && InStr(A_ThisMenuItem, "Graphics Accel"))
-			|| (InStr(CustomItem1, "DRM Streaming") && InStr(A_ThisMenuItem, "DRM Streaming")))
+			|| (InStr(CustomItem1, "DRM Streaming") && InStr(A_ThisMenuItem, "DRM Streaming"))
+			|| (InStr(CustomItem1, "Mouse Speed:") && InStr(A_ThisMenuItem, "Mouse Speed:")))
 		{
 			RemoteTrayTriggerMsg := DllCall("RegisterWindowMessage", "str", "AHK_RemoteTrayMenuTrigger_v1")
 			PostMessage, %RemoteTrayTriggerMsg%, %LineNum%,,,ahk_pid %Pid%
@@ -673,8 +699,8 @@ TrayIconRemove(Attempts)
 	Loop, % Attempts	; Try To Remove Over Time Because Icons May Lag Especially During Bootup
 	{
 		for Script_Name, Script in Scripts
-			; BasicTasks owns its own dynamic microphone mute tray icon, so do not kill it
-			if (Script.Status && Script_Name != "BasicTasks")
+			; BasicTasks and SunshineDisplayWatchdog manage their own dynamic taskbar tray indicators
+			if (Script.Status && Script_Name != "BasicTasks" && Script_Name != "SunshineDisplayWatchdog")
 			{
 				WinGet, hWnds, List, % "ahk_pid " Script.Pid
 				Loop % hWnds

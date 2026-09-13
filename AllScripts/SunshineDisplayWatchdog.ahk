@@ -1,5 +1,6 @@
 #Requires AutoHotkey v1.1
 #NoEnv
+#NoTrayIcon
 #Persistent
 SendMode Input
 SetWorkingDir %A_ScriptDir%
@@ -52,7 +53,12 @@ global OfflineStreak           := 0
 global ConnectStreak           := 0
 global g_LastWakeLogSize       := 0
 global g_LastManualDisplaySwitch := 0
+global g_LastManualMouseSwitch   := 0
+global PATH_HIBERNATE_ICO      := A_ScriptDir "\..\AutoHotkey Companion Files\tablet_hibernate.ico"
+global g_HibernateCountdownSec := 0
+global g_HibernateCountdownActive := false
 global g_CurrentDisplayModeLabel := "Unknown"
+global g_CurrentMouseSpeedLabel  := ""
 
 ; Closed-loop handshake state for Extend Displays mode
 global g_ExtendPendingConnect := false
@@ -61,16 +67,17 @@ global g_ExtendConnectTimeoutTicks := 0
 global g_ExtendNotesDelayMs := 1200
 
 ; Publish manifest for StartupScript master tray integration
-PublishTrayMenuManifest([ ["PC Screen Only (1080p @ 144Hz)`tWin+Alt+P", "Menu_SwitchLaptopOnly"]
-                        , ["Tablet Only (2560x1600 @ 120Hz)`tWin+Alt+P", "Menu_SwitchTabletOnly"]
-                        , ["Extend Displays (Dual Screens)`tWin+Alt+Shift+P", "Menu_SwitchExtend"]
-                        , ["Duplicate Displays (Mirror)`tWin+Alt+Shift+P", "Menu_SwitchDuplicate"] ])
+PublishSunshineTrayManifest()
 
 ; Win32 hardware event hooks
 OnMessage(0x0218, "SunshineDisplay_WM_POWERBROADCAST")
 OnMessage(0x007E, "SunshineDisplay_WM_DISPLAYCHANGE")
 DllCall("wtsapi32.dll\WTSRegisterSessionNotification", "Ptr", A_ScriptHwnd, "UInt", 0)
 OnMessage(0x02B1, "SunshineDisplay_WM_WTSSESSION_CHANGE")
+global g_hPowerNotify := DllCall("RegisterSuspendResumeNotification", "Ptr", A_ScriptHwnd, "UInt", 0, "Ptr")
+WM_TASKBARCREATED := DllCall("RegisterWindowMessage", "str", "TaskbarCreated")
+OnMessage(WM_TASKBARCREATED, "SunshineDisplay_WM_TASKBARCREATED")
+OnExit("SunshineDisplay_Cleanup")
 
 ; Initial status refresh
 UpdateTrayStatusAndTooltip()
@@ -91,6 +98,18 @@ return
 
 ; Win+Alt+Shift+P: Toggle between Extend and Duplicate
 #!+p::ToggleExtendVsDuplicate() ;{ <- Toggle Dual Display (Extend <-> Duplicate)
+
+
+#If (g_HibernateCountdownActive)
+Escape::CancelHibernateCountdown()
+Delete::CancelHibernateCountdown()
+~LButton::
+    MouseGetPos,,, clickedHwnd
+    WinGetClass, clickedClass, ahk_id %clickedHwnd%
+    if (clickedClass = "AutoHotkeyGUI")
+        CancelHibernateCountdown()
+return
+#If
 
 
 ; =============================================================================
@@ -130,7 +149,7 @@ ToggleExtendVsDuplicate() {
 }
 
 ; Switches host to PC Screen Only mode (1080p @ 144Hz, mouse speed 10)
-SwitchToLaptopOnlyMode(delayNotesMs := 1200, skipNotes := false) {
+SwitchToLaptopOnlyMode(delayNotesMs := 1200, skipNotes := false, isBlocking := false) {
     global g_LastManualDisplaySwitch, MarkerFile, LogFile
     g_LastManualDisplaySwitch := A_TickCount
 
@@ -147,15 +166,19 @@ SwitchToLaptopOnlyMode(delayNotesMs := 1200, skipNotes := false) {
         FileDelete, %MarkerFile%
     FileDelete, % A_Temp "\sunshine_manual_switch.flag"
 
-    ; 3. Native Win32 SetDisplayConfig call (0x81 = SDC_APPLY | SDC_TOPOLOGY_INTERNAL)
-    DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000081, "UInt")
-    Run, %A_WinDir%\System32\DisplaySwitch.exe /internal,, Hide
+    ; 3. Execute display switch to internal laptop panel
+    ; In blocking mode (such as pre-suspend), RunWait guarantees driver completes topology switch before sleep
+    if (isBlocking)
+        RunWait, %A_WinDir%\System32\DisplaySwitch.exe /internal,, Hide
+    else
+        Run, %A_WinDir%\System32\DisplaySwitch.exe /internal,, Hide
 
-    ; 4. Visual toast notification
-    ShowDisplayBadge("[PC ONLY]", "Laptop Display (1080p @ 144Hz)", "Mouse: Normal (10) | Precision: ON", "1A3A5A")
+    ; 4. Visual toast notification (skip if blocking or pre-suspend)
+    if (!isBlocking)
+        ShowDisplayBadge("[PC ONLY]", "Laptop Display (1080p @ 144Hz)", "Mouse: Normal (10) | Precision: ON", "1A3A5A")
 
     ; 5. Restore Simple Sticky Notes layout once 1080p DWM settles
-    if (!skipNotes)
+    if (!skipNotes && !isBlocking)
         ApplyLaptopStickyNotesLayout(delayNotesMs)
 
     ; 6. Re-cycle keyboard hook to guarantee hotkeys stay responsive
@@ -166,7 +189,7 @@ SwitchToLaptopOnlyMode(delayNotesMs := 1200, skipNotes := false) {
         Suspend, Off
 
     UpdateTrayStatusAndTooltip()
-    SunshineDisplay_Log("Manual switch to PC Screen Only (1080p @ 144Hz, mouse speed 10)")
+    SunshineDisplay_Log("Switched to PC Screen Only (1080p @ 144Hz, mouse speed 10, blocking=" (isBlocking ? "true" : "false") ")")
 }
 
 ; Switches host to Tablet Only mode (2560x1600 @ 120Hz, mouse speed 20)
@@ -206,6 +229,10 @@ SwitchToTabletOnlyMode(delayNotesMs := 1200) {
 
     UpdateTrayStatusAndTooltip()
     SunshineDisplay_Log("Manual switch to Tablet Only (2560x1600 @ 120Hz, mouse speed 20)")
+
+    ; 6. Schedule post-switch settling timers to re-assert mouse speed 20 after DWM re-enumeration
+    SetTimer, SunshineDisplay_EnforceTabletMouseSpeed, -1200
+    SetTimer, SunshineDisplay_EnforceTabletMouseSpeed, -2500
 }
 
 ; Switches host to Extend Displays mode (Laptop Primary + Tablet Secondary)
@@ -430,26 +457,155 @@ IsSecondScreenActive() {
 ; TRAY MENU AND STATUS UPDATER
 ; =============================================================================
 
-UpdateTrayStatusAndTooltip() {
+UpdateTrayStatusAndTooltip(forceRefresh := false) {
     global g_CurrentDisplayModeLabel
     topo := GetCurrentDisplayTopology()
-    if (topo == 8)
+    isTabletOnly := false
+
+    if (topo == 8) {
         modeText := "Tablet Only (2560x1600 @ 120Hz)"
-    else if (topo == 2)
+        isTabletOnly := true
+    } else if (topo == 2) {
         modeText := "Duplicate Displays (Mirror)"
-    else if (topo == 4)
+    } else if (topo == 4) {
         modeText := "Extend Displays (Dual Screens)"
-    else if (topo == 1)
+    } else if (topo == 1) {
         modeText := "PC Screen Only (1080p @ 144Hz)"
-    else
-    {
-        if (IsSecondScreenOnly())
+    } else {
+        if (IsSecondScreenOnly()) {
             modeText := "Tablet Only (2560x1600 @ 120Hz)"
-        else
+            isTabletOnly := true
+        } else {
             modeText := "PC Screen Only (1080p @ 144Hz)"
+        }
     }
 
     g_CurrentDisplayModeLabel := modeText
+    UpdateTabletHibernateTrayIcon(isTabletOnly, forceRefresh)
+    PublishSunshineTrayManifest()
+}
+
+UpdateTabletHibernateTrayIcon(isTabletOnly, forceRefresh := false) {
+    global PATH_HIBERNATE_ICO
+    static s_iconVisible := false
+    static s_lastMouseLabel := ""
+
+    if (forceRefresh)
+        s_iconVisible := false
+
+    curSpeed := GetCurrentMouseSpeed()
+    mouseLabel := (curSpeed >= 20) ? "Mouse Speed: Fast (20) [Click for Normal]" : "Mouse Speed: Normal (10) [Click for Fast]"
+
+    if (isTabletOnly) {
+        if (!s_iconVisible) {
+            iconFile := PATH_HIBERNATE_ICO
+            if (!FileExist(iconFile))
+                iconFile := A_ScriptDir "\..\AutoHotkey Companion Files\tablet_hibernate.ico"
+
+            Menu, Tray, NoStandard
+            Menu, Tray, DeleteAll
+            Menu, Tray, Add, Hibernate Workstation (5s Countdown), Menu_TriggerHibernateCountdown
+            Menu, Tray, Default, Hibernate Workstation (5s Countdown)
+            Menu, Tray, Add, Hibernate Immediately, Menu_HibernateImmediately
+            Menu, Tray, Add, Cancel Countdown, Menu_CancelHibernateCountdown
+            Menu, Tray, Add
+            Menu, Tray, Add, %mouseLabel%, Action_ToggleMouseSpeed
+            Menu, Tray, Add
+            Menu, Tray, Add, Restore Laptop Display (Win+Alt+P), Menu_SwitchLaptopOnly
+
+            if (FileExist(iconFile))
+                Menu, Tray, Icon, %iconFile%
+
+            Menu, Tray, Tip, Hibernate Workstation`nDouble-click to start 5s countdown
+            Menu, Tray, Icon
+            s_iconVisible := true
+            s_lastMouseLabel := mouseLabel
+        } else if (s_lastMouseLabel != mouseLabel) {
+            try Menu, Tray, Rename, %s_lastMouseLabel%, %mouseLabel%
+            s_lastMouseLabel := mouseLabel
+        }
+    } else {
+        if (s_iconVisible) {
+            Menu, Tray, NoIcon
+            s_iconVisible := false
+            s_lastMouseLabel := ""
+        }
+    }
+}
+
+SunshineDisplay_WM_TASKBARCREATED(wParam, lParam) {
+    UpdateTrayStatusAndTooltip(true)
+}
+
+Menu_TriggerHibernateCountdown:
+    TriggerHibernateCountdown()
+return
+
+Menu_CancelHibernateCountdown:
+    CancelHibernateCountdown()
+return
+
+Menu_HibernateImmediately:
+    global g_HibernateCountdownActive
+    SetTimer, HibernateCountdownTick, Off
+    g_HibernateCountdownActive := false
+    ExecuteSafeHibernate()
+return
+
+TriggerHibernateCountdown() {
+    global g_HibernateCountdownSec, g_HibernateCountdownActive
+
+    ; If countdown is already active, double-clicking again cancels it
+    if (g_HibernateCountdownActive) {
+        CancelHibernateCountdown()
+        return
+    }
+
+    g_HibernateCountdownSec := 5
+    g_HibernateCountdownActive := true
+    ShowHibernateCountdownBadge(g_HibernateCountdownSec)
+    SetTimer, HibernateCountdownTick, 1000
+}
+
+HibernateCountdownTick:
+    global g_HibernateCountdownSec, g_HibernateCountdownActive
+
+    if (!g_HibernateCountdownActive) {
+        SetTimer, HibernateCountdownTick, Off
+        return
+    }
+
+    g_HibernateCountdownSec--
+    if (g_HibernateCountdownSec > 0) {
+        ShowHibernateCountdownBadge(g_HibernateCountdownSec)
+    } else {
+        SetTimer, HibernateCountdownTick, Off
+        g_HibernateCountdownActive := false
+        ExecuteSafeHibernate()
+    }
+return
+
+CancelHibernateCountdown() {
+    global g_HibernateCountdownActive
+    if (g_HibernateCountdownActive) {
+        SetTimer, HibernateCountdownTick, Off
+        g_HibernateCountdownActive := false
+        HideBottomRightBadge()
+        ShowBottomRightBadge("[CANCELED] Hibernation Aborted`nWorkstation remains active.", "3A3D40", 2500)
+    }
+}
+
+ExecuteSafeHibernate() {
+    ShowBottomRightBadge("[HIBERNATING] Restoring Laptop Panel...`nCommitting session to disk.", "1A5A3A", 3000)
+    SwitchToLaptopOnlyMode(0, true, true)
+    Sleep, 200
+    Run, %A_WinDir%\System32\shutdown.exe /h,, Hide
+}
+
+ShowHibernateCountdownBadge(sec) {
+    title := "[HIBERNATE] Workstation Hibernating in " sec "s..."
+    detail := "Restoring laptop display panel. Press Esc, Del, or click to Cancel."
+    ShowBottomRightBadge(title "`n" detail, "B33A00", 1500)
 }
 
 TrayShowStatusToast:
@@ -497,22 +653,34 @@ SunshineWatchdogTick:
     ; Query current hardware display topology via native Windows engine
     topo := GetCurrentDisplayTopology()
 
-    ; ACTIVE TOPOLOGY GUARD: If host is in PC Screen Only mode (SDC_TOPOLOGY_INTERNAL = 1),
-    ; NEVER force speed 20, even if sunshine.log records CLIENT CONNECTED.
+    ; ACTIVE TOPOLOGY GUARD: Synchronize mouse speed according to active topology.
+    ; Manual switch grace check (30s) so user's explicit manual mouse toggle is preserved.
+    isMouseManualGrace := (g_LastManualMouseSwitch && (A_TickCount - g_LastManualMouseSwitch < 30000))
+
     if (topo == 1)
     {
-        ; If marker file is lingering, clear it
+        ; PC Screen Only (1080p @ 144Hz): mouse speed must be 10 (normal)
         if FileExist(MarkerFile)
             FileDelete, %MarkerFile%
         FileDelete, %ManualFlag%
 
-        ; Verify mouse speed is normal 10
-        DllCall("SystemParametersInfo", "UInt", 0x0070, "UInt", 0, "UIntP", curSpeed, "UInt", 0)
-        if (curSpeed > 10)
+        if (!isMouseManualGrace && GetCurrentMouseSpeed() > 10)
             SunshineWatchdog_RestoreMouseNormal("Topology Guard: Laptop Only mode enforced speed 10")
 
         UpdateTrayStatusAndTooltip()
         return
+    }
+    else if (topo == 8 || topo == 2 || (topo == 0 && IsSecondScreenOnly()))
+    {
+        ; Tablet Only (2560x1600 @ 120Hz) or Duplicate: mouse speed must be 20 (fast)
+        if (!isMouseManualGrace && GetCurrentMouseSpeed() != 20)
+            SetMouseSpeedFast("Topology Guard: Tablet/Duplicate mode enforced speed 20")
+    }
+    else if (topo == 4)
+    {
+        ; Extend Displays (Dual): primary is laptop, mouse speed must be 10 (normal)
+        if (!isMouseManualGrace && GetCurrentMouseSpeed() > 10)
+            SunshineWatchdog_RestoreMouseNormal("Topology Guard: Extend mode enforced speed 10")
     }
 
     ; Manual switch grace check
@@ -539,7 +707,8 @@ SunshineWatchdogTick:
         LogDisconnectedStreak := 0
         OfflineStreak := 0
 
-        if (!FileExist(MarkerFile))
+        ; Boost to fast speed if marker is missing OR mouse speed is currently below 20
+        if (!FileExist(MarkerFile) || GetCurrentMouseSpeed() < 20)
         {
             isStalePreWake := false
             if (g_LastWakeLogSize > 0)
@@ -742,9 +911,25 @@ SunshineWatchdog_ForceNormal(reason, skipScript := false) {
 }
 
 SunshineWatchdog_ForceFast(reason) {
-    global FastScript, MarkerFile
+    SetMouseSpeedFast("Watchdog force fast: " reason)
+}
 
-    ; 1. Instant Win32 boost of mouse speed to 20
+SunshineWatchdog_RestoreMouseNormal(reason) {
+    SetMouseSpeedNormal("Watchdog restore normal: " reason)
+}
+
+; -----------------------------------------------------------------------------
+; MOUSE SPEED ENGINE AND FAILSAFE TRAY ACTIONS
+; -----------------------------------------------------------------------------
+
+GetCurrentMouseSpeed() {
+    curSpeed := 0
+    DllCall("SystemParametersInfo", "UInt", 0x0070, "UInt", 0, "UIntP", curSpeed, "UInt", 0)
+    return curSpeed
+}
+
+SetMouseSpeedFast(reason := "") {
+    global MarkerFile, FastScript
     DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 20, "UInt", 3)
     VarSetCapacity(accel, 12, 0)
     NumPut(6, accel, 0, "Int")
@@ -752,22 +937,20 @@ SunshineWatchdog_ForceFast(reason) {
     NumPut(0, accel, 8, "Int")
     DllCall("SystemParametersInfo", "UInt", 0x0004, "UInt", 0, "Ptr", &accel, "UInt", 3)
 
-    ; 2. Touch marker file
     if (MarkerFile) {
         FileDelete, %MarkerFile%
-        FileAppend,, %MarkerFile%
+        FileAppend, manual, %MarkerFile%
     }
-
-    ; 3. Asynchronously invoke set_fast.ps1
-    if (FileExist(FastScript))
+    if (FastScript && FileExist(FastScript))
         RunSilentPowerShell(FastScript)
 
-    SunshineDisplay_Log("Forced FAST: " reason)
+    if (reason)
+        SunshineDisplay_Log("Set mouse speed FAST (20): " reason)
+    UpdateTrayStatusAndTooltip()
 }
 
-SunshineWatchdog_RestoreMouseNormal(reason) {
-    global MarkerFile
-
+SetMouseSpeedNormal(reason := "") {
+    global MarkerFile, NormalScript
     DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
     VarSetCapacity(accel, 12, 0)
     NumPut(6, accel, 0, "Int")
@@ -779,8 +962,50 @@ SunshineWatchdog_RestoreMouseNormal(reason) {
         FileDelete, %MarkerFile%
     FileDelete, % A_Temp "\sunshine_manual_switch.flag"
 
-    SunshineDisplay_Log("Mouse restored normal: " reason)
+    if (NormalScript && FileExist(NormalScript))
+        RunSilentPowerShell(NormalScript)
+
+    if (reason)
+        SunshineDisplay_Log("Set mouse speed NORMAL (10): " reason)
+    UpdateTrayStatusAndTooltip()
 }
+
+Action_ToggleMouseSpeed:
+    ToggleMouseSpeed()
+return
+
+ToggleMouseSpeed() {
+    global g_LastManualMouseSwitch
+    g_LastManualMouseSwitch := A_TickCount
+    curSpeed := GetCurrentMouseSpeed()
+    if (curSpeed >= 20) {
+        SetMouseSpeedNormal("Manual tray toggle")
+        ShowDisplayBadge("[MOUSE]", "Mouse Speed: Normal (10)", "Precision: ON | Normal speed restored", "1A3A5A", 3000)
+    } else {
+        SetMouseSpeedFast("Manual tray toggle")
+        ShowDisplayBadge("[MOUSE]", "Mouse Speed: Fast (20)", "Precision: OFF | Fast speed restored", "4A1A6E", 3000)
+    }
+}
+
+PublishSunshineTrayManifest() {
+    global g_CurrentMouseSpeedLabel
+    curSpeed := GetCurrentMouseSpeed()
+    speedLabel := (curSpeed >= 20) ? "Mouse Speed: Fast (20)`tClick for Normal" : "Mouse Speed: Normal (10)`tClick for Fast"
+    g_CurrentMouseSpeedLabel := speedLabel
+    PublishTrayMenuManifest([ ["PC Screen Only (1080p @ 144Hz)`tWin+Alt+P", "Menu_SwitchLaptopOnly"]
+                            , ["Tablet Only (2560x1600 @ 120Hz)`tWin+Alt+P", "Menu_SwitchTabletOnly"]
+                            , ["Extend Displays (Dual Screens)`tWin+Alt+Shift+P", "Menu_SwitchExtend"]
+                            , ["Duplicate Displays (Mirror)`tWin+Alt+Shift+P", "Menu_SwitchDuplicate"]
+                            , ["-"]
+                            , [speedLabel, "Action_ToggleMouseSpeed"] ])
+}
+
+SunshineDisplay_EnforceTabletMouseSpeed:
+    if (IsSecondScreenOnly() || GetCurrentDisplayTopology() == 8) {
+        if (GetCurrentMouseSpeed() != 20)
+            SetMouseSpeedFast("Post-switch settling enforcement")
+    }
+return
 
 
 ; =============================================================================
@@ -794,8 +1019,8 @@ SunshineDisplay_WM_POWERBROADCAST(wParam, lParam) {
     if (wParam = 4)
     {
         if (IsSecondScreenActive()) {
-            SunshineDisplay_Log("Pre-suspend (wParam=4): Second screen active. Restoring laptop panel before sleep.")
-            SwitchToLaptopOnlyMode(0, true)
+            SunshineDisplay_Log("Pre-suspend (wParam=4): Second screen active. Synchronously restoring laptop panel before sleep.")
+            SwitchToLaptopOnlyMode(0, true, true)
         } else {
             SunshineDisplay_Log("Pre-suspend (wParam=4): Laptop panel already active. No switch required.")
         }
@@ -814,16 +1039,16 @@ SunshineDisplay_WM_POWERBROADCAST(wParam, lParam) {
             }
         }
 
-        ; Staggered triple-wave recovery to overcome slow GPU re-enumeration after Modern Standby
-        SetTimer, SunshineDisplay_ResumeWakeWave1, -1000
-        SetTimer, SunshineDisplay_ResumeWakeWave2, -3000
-        SetTimer, SunshineDisplay_ResumeWakeWave3, -5000
+        ; Staggered triple-wave recovery to overcome slow GPU re-enumeration after Modern Standby or Hibernate
+        SetTimer, SunshineDisplay_ResumeWakeWave1, -500
+        SetTimer, SunshineDisplay_ResumeWakeWave2, -2000
+        SetTimer, SunshineDisplay_ResumeWakeWave3, -4000
     }
 }
 
 SunshineDisplay_ResumeWakeWave1:
     if (IsSecondScreenActive()) {
-        SunshineDisplay_Log("Wake Wave 1 (1000ms): Second screen active. Restoring laptop display mode.")
+        SunshineDisplay_Log("Wake Wave 1 (500ms): Second screen active. Restoring laptop display mode.")
         SwitchToLaptopOnlyMode(1200)
     }
     ; Re-cycle keyboard hook to guarantee hotkeys respond after wake
@@ -836,52 +1061,20 @@ return
 
 SunshineDisplay_ResumeWakeWave2:
     if (IsSecondScreenActive()) {
-        SunshineDisplay_Log("Wake Wave 2 (3000ms): Second screen still active. Re-applying restore.")
+        SunshineDisplay_Log("Wake Wave 2 (2000ms): Second screen still active. Re-applying restore.")
         SwitchToLaptopOnlyMode(1200)
     }
 return
 
 SunshineDisplay_ResumeWakeWave3:
     if (IsSecondScreenActive()) {
-        SunshineDisplay_Log("Wake Wave 3 (5000ms): Second screen still active. Final fail-safe restore.")
+        SunshineDisplay_Log("Wake Wave 3 (4000ms): Second screen still active. Final fail-safe restore.")
         SwitchToLaptopOnlyMode(1200)
     }
 return
 
 SunshineDisplay_WM_DISPLAYCHANGE(wParam, lParam, msg, hwnd) {
-    global g_LastManualDisplaySwitch, MarkerFile
-
     AutoApplyStickyNotesLayout(1200)
-
-    if (g_LastManualDisplaySwitch && (A_TickCount - g_LastManualDisplaySwitch < 4000))
-        return
-
-    if (!MarkerFile || !FileExist(MarkerFile))
-        return
-
-    ; Never revert if system is intentionally in Duplicate (topo 2) or Extend (topo 4) mode
-    topo := GetCurrentDisplayTopology()
-    if (topo == 2 || topo == 4)
-        return
-
-    SysGet, monCount, MonitorCount
-    hasInternal := false
-    Loop, %monCount%
-    {
-        SysGet, mName, MonitorName, %A_Index%
-        if InStr(mName, "DISPLAY1")
-        {
-            hasInternal := true
-            break
-        }
-    }
-
-    ; If internal panel returns while single-screen tablet mode was active, laptop lid was opened
-    if (hasInternal && monCount <= 1 && topo != 2 && topo != 4) {
-        SunshineDisplay_Log("Lid opened: DISPLAY1 returned while in tablet streaming mode. Restoring laptop display.")
-        SwitchToLaptopOnlyMode(1200)
-    }
-
     UpdateTrayStatusAndTooltip()
 }
 
@@ -899,5 +1092,13 @@ SunshineDisplay_WM_WTSSESSION_CHANGE(wParam, lParam, msg, hwnd) {
         Sleep, 50
         if (!wasSuspended)
             Suspend, Off
+    }
+}
+
+SunshineDisplay_Cleanup(ExitReason, ExitCode) {
+    global g_hPowerNotify
+    if (g_hPowerNotify) {
+        DllCall("UnregisterSuspendResumeNotification", "Ptr", g_hPowerNotify)
+        g_hPowerNotify := 0
     }
 }
