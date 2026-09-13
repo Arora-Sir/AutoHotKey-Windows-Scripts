@@ -107,11 +107,12 @@ Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or 
 
 ---
 
-## DRM Video Streaming Mode (Moonlight / Sunshine)
+## Browser graphics acceleration and DRM streaming mode
 
 When streaming your desktop to a tablet or remote client via Moonlight/Sunshine, DRM-protected video (Netflix, Prime Video, Hotstar, Udemy) displays as a black screen due to Chromium hardware acceleration capturing protected surfaces.
 
-- **Toggle Action**: Click **"Toggle DRM Streaming Mode"** inside the `BasicTasks` tray submenu.
+- **Toggle Action**: Click **"Graphics Accel: Brave (ON) / Chrome (OFF)"** inside the `BasicTasks` tray submenu.
+- **Live Status Indication**: Displays real-time hardware acceleration status for both Brave and Chrome on a single line with dynamic updates.
 - **How it Works**:
   1. Detects active or frontmost Chromium browser (Brave or Google Chrome) via immediate focus, recent 20-second focus tracking across tray clicks, or desktop window Z-order. If neither browser is active, displays an informative badge and exits gracefully without disrupting background processes.
   2. Sends `WM_CLOSE` to gracefully save open tabs and session history, then terminates lingering background processes to unlock configuration files.

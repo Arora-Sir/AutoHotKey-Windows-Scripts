@@ -76,7 +76,7 @@ global g_SkillsPendingMode := ""
 ; engine already guarantees at most one concurrently-running instance of a
 ; given timer target, so this should never actually read true in practice.
 global g_SkillsCommitBusy := false
-global g_DRMTrayStatusLabel := "DRM Streaming: [OFF] (HW Accel ON)"
+global g_DRMTrayStatusLabel := "Graphics Accel: Brave (ON) / Chrome (OFF)"
 global g_LastActiveBrowser := ""
 global g_LastActiveBrowserTime := 0
 
@@ -95,12 +95,9 @@ global g_LastActiveBrowserTime := 0
 
 ; Publish for StartupScript.ahk's master submenu mirroring (see SharedHelpers.ahk).
 ; Logical feature groups are divided by horizontal separators (["-"]):
-;   Group 1: Skills Vault Status & Cycle Mode
-;   Group 2: Browser DRM Streaming Mode
-PublishTrayMenuManifest([ ["Skills: Vault Status (Show Toast)", "TraySkillsVaultStatus"]
-                        , ["Skills: Cycle Skills Vault Mode (Win+Alt+L)", "TraySkillsVaultCycle"]
-                        , ["-"]
-                        , ["Browser: Toggle DRM Streaming Mode", "TrayDRMStreamingModeToggle"] ])
+;   Group 1: Dynamic Skills Vault Mode Cycle (Win+Alt+L)
+;   Group 2: Browser Graphics Acceleration Mode (Single-line live status)
+PublishBasicTasksManifest()
 
 SetTimer, UpdateSkillsTrayStatus, 2000
 SetTimer, UpdateSkillsTrayStatus, -100 ; Fast initial update
@@ -1237,6 +1234,30 @@ CommitPersonalSkillsLock:
 
 ; AcquireSkillsVaultLock/ReleaseSkillsVaultLock now live in SharedHelpers.ahk as the generalized AcquireNamedMutex/ReleaseNamedMutex.
 
+; Dynamically publishes BasicTasks tray manifest with live state and tab-aligned hotkeys
+PublishBasicTasksManifest() {
+    modeFile := A_Temp "\skills_vault_mode.flag"
+    sMode := "Auto"
+    if FileExist(modeFile) {
+        FileRead, rawMode, %modeFile%
+        rawMode := Trim(rawMode)
+        if (rawMode = "locked")
+            sMode := "Locked"
+        else if (rawMode = "unlocked")
+            sMode := "Unlocked"
+    }
+
+    braveAccel := GetBrowserHardwareAcceleration("Brave") ? "ON" : "OFF"
+    chromeAccel := GetBrowserHardwareAcceleration("Chrome") ? "ON" : "OFF"
+
+    skillsLabel := "Skills: Cycle Vault Mode (" sMode ")`tWin+Alt+L"
+    accelLabel := "Graphics Accel: Brave (" braveAccel ") / Chrome (" chromeAccel ")"
+
+    PublishTrayMenuManifest([ [skillsLabel, "TraySkillsVaultCycle"]
+                            , ["-"]
+                            , [accelLabel, "TrayDRMStreamingModeToggle"] ])
+}
+
 TraySkillsVaultStatus:
     modeFile := A_Temp "\skills_vault_mode.flag"
     sMode := "auto"
@@ -1257,27 +1278,7 @@ TraySkillsVaultCycle:
 return
 
 UpdateSkillsTrayStatus:
-    global g_SkillsTrayStatusLabel
-    modeFile := A_Temp "\skills_vault_mode.flag"
-    sMode := "auto"
-    if FileExist(modeFile) {
-        FileRead, sMode, %modeFile%
-        sMode := Trim(sMode)
-    }
-    if (sMode = "locked")
-        newLabel := "Skills Vault: [LOCKED] (manual)"
-    else if (sMode = "unlocked")
-        newLabel := "Skills Vault: [UNLOCKED] (manual)"
-    else
-        newLabel := "Skills Vault: [AUTO] (focus-driven)"
-
-    if (newLabel != g_SkillsTrayStatusLabel) {
-        try {
-            Menu, Tray, Rename, %g_SkillsTrayStatusLabel%, %newLabel%
-            g_SkillsTrayStatusLabel := newLabel
-            Menu, Tray, Disable, %newLabel%
-        }
-    }
+    PublishBasicTasksManifest()
 return
 
 ; HandleRemoteTrayMenuTriggerBT replaced by the shared HandleRemoteTrayMenuTrigger
@@ -1299,7 +1300,7 @@ ToggleDRMStreamingMode() {
     ; Target: active top browser window currently viewed (not background instances)
     targets := GetTargetBrowsersForDRM()
     if (targets.Length() = 0) {
-        ShowDRMStatusBadge("[OFF] DRM: No active Chrome or Brave window")
+        ShowDRMStatusBadge("[OFF] Graphics Accel: No active Chrome or Brave window")
         return
     }
 
@@ -1327,7 +1328,7 @@ ToggleDRMStreamingMode() {
             LaunchBrowserInstance(bName, "--disable-gpu --restore-last-session --disable-session-crashed-bubble")
         }
 
-        ShowDRMStatusBadge("[ACTIVE] DRM Streaming: " targetListStr " (HW Accel OFF)")
+        ShowDRMStatusBadge("[OFF] Graphics Accel: " targetListStr " (DRM Mode Active)")
         SetTimer, UpdateDRMTrayStatus, -100
     } else {
         ; --- DEACTIVATE DRM STREAMING MODE (Restore Hardware Acceleration) ---
@@ -1341,7 +1342,7 @@ ToggleDRMStreamingMode() {
         if (GetBrowserHardwareAcceleration("Brave") && GetBrowserHardwareAcceleration("Chrome"))
             FileDelete, %flagFile%
 
-        ShowDRMStatusBadge("[OFF] DRM Streaming: " targetListStr " (HW Accel ON)")
+        ShowDRMStatusBadge("[ON] Graphics Accel: " targetListStr " (Normal GPU Mode)")
         SetTimer, UpdateDRMTrayStatus, -100
     }
 }
@@ -1351,22 +1352,7 @@ TrayDRMStreamingModeToggle:
 return
 
 UpdateDRMTrayStatus:
-    global g_DRMTrayStatusLabel
-    flagFile := A_Temp "\ahk_drm_streaming_mode.flag"
-    isBraveOff := !GetBrowserHardwareAcceleration("Brave")
-    isChromeOff := !GetBrowserHardwareAcceleration("Chrome")
-
-    if (FileExist(flagFile) || isBraveOff || isChromeOff)
-        newLabel := "DRM Streaming: [ACTIVE] (HW Accel OFF)"
-    else
-        newLabel := "DRM Streaming: [OFF] (HW Accel ON)"
-
-    if (newLabel != g_DRMTrayStatusLabel) {
-        try {
-            Menu, Tray, Rename, %g_DRMTrayStatusLabel%, %newLabel%
-            g_DRMTrayStatusLabel := newLabel
-        }
-    }
+    PublishBasicTasksManifest()
 return
 
 TrackActiveBrowser:

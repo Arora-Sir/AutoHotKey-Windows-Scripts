@@ -89,6 +89,8 @@ Files.Push(Script_12)
 ; Everything else falls back to the normal (alphabetical-looking) order below them.
 ; Add or remove a name here to change what's pinned - MenuBuild: below needs no other change.
 PinnedScripts := ["BasicTasks", "PersonalKeywords", "SunshineDisplayWatchdog"]
+global g_CurrentBasicTasksSkillsItem := ""
+global g_CurrentBasicTasksDrmItem := ""
 
 ; Loop, 1
 ; {
@@ -374,11 +376,30 @@ MenuBuild:
 				Menu, SubMenu_%PID%, Add
 				Loop, Read, %CustomManifest%
 				{
-					StringSplit, CustomItem, A_LoopReadLine, |
+					delimPos := InStr(A_LoopReadLine, "|", false, 0)
+					if (delimPos > 0)
+					{
+						CustomItem1 := SubStr(A_LoopReadLine, 1, delimPos - 1)
+						CustomItem2 := SubStr(A_LoopReadLine, delimPos + 1)
+					}
+					else
+					{
+						CustomItem1 := A_LoopReadLine
+						CustomItem2 := ""
+					}
 					if (CustomItem1 = "-" || CustomItem1 = "")
 						Menu, SubMenu_%PID%, Add
-					else if (CustomItem0 >= 1 && CustomItem1 != "")
+					else if (CustomItem1 != "")
+					{
 						Menu, SubMenu_%PID%, Add, % CustomItem1, RemoteMenuCommand
+						if (Script_Name = "BasicTasks")
+						{
+							if InStr(CustomItem1, "Skills: Cycle Vault Mode")
+								g_CurrentBasicTasksSkillsItem := CustomItem1
+							else if (InStr(CustomItem1, "Graphics Accel") || InStr(CustomItem1, "DRM Streaming"))
+								g_CurrentBasicTasksDrmItem := CustomItem1
+						}
+					}
 				}
 			}
 		}
@@ -453,6 +474,7 @@ MenuBuild:
 		Menu, Tray, Icon
 
 	gosub UpdateSunshineDisplayMenuChecks
+	gosub UpdateBasicTasksMenuLabels
 return
 
 ; Dynamically applies checkmarks to active display mode inside SunshineDisplayWatchdog's submenu
@@ -460,24 +482,6 @@ UpdateSunshineDisplayMenuChecks:
 	PID := Scripts["SunshineDisplayWatchdog", "PID"]
 	if (!PID)
 		return
-
-	SysGet, monCount, MonitorCount
-	hasInternal := false
-	Loop, %monCount%
-	{
-		SysGet, mName, MonitorName, %A_Index%
-		if InStr(mName, "DISPLAY1")
-			hasInternal := true
-	}
-
-	isDuplicate := false
-	if (monCount >= 2)
-	{
-		SysGet, m1, Monitor, 1
-		SysGet, m2, Monitor, 2
-		if (m1Left = m2Left && m1Top = m2Top && m1Right = m2Right && m1Bottom = m2Bottom)
-			isDuplicate := true
-	}
 
 	itemLaptop    := "PC Screen Only (1080p @ 144Hz)`tWin+Alt+P"
 	itemTablet    := "Tablet Only (2560x1600 @ 120Hz)`tWin+Alt+P"
@@ -489,14 +493,56 @@ UpdateSunshineDisplayMenuChecks:
 	try Menu, SubMenu_%PID%, Uncheck, %itemExtend%
 	try Menu, SubMenu_%PID%, Uncheck, %itemDuplicate%
 
-	if (!hasInternal)
+	topo := GetCurrentDisplayTopology()
+	if (topo == 8)
 		try Menu, SubMenu_%PID%, Check, %itemTablet%
-	else if (monCount >= 2 && isDuplicate)
+	else if (topo == 2)
 		try Menu, SubMenu_%PID%, Check, %itemDuplicate%
-	else if (monCount >= 2)
+	else if (topo == 4)
 		try Menu, SubMenu_%PID%, Check, %itemExtend%
-	else
+	else if (topo == 1)
 		try Menu, SubMenu_%PID%, Check, %itemLaptop%
+	else
+	{
+		SysGet, monCount, MonitorCount
+		if (monCount >= 2)
+			try Menu, SubMenu_%PID%, Check, %itemExtend%
+		else
+			try Menu, SubMenu_%PID%, Check, %itemLaptop%
+	}
+return
+
+; Dynamically synchronizes BasicTasks tray menu labels with live manifest
+UpdateBasicTasksMenuLabels:
+	PID := Scripts["BasicTasks", "PID"]
+	if (!PID)
+		return
+
+	manifest := A_Temp "\ahk_traymenu_BasicTasks.txt"
+	if !FileExist(manifest)
+		return
+
+	Loop, Read, %manifest%
+	{
+		delimPos := InStr(A_LoopReadLine, "|", false, 0)
+		item1 := (delimPos > 0) ? SubStr(A_LoopReadLine, 1, delimPos - 1) : A_LoopReadLine
+		if InStr(item1, "Skills: Cycle Vault Mode")
+		{
+			if (g_CurrentBasicTasksSkillsItem && g_CurrentBasicTasksSkillsItem != item1)
+			{
+				try Menu, SubMenu_%PID%, Rename, %g_CurrentBasicTasksSkillsItem%, %item1%
+				g_CurrentBasicTasksSkillsItem := item1
+			}
+		}
+		else if (InStr(item1, "Graphics Accel") || InStr(item1, "DRM Streaming"))
+		{
+			if (g_CurrentBasicTasksDrmItem && g_CurrentBasicTasksDrmItem != item1)
+			{
+				try Menu, SubMenu_%PID%, Rename, %g_CurrentBasicTasksDrmItem%, %item1%
+				g_CurrentBasicTasksDrmItem := item1
+			}
+		}
+	}
 return
 
 ScriptCommand:
@@ -579,8 +625,12 @@ RemoteMenuCommand:
 	Loop, Read, %CustomManifest%
 	{
 		LineNum++
-		StringSplit, CustomItem, A_LoopReadLine, |
-		if (CustomItem1 = A_ThisMenuItem)
+		delimPos := InStr(A_LoopReadLine, "|", false, 0)
+		CustomItem1 := (delimPos > 0) ? SubStr(A_LoopReadLine, 1, delimPos - 1) : A_LoopReadLine
+		if (CustomItem1 = A_ThisMenuItem
+			|| (InStr(CustomItem1, "Skills: Cycle Vault Mode") && InStr(A_ThisMenuItem, "Skills: Cycle Vault Mode"))
+			|| (InStr(CustomItem1, "Graphics Accel") && InStr(A_ThisMenuItem, "Graphics Accel"))
+			|| (InStr(CustomItem1, "DRM Streaming") && InStr(A_ThisMenuItem, "DRM Streaming")))
 		{
 			RemoteTrayTriggerMsg := DllCall("RegisterWindowMessage", "str", "AHK_RemoteTrayMenuTrigger_v1")
 			PostMessage, %RemoteTrayTriggerMsg%, %LineNum%,,,ahk_pid %Pid%
@@ -648,6 +698,28 @@ KillTrayIcon(scriptHwnd) {
 	return DllCall("Shell32\Shell_NotifyIcon", "uint", NIM_DELETE, "ptr", &nic)
 }
 
+GetCurrentDisplayTopology() {
+	VarSetCapacity(numPaths, 4, 0)
+	VarSetCapacity(numModes, 4, 0)
+	if DllCall("GetDisplayConfigBufferSizes", "UInt", 4, "Ptr", &numPaths, "Ptr", &numModes)
+		return 0
+
+	pCount := NumGet(numPaths, 0, "UInt")
+	mCount := NumGet(numModes, 0, "UInt")
+	if (pCount = 0)
+		return 0
+
+	VarSetCapacity(paths, pCount * 72, 0)
+	VarSetCapacity(modes, mCount * 64, 0)
+	VarSetCapacity(topologyId, 4, 0)
+
+	ret := DllCall("QueryDisplayConfig", "UInt", 4, "Ptr", &numPaths, "Ptr", &paths, "Ptr", &numModes, "Ptr", &modes, "Ptr", &topologyId)
+	if (ret != 0)
+		return 0
+
+	return NumGet(topologyId, 0, "UInt")
+}
+
 TrimAtDelim(String,Length:=124,Delim:="`n",Tail:="...")
 {
 	if (StrLen(String)>Length)
@@ -666,6 +738,7 @@ AHK_NOTIFYICON(wParam, lParam, uMsg, hWnd) ; OnMessage(0x404, "AHK_NOTIFYICON")
 	else if (lParam = 0x202 || lParam = 0x205) ; WM_LBUTTONUP or WM_RBUTTONUP
 	{
 		gosub UpdateSunshineDisplayMenuChecks
+		gosub UpdateBasicTasksMenuLabels
 		Menu, Tray, Show
 		return 0
 	}
