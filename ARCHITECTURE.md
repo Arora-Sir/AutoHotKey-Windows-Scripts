@@ -618,7 +618,19 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
   5. **Dual-Tray Failsafe Toggle**:
      - **Tablet Tray Icon**: `UpdateTabletHibernateTrayIcon` adds a dynamic menu item (`Mouse Speed: Fast (20) [Click for Normal]` or `Mouse Speed: Normal (10) [Click for Fast]`) that allows 1-click toggling directly from the tablet taskbar in Moonlight.
      - **Master Tray Menu**: `PublishSunshineTrayManifest()` publishes the live speed label to `A_Temp\ahk_traymenu_SunshineDisplayWatchdog.txt`. `StartupScript.ahk` (`UpdateSunshineDisplayMenuChecks`) dynamically tracks and updates the label inside the master submenu.
-     - **Manual Grace Window**: Manual toggles set `g_LastManualMouseSwitch := A_TickCount` (30-second window), preventing the background topology guard from overriding intentional user choices.
+     - **Session-Aware Manual Override Lock**: Manual toggles engage `g_ManualMouseOverride := true` and snapshot `g_ManualOverrideConnectId` from `sunshine.log`. The background watchdog strictly respects the user's manual choice without recurring timer reversion loops. Automatic mode automatically resumes when Moonlight disconnects or closes on the tablet, or when a fresh stream reconnection event occurs.
+
+### 14. Dedicated 3-Way Skills Vault Tray Integration & Dynamic Checkmarks (`BasicTasks.ahk` & `StartupScript.ahk`)
+- **Context**: Selecting and visualizing the active Skills Vault protection mode (`Auto`, `Locked`, `Unlocked`) from the Windows system tray.
+- **Problem**: `BasicTasks.ahk` previously published a single cycling menu entry (`Skills: Cycle Vault Mode (<current>)`tWin+Alt+L`). When the vault was locked, the entry displayed `(Locked)` persistently, concealing the other available states and requiring blind sequential keyboard toggling.
+- **Decision**:
+  1. **Three Dedicated Tray Items**: Replaced the single cycling entry with 3 discrete menu items published via `PublishBasicTasksManifest`:
+     - `Skills Vault: Auto (Focus-Driven)`tWin+Alt+L`
+     - `Skills Vault: Locked (Org Safe Mode)`
+     - `Skills Vault: Unlocked (Personal Mode)`
+  2. **Real-Time Win32 Checkmarks**: `StartupScript.ahk` (`UpdateBasicTasksMenuChecks`) evaluates `%TEMP%\skills_vault_mode.flag` and applies native Win32 `Menu, Check` to the active mode while unchecking the other two. Invoked both on initialization and dynamically on mouse up (`WM_LBUTTONUP` / `WM_RBUTTONUP`), ensuring the active checkmark is strictly accurate before the menu appears.
+  3. **Direct 1-Click Mode Selection**: Each entry maps to a dedicated label (`TraySkillsVaultAuto`, `TraySkillsVaultLocked`, `TraySkillsVaultUnlocked`) invoking `SetPersonalSkillsMode(targetMode)` with a fast 300ms debounce.
+  4. **Preserved Keyboard Cycling**: `Win+Alt+L` remains mapped to `TogglePersonalSkillsLock()` with its 2000ms debounce settle window for rapid keyboard cycling, automatically synchronizing checkmark placement on next menu view.
 
 ---
 

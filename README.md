@@ -66,10 +66,10 @@ Protects personal skills vaults, private study roadmaps, and sensitive configura
   - Continuously monitors active window focus:
     - **Focusing Claude (`claude.exe`)**: Automatically triggers `lock-personal-skills.ps1` to revoke permissions and lock personal vaults (org safe mode). Displays an amber/red bottom-right badge.
     - **Focusing Antigravity (`Antigravity.exe` or `agy.exe`)**: Automatically triggers `unlock-personal-skills.ps1` to restore full personal workspace permissions. Displays a deep green badge.
-- **Manual Cycle Mode (`BasicTasks.ahk`)**:
-  - Press **`Win+Alt+L`** (or click **"Cycle Skills Vault Mode"** in the `BasicTasks` tray submenu).
-  - Cycles between three modes: `Auto` -> `Force Locked` -> `Force Unlocked`.
-  - Debounced with a 2000ms settle window and protected by a Win32 named mutex (`SkillsVaultLock_AHK_v1`) to prevent rapid presses from racing `icacls` ACL permissions sweeps.
+- **Manual 3-Way Mode Control (`BasicTasks.ahk`)**:
+  - **Dedicated Tray Menu Items**: Open the `BasicTasks` submenu to view all 3 mode entries (**`Skills Vault: Auto (Focus-Driven)`**, **`Skills Vault: Locked (Org Safe Mode)`**, **`Skills Vault: Unlocked (Personal Mode)`**) with real-time Win32 checkmarks indicating the active state. Click any entry to switch directly.
+  - **Keyboard Cycle Hotkey**: Press **`Win+Alt+L`** to cycle between the three modes: `Auto` -> `Force Locked` -> `Force Unlocked`.
+  - Debounced with a 2000ms settle window for keyboard cycling (and 300ms for direct tray clicks) and protected by a Win32 named mutex (`SkillsVaultLock_AHK_v1`) to prevent rapid transitions from racing `icacls` ACL permissions sweeps.
   - Color-coded bottom-right corner badge confirms status: Deep Red for `[LOCKED]`, Deep Green for `[UNLOCKED]`, Deep Blue for `[AUTO]`, and Amber for `applying...`.
 
 ---

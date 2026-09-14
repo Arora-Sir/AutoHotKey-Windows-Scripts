@@ -96,7 +96,7 @@ global g_LastActiveBrowserTime := 0
 
 ; Publish for StartupScript.ahk's master submenu mirroring (see SharedHelpers.ahk).
 ; Logical feature groups are divided by horizontal separators (["-"]):
-;   Group 1: Dynamic Skills Vault Mode Cycle (Win+Alt+L)
+;   Group 1: Dedicated Skills Vault Modes (Auto, Locked, Unlocked)
 ;   Group 2: Browser Graphics Acceleration Mode (Single-line live status)
 PublishBasicTasksManifest()
 
@@ -1247,29 +1247,64 @@ CommitPersonalSkillsLock:
 
 ; AcquireSkillsVaultLock/ReleaseSkillsVaultLock now live in SharedHelpers.ahk as the generalized AcquireNamedMutex/ReleaseNamedMutex.
 
-; Dynamically publishes BasicTasks tray manifest with live state and tab-aligned hotkeys
-PublishBasicTasksManifest() {
-    modeFile := A_Temp "\skills_vault_mode.flag"
-    sMode := "Auto"
-    if FileExist(modeFile) {
-        FileRead, rawMode, %modeFile%
-        rawMode := Trim(rawMode)
-        if (rawMode = "locked")
-            sMode := "Locked"
-        else if (rawMode = "unlocked")
-            sMode := "Unlocked"
+; Direct mode setter for tray menu selection (Auto, Locked, Unlocked)
+SetPersonalSkillsMode(targetMode) {
+    global g_SkillsPendingMode, g_SkillsCommitBusy
+    global PATH_SKILLS_LOCK_SCRIPT, PATH_SKILLS_UNLOCK_SCRIPT
+
+    if (g_SkillsCommitBusy)
+        return
+
+    if (!PATH_SKILLS_LOCK_SCRIPT || !PATH_SKILLS_UNLOCK_SCRIPT) {
+        ShowSkillsStatusBadge("[ERROR] Skills paths not configured")
+        return
     }
 
+    if (targetMode != "locked" && targetMode != "unlocked")
+        targetMode := "auto"
+
+    g_SkillsPendingMode := targetMode
+
+    if (g_SkillsPendingMode = "locked")
+        ShowSkillsStatusBadge("[LOCKED] Skills Vault (manual)")
+    else if (g_SkillsPendingMode = "unlocked")
+        ShowSkillsStatusBadge("[UNLOCKED] Skills Vault (manual)")
+    else
+        ShowSkillsStatusBadge("[AUTO] Skills Vault (focus-driven)")
+
+    ; Fast 300ms debounce for direct user tray clicks
+    DebounceArmTimer("CommitPersonalSkillsLock", 300)
+    return
+}
+
+; Dynamically publishes BasicTasks tray manifest with dedicated modes and tab-aligned hotkey
+PublishBasicTasksManifest() {
     braveAccel := GetBrowserHardwareAcceleration("Brave") ? "ON" : "OFF"
     chromeAccel := GetBrowserHardwareAcceleration("Chrome") ? "ON" : "OFF"
 
-    skillsLabel := "Skills: Cycle Vault Mode (" sMode ")`tWin+Alt+L"
-    accelLabel := "Graphics Accel: Brave (" braveAccel ") / Chrome (" chromeAccel ")"
+    itemAuto     := "Skills Vault: Auto (Focus-Driven)`tWin+Alt+L"
+    itemLocked   := "Skills Vault: Locked (Org Safe Mode)"
+    itemUnlocked := "Skills Vault: Unlocked (Personal Mode)"
+    accelLabel   := "Graphics Accel: Brave (" braveAccel ") / Chrome (" chromeAccel ")"
 
-    PublishTrayMenuManifest([ [skillsLabel, "TraySkillsVaultCycle"]
+    PublishTrayMenuManifest([ [itemAuto, "TraySkillsVaultAuto"]
+                            , [itemLocked, "TraySkillsVaultLocked"]
+                            , [itemUnlocked, "TraySkillsVaultUnlocked"]
                             , ["-"]
                             , [accelLabel, "TrayDRMStreamingModeToggle"] ])
 }
+
+TraySkillsVaultAuto:
+    SetPersonalSkillsMode("auto")
+return
+
+TraySkillsVaultLocked:
+    SetPersonalSkillsMode("locked")
+return
+
+TraySkillsVaultUnlocked:
+    SetPersonalSkillsMode("unlocked")
+return
 
 TraySkillsVaultStatus:
     modeFile := A_Temp "\skills_vault_mode.flag"

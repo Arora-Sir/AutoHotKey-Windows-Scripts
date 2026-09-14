@@ -89,7 +89,6 @@ Files.Push(Script_12)
 ; Everything else falls back to the normal (alphabetical-looking) order below them.
 ; Add or remove a name here to change what's pinned - MenuBuild: below needs no other change.
 PinnedScripts := ["BasicTasks", "PersonalKeywords", "SunshineDisplayWatchdog"]
-global g_CurrentBasicTasksSkillsItem := ""
 global g_CurrentBasicTasksDrmItem := ""
 global g_CurrentSunshineMouseSpeedItem := ""
 
@@ -395,9 +394,7 @@ MenuBuild:
 						Menu, SubMenu_%PID%, Add, % CustomItem1, RemoteMenuCommand
 						if (Script_Name = "BasicTasks")
 						{
-							if InStr(CustomItem1, "Skills: Cycle Vault Mode")
-								g_CurrentBasicTasksSkillsItem := CustomItem1
-							else if (InStr(CustomItem1, "Graphics Accel") || InStr(CustomItem1, "DRM Streaming"))
+							if (InStr(CustomItem1, "Graphics Accel") || InStr(CustomItem1, "DRM Streaming"))
 								g_CurrentBasicTasksDrmItem := CustomItem1
 						}
 						else if (Script_Name = "SunshineDisplayWatchdog")
@@ -480,6 +477,7 @@ MenuBuild:
 		Menu, Tray, Icon
 
 	gosub UpdateSunshineDisplayMenuChecks
+	gosub UpdateBasicTasksMenuChecks
 	gosub UpdateBasicTasksMenuLabels
 return
 
@@ -537,6 +535,36 @@ UpdateSunshineDisplayMenuChecks:
 	}
 return
 
+; Dynamically applies checkmarks to active skills vault mode inside BasicTasks's submenu
+UpdateBasicTasksMenuChecks:
+	PID := Scripts["BasicTasks", "PID"]
+	if (!PID)
+		return
+
+	itemAuto     := "Skills Vault: Auto (Focus-Driven)`tWin+Alt+L"
+	itemLocked   := "Skills Vault: Locked (Org Safe Mode)"
+	itemUnlocked := "Skills Vault: Unlocked (Personal Mode)"
+
+	try Menu, SubMenu_%PID%, Uncheck, %itemAuto%
+	try Menu, SubMenu_%PID%, Uncheck, %itemLocked%
+	try Menu, SubMenu_%PID%, Uncheck, %itemUnlocked%
+
+	modeFile := A_Temp "\skills_vault_mode.flag"
+	sMode := "auto"
+	if FileExist(modeFile)
+	{
+		FileRead, sMode, %modeFile%
+		sMode := Trim(sMode)
+	}
+
+	if (sMode = "locked")
+		try Menu, SubMenu_%PID%, Check, %itemLocked%
+	else if (sMode = "unlocked")
+		try Menu, SubMenu_%PID%, Check, %itemUnlocked%
+	else
+		try Menu, SubMenu_%PID%, Check, %itemAuto%
+return
+
 ; Dynamically synchronizes BasicTasks tray menu labels with live manifest
 UpdateBasicTasksMenuLabels:
 	PID := Scripts["BasicTasks", "PID"]
@@ -551,15 +579,7 @@ UpdateBasicTasksMenuLabels:
 	{
 		delimPos := InStr(A_LoopReadLine, "|", false, 0)
 		item1 := (delimPos > 0) ? SubStr(A_LoopReadLine, 1, delimPos - 1) : A_LoopReadLine
-		if InStr(item1, "Skills: Cycle Vault Mode")
-		{
-			if (g_CurrentBasicTasksSkillsItem && g_CurrentBasicTasksSkillsItem != item1)
-			{
-				try Menu, SubMenu_%PID%, Rename, %g_CurrentBasicTasksSkillsItem%, %item1%
-				g_CurrentBasicTasksSkillsItem := item1
-			}
-		}
-		else if (InStr(item1, "Graphics Accel") || InStr(item1, "DRM Streaming"))
+		if (InStr(item1, "Graphics Accel") || InStr(item1, "DRM Streaming"))
 		{
 			if (g_CurrentBasicTasksDrmItem && g_CurrentBasicTasksDrmItem != item1)
 			{
@@ -653,7 +673,6 @@ RemoteMenuCommand:
 		delimPos := InStr(A_LoopReadLine, "|", false, 0)
 		CustomItem1 := (delimPos > 0) ? SubStr(A_LoopReadLine, 1, delimPos - 1) : A_LoopReadLine
 		if (CustomItem1 = A_ThisMenuItem
-			|| (InStr(CustomItem1, "Skills: Cycle Vault Mode") && InStr(A_ThisMenuItem, "Skills: Cycle Vault Mode"))
 			|| (InStr(CustomItem1, "Graphics Accel") && InStr(A_ThisMenuItem, "Graphics Accel"))
 			|| (InStr(CustomItem1, "DRM Streaming") && InStr(A_ThisMenuItem, "DRM Streaming"))
 			|| (InStr(CustomItem1, "Mouse Speed:") && InStr(A_ThisMenuItem, "Mouse Speed:")))
@@ -765,6 +784,7 @@ AHK_NOTIFYICON(wParam, lParam, uMsg, hWnd) ; OnMessage(0x404, "AHK_NOTIFYICON")
 	else if (lParam = 0x202 || lParam = 0x205) ; WM_LBUTTONUP or WM_RBUTTONUP
 	{
 		gosub UpdateSunshineDisplayMenuChecks
+		gosub UpdateBasicTasksMenuChecks
 		gosub UpdateBasicTasksMenuLabels
 		Menu, Tray, Show
 		return 0

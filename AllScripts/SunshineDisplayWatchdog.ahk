@@ -55,6 +55,8 @@ global ConnectStreak           := 0
 global g_LastWakeLogSize       := 0
 global g_LastManualDisplaySwitch := 0
 global g_LastManualMouseSwitch   := 0
+global g_ManualMouseOverride     := false
+global g_ManualOverrideConnectId := ""
 global PATH_HIBERNATE_ICO      := A_ScriptDir "\..\AutoHotkey Companion Files\tablet_hibernate.ico"
 global g_HibernateCountdownSec := 0
 global g_HibernateCountdownActive := false
@@ -152,7 +154,10 @@ ToggleExtendVsDuplicate() {
 ; Switches host to PC Screen Only mode (1080p @ 144Hz, mouse speed 10)
 SwitchToLaptopOnlyMode(delayNotesMs := 1200, skipNotes := false, isBlocking := false) {
     global g_LastManualDisplaySwitch, MarkerFile, LogFile
+    global g_ManualMouseOverride, g_ManualOverrideConnectId
     g_LastManualDisplaySwitch := A_TickCount
+    g_ManualMouseOverride := false
+    g_ManualOverrideConnectId := ""
 
     ; 1. Win32 instant mouse speed set to 10 (normal) and acceleration ON (0 ms)
     DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
@@ -196,12 +201,15 @@ SwitchToLaptopOnlyMode(delayNotesMs := 1200, skipNotes := false, isBlocking := f
 ; Switches host to Tablet Only mode (2560x1600 @ 120Hz, mouse speed 20)
 SwitchToTabletOnlyMode(delayNotesMs := 1200) {
     global g_LastManualDisplaySwitch, MarkerFile, LogFile
+    global g_ManualMouseOverride, g_ManualOverrideConnectId
     if (!HasSecondDisplayConnected()) {
         ShowDisplayBadge("[ALERT]", "No Second Display Detected", "Please attach tablet dummy plug.", "7A3B00")
         return
     }
 
     g_LastManualDisplaySwitch := A_TickCount
+    g_ManualMouseOverride := false
+    g_ManualOverrideConnectId := ""
 
     ; 1. Win32 instant boost of mouse speed to 20 and acceleration OFF (0 ms)
     DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 20, "UInt", 3)
@@ -243,6 +251,7 @@ SwitchToExtendMode(delayNotesMs := 1200) {
     global g_LastManualDisplaySwitch, MarkerFile, LogFile, SunshineLog
     global g_ExtendPendingConnect, g_ExtendTargetLogSize, g_ExtendConnectTimeoutTicks, g_ExtendNotesDelayMs
     global PATH_ADB_EXE, SUNSHINE_TABLET_TAILSCALE_IP
+    global g_ManualMouseOverride, g_ManualOverrideConnectId
 
     if (!HasSecondDisplayConnected()) {
         ShowDisplayBadge("[ALERT]", "No Second Display Detected", "Please attach tablet dummy plug.", "7A3B00")
@@ -250,6 +259,8 @@ SwitchToExtendMode(delayNotesMs := 1200) {
     }
 
     g_LastManualDisplaySwitch := A_TickCount
+    g_ManualMouseOverride := false
+    g_ManualOverrideConnectId := ""
     g_ExtendNotesDelayMs := delayNotesMs
 
     topo := GetCurrentDisplayTopology()
@@ -410,12 +421,15 @@ return
 ; Switches host to Duplicate Displays mode (Mirrors screens)
 SwitchToDuplicateMode(delayNotesMs := 1200) {
     global g_LastManualDisplaySwitch, MarkerFile, LogFile
+    global g_ManualMouseOverride, g_ManualOverrideConnectId
     if (!HasSecondDisplayConnected()) {
         ShowDisplayBadge("[ALERT]", "No Second Display Detected", "Please attach tablet dummy plug.", "7A3B00")
         return
     }
 
     g_LastManualDisplaySwitch := A_TickCount
+    g_ManualMouseOverride := false
+    g_ManualOverrideConnectId := ""
 
     ; 1. Boost mouse speed to 20 for streaming canvas navigation
     DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 20, "UInt", 3)
@@ -648,6 +662,12 @@ SunshineWatchdogTick:
         FileDelete, %QuitFlag%
         LogDisconnectedStreak := 0
         OfflineStreak := 0
+        if (g_ManualMouseOverride)
+        {
+            g_ManualMouseOverride := false
+            g_ManualOverrideConnectId := ""
+            SunshineDisplay_Log("Sunshine session ended (.session_quit): Cleared manual mouse override.")
+        }
         SunshineDisplay_Log("Sunshine session ended (undo hook processed)")
         UpdateTrayStatusAndTooltip()
     }
@@ -655,12 +675,30 @@ SunshineWatchdogTick:
     ; Query current hardware display topology via native Windows engine
     topo := GetCurrentDisplayTopology()
 
-    ; Query streaming status from sunshine.log
-    LastEvent := SunshineWatchdog_LastClientEvent()
+    ; Query streaming status and connection event identifiers from sunshine.log
+    lastConnectId := ""
+    lastDisconnectId := ""
+    LastEvent := SunshineWatchdog_LastClientEvent(lastConnectId, lastDisconnectId)
     isStreaming := (LastEvent = "CONNECTED")
 
-    ; Manual switch grace check (30s) so user's explicit manual mouse toggle is preserved
-    isMouseManualGrace := (g_LastManualMouseSwitch && (A_TickCount - g_LastManualMouseSwitch < 30000))
+    ; Reset manual mouse override on session boundary:
+    ; 1. Stream disconnected
+    ; 2. Fresh stream reconnection (new CLIENT CONNECTED timestamp signature)
+    if (g_ManualMouseOverride)
+    {
+        if (LastEvent = "DISCONNECTED")
+        {
+            g_ManualMouseOverride := false
+            g_ManualOverrideConnectId := ""
+            SunshineDisplay_Log("Disconnection event: Cleared manual mouse override. Automatic mode restored.")
+        }
+        else if (isStreaming && lastConnectId != "" && g_ManualOverrideConnectId != "" && lastConnectId != g_ManualOverrideConnectId)
+        {
+            g_ManualMouseOverride := false
+            g_ManualOverrideConnectId := ""
+            SunshineDisplay_Log("Reconnection detected (" lastConnectId "): Cleared manual mouse override. Automatic mode restored.")
+        }
+    }
 
     ; Manual display switch grace check (20s)
     isManualGrace := false
@@ -686,11 +724,16 @@ SunshineWatchdogTick:
         LogDisconnectedStreak := 0
         OfflineStreak := 0
 
+        ; If user manually toggled mouse speed, hold that choice without reverting
+        if (g_ManualMouseOverride)
+        {
+            ConnectStreak := 0
+        }
         ; In Extend Displays mode (topo 4), the laptop screen is the primary display
         ; with physical controls, so mouse speed remains normal (10).
-        if (topo == 4)
+        else if (topo == 4)
         {
-            if (!isMouseManualGrace && GetCurrentMouseSpeed() > 10)
+            if (GetCurrentMouseSpeed() > 10)
                 SunshineWatchdog_RestoreMouseNormal("Topology Guard: Extend mode enforced speed 10")
         }
         else
@@ -698,7 +741,7 @@ SunshineWatchdogTick:
             ; For PC Screen Only (topo 1, default laptop mirror), Duplicate (topo 2),
             ; or Tablet Only (topo 8): user is actively controlling the desktop from tablet.
             ; Ensure mouse speed is FAST (20) with precision acceleration disabled.
-            if (!isMouseManualGrace && (!FileExist(MarkerFile) || GetCurrentMouseSpeed() < 20))
+            if (!FileExist(MarkerFile) || GetCurrentMouseSpeed() < 20)
             {
                 isStalePreWake := false
                 if (g_LastWakeLogSize > 0)
@@ -736,6 +779,13 @@ SunshineWatchdogTick:
     else if (LastEvent = "DISCONNECTED")
     {
         ConnectStreak := 0
+        if (g_ManualMouseOverride)
+        {
+            g_ManualMouseOverride := false
+            g_ManualOverrideConnectId := ""
+            SunshineDisplay_Log("Disconnection event: Cleared manual mouse override.")
+        }
+
         if (!isManualGrace)
         {
             LogDisconnectedStreak++
@@ -771,7 +821,7 @@ SunshineWatchdogTick:
     {
         ConnectStreak := 0
         ; When stream is idle and workstation is on PC Screen Only or Extend, enforce normal speed 10
-        if (!isMouseManualGrace && (topo == 1 || topo == 4))
+        if (!g_ManualMouseOverride && (topo == 1 || topo == 4))
         {
             if (GetCurrentMouseSpeed() > 10)
                 SunshineWatchdog_RestoreMouseNormal("Topology Guard: Idle mode (topo=" topo ") enforced speed 10")
@@ -784,8 +834,8 @@ SunshineWatchdogTick:
             if SunshineWatchdog_TabletReachable()
             {
                 OfflineStreak := 0
-                ; Ensure speed 20 is active for tablet display if not in manual grace
-                if (!isMouseManualGrace && GetCurrentMouseSpeed() < 20)
+                ; Ensure speed 20 is active for tablet display if not in manual override
+                if (!g_ManualMouseOverride && GetCurrentMouseSpeed() < 20)
                     SetMouseSpeedFast("Topology Guard: Tablet Only mode asserted speed 20")
             }
             else
@@ -793,6 +843,12 @@ SunshineWatchdogTick:
                 OfflineStreak++
                 if (OfflineStreak >= RequiredOfflineStreak)
                 {
+                    if (g_ManualMouseOverride)
+                    {
+                        g_ManualMouseOverride := false
+                        g_ManualOverrideConnectId := ""
+                        SunshineDisplay_Log("Tablet unreachable on Tailscale: Cleared manual mouse override.")
+                    }
                     SunshineWatchdog_ForceNormal("tablet unreachable on Tailscale for " (OfflineStreak * CheckIntervalMs / 1000) "s+")
                     LogDisconnectedStreak := 0
                     OfflineStreak := 0
@@ -811,6 +867,8 @@ SunshineWatchdogTick:
         EnvSub, NowCopy, %FastSince%, Hours
         if (NowCopy >= MaxFastHours)
         {
+            g_ManualMouseOverride := false
+            g_ManualOverrideConnectId := ""
             SunshineWatchdog_ForceNormal("stuck fast " NowCopy "h+, past the " MaxFastHours "h ceiling")
             LogDisconnectedStreak := 0
             OfflineStreak := 0
@@ -825,8 +883,10 @@ return
 ; HELPER FUNCTIONS (Watchdog & Streaming)
 ; =============================================================================
 
-SunshineWatchdog_LastClientEvent() {
+SunshineWatchdog_LastClientEvent(ByRef outConnectId := "", ByRef outDisconnectId := "") {
     global SunshineLog
+    outConnectId := ""
+    outDisconnectId := ""
     if (!SunshineLog || !FileExist(SunshineLog))
         return ""
 
@@ -862,6 +922,24 @@ SunshineWatchdog_LastClientEvent() {
             break
         LastDisconnectedPos := FoundPos
         SearchPos := FoundPos + 1
+    }
+
+    if (LastConnectedPos > 0)
+    {
+        lineStart := InStr(SubStr(Text, 1, LastConnectedPos), "`n", false, 0)
+        lineStart := (lineStart > 0) ? lineStart + 1 : 1
+        lineEnd := InStr(Text, "`n", false, LastConnectedPos)
+        lineLen := (lineEnd > 0) ? (lineEnd - lineStart) : (StrLen(Text) - lineStart + 1)
+        outConnectId := Trim(SubStr(Text, lineStart, lineLen), "`r`n ")
+    }
+
+    if (LastDisconnectedPos > 0)
+    {
+        lineStart := InStr(SubStr(Text, 1, LastDisconnectedPos), "`n", false, 0)
+        lineStart := (lineStart > 0) ? lineStart + 1 : 1
+        lineEnd := InStr(Text, "`n", false, LastDisconnectedPos)
+        lineLen := (lineEnd > 0) ? (lineEnd - lineStart) : (StrLen(Text) - lineStart + 1)
+        outDisconnectId := Trim(SubStr(Text, lineStart, lineLen), "`r`n ")
     }
 
     if (LastConnectedPos = 0 && LastDisconnectedPos = 0)
@@ -979,15 +1057,23 @@ Action_ToggleMouseSpeed:
 return
 
 ToggleMouseSpeed() {
-    global g_LastManualMouseSwitch
+    global g_LastManualMouseSwitch, g_ManualMouseOverride, g_ManualOverrideConnectId
     g_LastManualMouseSwitch := A_TickCount
+    g_ManualMouseOverride := true
+
+    ; Capture active connection signature to detect any subsequent reconnection
+    curConnectId := ""
+    curDisconnectId := ""
+    SunshineWatchdog_LastClientEvent(curConnectId, curDisconnectId)
+    g_ManualOverrideConnectId := curConnectId
+
     curSpeed := GetCurrentMouseSpeed()
     if (curSpeed >= 20) {
-        SetMouseSpeedNormal("Manual tray toggle")
-        ShowDisplayBadge("[MOUSE]", "Mouse Speed: Normal (10)", "Precision: ON | Normal speed restored", "1A3A5A", 3000)
+        SetMouseSpeedNormal("Manual tray toggle (override engaged)")
+        ShowDisplayBadge("[MOUSE]", "Mouse Speed: Normal (10)", "Manual Override Active`nHeld until reconnect or disconnect", "1A3A5A", 3500)
     } else {
-        SetMouseSpeedFast("Manual tray toggle")
-        ShowDisplayBadge("[MOUSE]", "Mouse Speed: Fast (20)", "Precision: OFF | Fast speed restored", "4A1A6E", 3000)
+        SetMouseSpeedFast("Manual tray toggle (override engaged)")
+        ShowDisplayBadge("[MOUSE]", "Mouse Speed: Fast (20)", "Manual Override Active`nHeld until reconnect or disconnect", "4A1A6E", 3500)
     }
 }
 
@@ -1005,7 +1091,8 @@ PublishSunshineTrayManifest() {
 }
 
 SunshineDisplay_EnforceTabletMouseSpeed:
-    if (IsSecondScreenOnly() || GetCurrentDisplayTopology() == 8) {
+    global g_ManualMouseOverride
+    if (!g_ManualMouseOverride && (IsSecondScreenOnly() || GetCurrentDisplayTopology() == 8)) {
         if (GetCurrentMouseSpeed() != 20)
             SetMouseSpeedFast("Post-switch settling enforcement")
     }
@@ -1017,7 +1104,9 @@ return
 ; =============================================================================
 
 SunshineDisplay_WM_POWERBROADCAST(wParam, lParam) {
-    global g_LastWakeLogSize, SunshineLog
+    global g_LastWakeLogSize, SunshineLog, g_ManualMouseOverride, g_ManualOverrideConnectId
+    g_ManualMouseOverride := false
+    g_ManualOverrideConnectId := ""
 
     ; wParam 4: PBT_APMSUSPEND (system is preparing to suspend or hibernate)
     if (wParam = 4)
