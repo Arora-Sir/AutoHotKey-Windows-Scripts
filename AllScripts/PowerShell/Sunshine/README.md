@@ -150,8 +150,8 @@ Follow these sequential steps to recreate the entire streaming environment from 
 ## Troubleshooting
 
 ### Mouse Speed Stays at 20 on Laptop
-- Check if dummy plug is still the only active display. Press Win+Alt+P to switch back to PC Screen Only.
-- SunshineDisplayWatchdog.ahk includes an Active Topology Guard that suppresses speed 20 when on single internal display. If needed, click the tray icon -> Reload Display Watchdog.
+- Check if dummy plug is still the active display. Press Win+Alt+P to switch back to PC Screen Only.
+- Active streaming check: when Moonlight is connected to Sunshine, mouse speed 20 is expected even in default mirror mode. When Moonlight disconnects or pauses, SunshineDisplayWatchdog.ahk automatically restores mouse speed 10 within 1.5 seconds. If speed remains fast after disconnecting, verify Moonlight is closed on the tablet or reload the watchdog via tray menu.
 
 ### Tablet Shows Duplicate Instead of Extended Screen
 - In Moonlight, launch Desktop (Extended Tab) instead of Desktop.

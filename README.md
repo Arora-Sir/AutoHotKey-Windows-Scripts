@@ -90,15 +90,16 @@ Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or 
   - Tablet displays the extended monitor directly while the laptop remains the primary display with all taskbar notification icons intact.
 - **Watchdog Auto-Recovery (`SunshineDisplayWatchdog.ahk`)**:
   - Fast-reacting watchdog loop checks session state every 1.5 seconds.
-  - Disconnect or pause restores normal mouse speed (10) within 1.5 seconds (streak = 1 poll).
-  - Active display topology guard: when on PC Screen Only, watchdog never forces fast mouse speed (20), preventing speed-sticking glitches.
+  - Active stream synchronization: boosts mouse speed to 20 during active Moonlight streaming sessions across PC Screen Only (default mirror), Duplicate, and Tablet Only modes.
+  - Disconnect or pause restores normal mouse speed (10) within 1.5 seconds on PC Screen Only, Duplicate, and Extend modes.
+  - Active display topology guard: enforces mouse speed 10 when the stream is idle on laptop or extended displays, preventing speed-sticking glitches while keeping tablet streaming fast.
 - **Hardware Lid-Open Auto-Recovery**:
   - Opening laptop lid triggers a Win32 `WM_DISPLAYCHANGE` notification.
-  - Automatically restores mouse speed to 10 and switches display topology back to PC Screen Only if `monCount <= 1`. In Extend or Duplicate mode, multi-monitor configuration is preserved untouched.
+  - Automatically restores mouse speed to 10 and restores laptop display mode if `monCount <= 1`. In Extend or Duplicate mode, multi-monitor configuration is preserved untouched.
 - **System Wake, Hibernate & Session Unlock Auto-Recovery**:
   - Catches Win32 `WM_POWERBROADCAST` (0x0218) system resume events.
-  - Triple-wave recovery (1000ms, 3000ms, and 5000ms) restores display topology to PC Screen Only (`DISPLAY1`), restores mouse speed to 10, cycles low-level keyboard hooks to prevent dead keys after Modern Standby, and suppresses stale pre-wake Sunshine log events.
-  - Catches Win32 `WM_WTSSESSION_CHANGE` (0x02B1) `WTS_SESSION_UNLOCK` events: automatically re-checks display state upon user unlock, restores laptop mode if dummy plug remained active, and refreshes keyboard hooks.
+  - Triple-wave recovery (500ms, 2000ms, and 4000ms) restores display topology to PC Screen Only (`DISPLAY1`), restores mouse speed to 10, cycles low-level keyboard hooks to prevent dead keys after Modern Standby, and suppresses stale pre-wake Sunshine log events.
+  - Catches Win32 `WM_WTSSESSION_CHANGE` (0x02B1) `WTS_SESSION_UNLOCK` events: refreshes low-level keyboard hooks after unlock while preserving Tablet Only mode during remote PIN entry.
 - **Simple Sticky Notes Multi-Resolution Auto-Arrangement (`apply_ssn_layout.ps1`)**:
   - Automatically re-arranges Simple Sticky Notes (`ssn.exe`) windows to match the active screen resolution and DPI scaling:
     - **Laptop (1536x864 DIP)**: 4 columns flush against the right bezel ($X = 1268$, $W = 268 \to 1536\text{px}$).

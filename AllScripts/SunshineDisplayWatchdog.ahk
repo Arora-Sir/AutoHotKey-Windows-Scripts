@@ -20,7 +20,8 @@ DetectHiddenWindows, On
 ;    - Duplicate Displays: Mirrored screens (Win+Alt+Shift+P, mouse speed 20)
 ; 2. Instant Mouse Speed Synchronization:
 ;    - Manual hotkeys switch mouse speed in 0 milliseconds.
-;    - Active topology guard: When on PC Screen Only, watchdog NEVER forces speed 20.
+;    - Active topology guard: Dynamically tracks Sunshine streaming state and Windows topology.
+;      Boosts mouse speed to 20 during active streaming across default mirror, duplicate, and tablet modes.
 ;    - Automatic pause/exit restores mouse speed 10 within 1.5 seconds (streak = 1 poll).
 ; 3. Visual Feedback:
 ;    - Modern rounded bottom-right toast badge via SharedHelpers.ahk (ShowBottomRightBadge).
@@ -654,37 +655,14 @@ SunshineWatchdogTick:
     ; Query current hardware display topology via native Windows engine
     topo := GetCurrentDisplayTopology()
 
-    ; ACTIVE TOPOLOGY GUARD: Synchronize mouse speed according to active topology.
-    ; Manual switch grace check (30s) so user's explicit manual mouse toggle is preserved.
+    ; Query streaming status from sunshine.log
+    LastEvent := SunshineWatchdog_LastClientEvent()
+    isStreaming := (LastEvent = "CONNECTED")
+
+    ; Manual switch grace check (30s) so user's explicit manual mouse toggle is preserved
     isMouseManualGrace := (g_LastManualMouseSwitch && (A_TickCount - g_LastManualMouseSwitch < 30000))
 
-    if (topo == 1)
-    {
-        ; PC Screen Only (1080p @ 144Hz): mouse speed must be 10 (normal)
-        if FileExist(MarkerFile)
-            FileDelete, %MarkerFile%
-        FileDelete, %ManualFlag%
-
-        if (!isMouseManualGrace && GetCurrentMouseSpeed() > 10)
-            SunshineWatchdog_RestoreMouseNormal("Topology Guard: Laptop Only mode enforced speed 10")
-
-        UpdateTrayStatusAndTooltip()
-        return
-    }
-    else if (topo == 8 || topo == 2 || (topo == 0 && IsSecondScreenOnly()))
-    {
-        ; Tablet Only (2560x1600 @ 120Hz) or Duplicate: mouse speed must be 20 (fast)
-        if (!isMouseManualGrace && GetCurrentMouseSpeed() != 20)
-            SetMouseSpeedFast("Topology Guard: Tablet/Duplicate mode enforced speed 20")
-    }
-    else if (topo == 4)
-    {
-        ; Extend Displays (Dual): primary is laptop, mouse speed must be 10 (normal)
-        if (!isMouseManualGrace && GetCurrentMouseSpeed() > 10)
-            SunshineWatchdog_RestoreMouseNormal("Topology Guard: Extend mode enforced speed 10")
-    }
-
-    ; Manual switch grace check
+    ; Manual display switch grace check (20s)
     isManualGrace := false
     if FileExist(ManualFlag)
     {
@@ -697,10 +675,10 @@ SunshineWatchdogTick:
             FileDelete, %ManualFlag%
     }
 
-    LastEvent := SunshineWatchdog_LastClientEvent()
-
-    ; 1. CLIENT CONNECTED: active streaming session
-    if (LastEvent = "CONNECTED")
+    ; -------------------------------------------------------------------------
+    ; 1. CLIENT CONNECTED: Active streaming session (Tablet Moonlight)
+    ; -------------------------------------------------------------------------
+    if (isStreaming)
     {
         if FileExist(ManualFlag)
             FileDelete, %ManualFlag%
@@ -708,51 +686,76 @@ SunshineWatchdogTick:
         LogDisconnectedStreak := 0
         OfflineStreak := 0
 
-        ; Boost to fast speed if marker is missing OR mouse speed is currently below 20
-        if (!FileExist(MarkerFile) || GetCurrentMouseSpeed() < 20)
+        ; In Extend Displays mode (topo 4), the laptop screen is the primary display
+        ; with physical controls, so mouse speed remains normal (10).
+        if (topo == 4)
         {
-            isStalePreWake := false
-            if (g_LastWakeLogSize > 0)
-            {
-                currLogSize := 0
-                file := FileOpen(SunshineLog, "r")
-                if IsObject(file)
-                {
-                    currLogSize := file.Length
-                    file.Close()
-                }
-                if (currLogSize <= g_LastWakeLogSize)
-                    isStalePreWake := true
-                else
-                    g_LastWakeLogSize := 0
-            }
-
-            if (!isStalePreWake)
-            {
-                ConnectStreak++
-                if (ConnectStreak >= RequiredConnectStreak)
-                {
-                    SunshineWatchdog_ForceFast("sunshine.log shows CLIENT CONNECTED while mouse was normal")
-                    ConnectStreak := 0
-                }
-            }
+            if (!isMouseManualGrace && GetCurrentMouseSpeed() > 10)
+                SunshineWatchdog_RestoreMouseNormal("Topology Guard: Extend mode enforced speed 10")
         }
         else
-            ConnectStreak := 0
+        {
+            ; For PC Screen Only (topo 1, default laptop mirror), Duplicate (topo 2),
+            ; or Tablet Only (topo 8): user is actively controlling the desktop from tablet.
+            ; Ensure mouse speed is FAST (20) with precision acceleration disabled.
+            if (!isMouseManualGrace && (!FileExist(MarkerFile) || GetCurrentMouseSpeed() < 20))
+            {
+                isStalePreWake := false
+                if (g_LastWakeLogSize > 0)
+                {
+                    currLogSize := 0
+                    file := FileOpen(SunshineLog, "r")
+                    if IsObject(file)
+                    {
+                        currLogSize := file.Length
+                        file.Close()
+                    }
+                    if (currLogSize <= g_LastWakeLogSize)
+                        isStalePreWake := true
+                    else
+                        g_LastWakeLogSize := 0
+                }
+
+                if (!isStalePreWake)
+                {
+                    ConnectStreak++
+                    if (ConnectStreak >= RequiredConnectStreak)
+                    {
+                        SunshineWatchdog_ForceFast("Active Sunshine stream (topo=" topo "): boosted mouse speed to 20")
+                        ConnectStreak := 0
+                    }
+                }
+            }
+            else
+                ConnectStreak := 0
+        }
     }
-    ; 2. CLIENT DISCONNECTED: stream paused or closed on tablet
+    ; -------------------------------------------------------------------------
+    ; 2. CLIENT DISCONNECTED: Stream paused or closed on tablet
+    ; -------------------------------------------------------------------------
     else if (LastEvent = "DISCONNECTED")
     {
         ConnectStreak := 0
         if (!isManualGrace)
         {
             LogDisconnectedStreak++
-            ; RequiredLogStreak is 1 -> restores mouse normal on very first tick (under 1.5s)
+            ; RequiredLogStreak is 1: restores mouse normal on very first tick (under 1.5s)
             if (LogDisconnectedStreak >= RequiredLogStreak)
             {
-                if FileExist(MarkerFile)
+                ; On PC Screen Only (topo 1), Duplicate (topo 2), or Extend (topo 4),
+                ; the user is using the laptop display locally; restore normal speed 10.
+                if (topo == 1 || topo == 2 || topo == 4)
                 {
-                    SunshineWatchdog_RestoreMouseNormal("sunshine.log shows CLIENT DISCONNECTED (stream paused/ended)")
+                    if (FileExist(MarkerFile) || GetCurrentMouseSpeed() > 10)
+                    {
+                        SunshineWatchdog_RestoreMouseNormal("sunshine.log shows CLIENT DISCONNECTED on topo " topo " (stream paused/ended)")
+                    }
+                }
+                else if (topo == 8 || (topo == 0 && IsSecondScreenOnly()))
+                {
+                    ; Tablet Only mode: laptop screen is off. Clear MarkerFile without oscillating.
+                    if FileExist(MarkerFile)
+                        FileDelete, %MarkerFile%
                 }
                 LogDisconnectedStreak := 0
                 OfflineStreak := 0
@@ -761,14 +764,30 @@ SunshineWatchdogTick:
         else
             LogDisconnectedStreak := 0
     }
-    ; 3. Fallback: Tailscale reachability check when log has no active answer
+    ; -------------------------------------------------------------------------
+    ; 3. IDLE / FALLBACK: No active stream events in recent log window
+    ; -------------------------------------------------------------------------
     else
     {
         ConnectStreak := 0
-        if (!isManualGrace && IsSecondScreenOnly())
+        ; When stream is idle and workstation is on PC Screen Only or Extend, enforce normal speed 10
+        if (!isMouseManualGrace && (topo == 1 || topo == 4))
         {
+            if (GetCurrentMouseSpeed() > 10)
+                SunshineWatchdog_RestoreMouseNormal("Topology Guard: Idle mode (topo=" topo ") enforced speed 10")
+            if FileExist(MarkerFile)
+                FileDelete, %MarkerFile%
+        }
+        else if (!isManualGrace && IsSecondScreenOnly())
+        {
+            ; In Tablet Only mode with no stream events, check Tailscale reachability
             if SunshineWatchdog_TabletReachable()
+            {
                 OfflineStreak := 0
+                ; Ensure speed 20 is active for tablet display if not in manual grace
+                if (!isMouseManualGrace && GetCurrentMouseSpeed() < 20)
+                    SetMouseSpeedFast("Topology Guard: Tablet Only mode asserted speed 20")
+            }
             else
             {
                 OfflineStreak++
@@ -882,7 +901,7 @@ SunshineDisplay_Log(msg) {
 }
 
 SunshineWatchdog_ForceNormal(reason, skipScript := false) {
-    global NormalScript, MarkerFile
+    global MarkerFile
 
     ; 1. Instant Win32 restore of mouse speed to 10
     DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
@@ -896,10 +915,6 @@ SunshineWatchdog_ForceNormal(reason, skipScript := false) {
     if (MarkerFile)
         FileDelete, %MarkerFile%
     FileDelete, % A_Temp "\sunshine_manual_switch.flag"
-
-    ; 3. Asynchronously invoke set_normal.ps1
-    if (!skipScript && NormalScript && FileExist(NormalScript))
-        RunSilentPowerShell(NormalScript)
 
     SunshineDisplay_Log("Forced normal mouse speed: " reason)
 }
@@ -923,7 +938,7 @@ GetCurrentMouseSpeed() {
 }
 
 SetMouseSpeedFast(reason := "") {
-    global MarkerFile, FastScript
+    global MarkerFile
     DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 20, "UInt", 3)
     VarSetCapacity(accel, 12, 0)
     NumPut(6, accel, 0, "Int")
@@ -935,8 +950,6 @@ SetMouseSpeedFast(reason := "") {
         FileDelete, %MarkerFile%
         FileAppend, manual, %MarkerFile%
     }
-    if (FastScript && FileExist(FastScript))
-        RunSilentPowerShell(FastScript)
 
     if (reason)
         SunshineDisplay_Log("Set mouse speed FAST (20): " reason)
@@ -944,7 +957,7 @@ SetMouseSpeedFast(reason := "") {
 }
 
 SetMouseSpeedNormal(reason := "") {
-    global MarkerFile, NormalScript
+    global MarkerFile
     DllCall("SystemParametersInfo", "UInt", 0x0071, "UInt", 0, "UInt", 10, "UInt", 3)
     VarSetCapacity(accel, 12, 0)
     NumPut(6, accel, 0, "Int")
@@ -955,9 +968,6 @@ SetMouseSpeedNormal(reason := "") {
     if (MarkerFile)
         FileDelete, %MarkerFile%
     FileDelete, % A_Temp "\sunshine_manual_switch.flag"
-
-    if (NormalScript && FileExist(NormalScript))
-        RunSilentPowerShell(NormalScript)
 
     if (reason)
         SunshineDisplay_Log("Set mouse speed NORMAL (10): " reason)
