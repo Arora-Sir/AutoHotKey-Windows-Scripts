@@ -45,10 +45,11 @@ if (hUxtheme) {
 	}
 }
 
-; v2 fleet control protocol: replaces v1's PostMessage to AutoHotkey's own reserved tray-command IDs (Edit/Exit/
-; ViewKeyHistory/Suspend), which is not guaranteed to carry over to a v2 process. The master only ever SENDS this
-; message (every child script both registers and handles it - see SharedHelpers.ahk/LocalPaths.ahk/Watchdog.ahk for
-; the receiving side). Registering it here just needs to resolve to the same numeric ID every process gets.
+; v2 fleet control protocol: replaces v1's PostMessage to AutoHotkey's own reserved tray-command IDs
+; (Edit/Exit/ViewKeyHistory/Suspend), which is not guaranteed to carry over to a v2 process.
+; The master only ever SENDS this message (every child script both registers and handles it - see
+; SharedHelpers.ahk/LocalPaths.ahk/Watchdog.ahk for the receiving side). Registering it here just needs to
+; resolve to the same numeric ID every process gets.
 g_FleetControlMsg := DllCall("RegisterWindowMessage", "Str", "AHK_FleetControl_v2", "UInt")
 ; Codes match every child's own HandleFleetControlMessage: 1=Edit, 2=Exit, 3=ViewKeyHistory, 4=Suspend-toggle.
 ; "Restart" has no code of its own - it's still master-side orchestration (post code 2, wait, relaunch), same as v1.
@@ -128,8 +129,8 @@ if FileExist(RegExReplace(A_ScriptName, "(.*)\..*", "$1.txt")) ; Look for text f
 ; a plain object with named properties (.Path/.Status/.RunPath/.Pid), matching how the rest of this file reads them.
 Scripts := Map()
 ; v2: "File" is a reserved built-in class name (the FileOpen() return type) - it cannot be used as a plain variable
-; (including a for-loop's iteration variable, which errors at load time with "This Class cannot be used as an output
-; variable"), so v1's original "File" variable name throughout this block is renamed to "fileEntry" here.
+; (including a for-loop's iteration variable, which errors at load time with "This Class cannot be used as an
+; output variable"), so v1's original "File" variable name throughout this block is renamed to "fileEntry" here.
 for index, fileEntry in Files {
 	if InStr(fileEntry, "/noload")
 		status := false
@@ -170,9 +171,9 @@ for scriptName, script in Scripts {
 		continue
 	; Terminate any existing instance running this script path before spawning.
 	; v2: WinClose() against a non-existent window hangs indefinitely in this environment (Migration-Notes.md
-	; section 18.6) - resolved by guarding with WinExist() first, confirmed to return instantly (falsy) against a
-	; non-existent target rather than hanging. Each child's own #SingleInstance force remains the backstop against
-	; a genuine duplicate either way.
+	; section 18.6) - resolved by guarding with WinExist() first, confirmed to return instantly (falsy) against
+	; a non-existent target rather than hanging.
+	; Each child's own #SingleInstance force remains the backstop against a genuine duplicate either way.
 	DetectHiddenWindows(true)
 	SetTitleMatchMode(2)
 	if WinExist(script.Path " ahk_class AutoHotkey")
@@ -238,11 +239,12 @@ TrayIconRemove(10)
 
 ; SUBROUTINES
 ;{-----------------------------------------------
-; v2: every one of these was a Gosub-targeted label in v1. Gosub is removed entirely in v2, so each becomes a real
-; function; every variable a label used to reach via v1's implicit shared script-scope now needs an explicit
-; `global` declaration. `(*)` on handlers that also serve as hotkey/menu-click targets means "accept and ignore
-; whatever positional args the caller supplies" - hotkeys can pass a hotkey name, menu clicks pass (ItemName,
-; ItemPos, MenuObj), and this file doesn't need any of that for these specific handlers.
+; v2: every one of these was a Gosub-targeted label in v1. Gosub is removed entirely in v2, so each becomes a
+; real function; every variable a label used to reach via v1's implicit shared script-scope now needs an
+; explicit `global` declaration.
+; `(*)` on handlers that also serve as hotkey/menu-click targets means "accept and ignore whatever positional
+; args the caller supplies" - hotkeys can pass a hotkey name, menu clicks pass (ItemName, ItemPos, MenuObj),
+; and this file doesn't need any of that for these specific handlers.
 ;
 ReloadAll(*) {
 	global Scripts
@@ -250,8 +252,9 @@ ReloadAll(*) {
 	SetTitleMatchMode(2)
 	for scriptName, script in Scripts {
 		; v2: WinClose() guarded by WinExist() first - see the identical fix/note in the auto-execute child-launch
-		; loop above (Migration-Notes.md section 18.6). ProcessClose(script.Pid) below remains the real termination
-		; mechanism regardless; this is just the same "let it exit gracefully first" nicety v1 had.
+		; loop above (Migration-Notes.md section 18.6).
+		; ProcessClose(script.Pid) below remains the real termination mechanism regardless; this is just the
+		; same "let it exit gracefully first" nicety v1 had.
 		if script.Path && WinExist(script.Path " ahk_class AutoHotkey")
 			WinClose(script.Path " ahk_class AutoHotkey")
 		if script.HasOwnProp("Pid") && script.Pid {
@@ -349,8 +352,8 @@ ExitSub(ExitReason, ExitCode) {
 	SetTitleMatchMode(2)
 	for scriptName, script in Scripts {
 		; v2: WinClose() guarded by WinExist() first - see the identical fix/note in the auto-execute child-launch
-		; loop above (Migration-Notes.md section 18.6). ProcessClose(script.Pid) below remains the real termination
-		; mechanism regardless.
+		; loop above (Migration-Notes.md section 18.6).
+		; ProcessClose(script.Pid) below remains the real termination mechanism regardless.
 		if script.Path && WinExist(script.Path " ahk_class AutoHotkey")
 			WinClose(script.Path " ahk_class AutoHotkey")
 		if script.HasOwnProp("Pid") && script.Pid {
@@ -793,11 +796,12 @@ TrimAtDelim(String, Length := 124, Delim := "`n", Tail := "...") {
 }
 
 ; Simple ascending string sort for an array (replaces v1's Sort command over a delimited string).
-; v2: the native `<`/`>` string-relational operators hang indefinitely in this environment - confirmed down to the
-; simplest possible case ("a" < "b") in total isolation; `=`/`!=` are unaffected. Traced to this machine's mismatched
-; locale configuration (system locale en-US, user locale en-GB) deadlocking v2's locale-aware string collation path;
-; v1 does not hit this. Workaround: StrGreaterThan() below compares ordinally by character code, never invoking the
-; native operator on two strings. See Migration-Notes.md 18.11.
+; v2: the native `<`/`>` string-relational operators hang indefinitely in this environment - confirmed down to
+; the simplest possible case ("a" < "b") in total isolation; `=`/`!=` are unaffected.
+; Traced to this machine's mismatched locale configuration (system locale en-US, user locale en-GB) deadlocking
+; v2's locale-aware string collation path; v1 does not hit this.
+; Workaround: StrGreaterThan() below compares ordinally by character code, never invoking the native operator
+; on two strings. See Migration-Notes.md 18.11.
 Sort_ArrayStrings(arr) {
 	n := arr.Length
 	Loop n - 1 {
@@ -815,8 +819,9 @@ Sort_ArrayStrings(arr) {
 }
 
 ; Ordinal (byte/codepoint) string comparison, deliberately not using the native `>` operator - see the note on
-; Sort_ArrayStrings() above. Character-by-character via Ord()/SubStr(), which never touches the string-relational
-; code path that hangs in this environment.
+; Sort_ArrayStrings() above.
+; Character-by-character via Ord()/SubStr(), which never touches the string-relational code path that hangs
+; in this environment.
 StrGreaterThan(a, b) {
 	lenA := StrLen(a), lenB := StrLen(b)
 	minLen := lenA < lenB ? lenA : lenB ; numeric `<` - unaffected, confirmed safe (only string `<`/`>` hangs)

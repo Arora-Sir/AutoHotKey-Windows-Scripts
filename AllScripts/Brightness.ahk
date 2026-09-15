@@ -7,25 +7,25 @@
 ; Ctr+PgUp & Ctr+PgDn -> Extreme levels of brightness (beyond brightness level)
 
 ; v2: #NoEnv deleted entirely (meaningless in v2 - no legacy/ANSI environment mode exists anymore).
-; #Persistent is not usable as a directive in v2 (confirmed empirically: it hangs the process at load time with no
-; error shown) - Persistent() the function is the proven-working replacement, used below.
+; #Persistent is not usable as a directive in v2 (confirmed empirically: it hangs the process at load time
+; with no error shown) - Persistent() the function is the proven-working replacement, used below.
 Persistent()
 SendMode("Input")
 SetWorkingDir(A_ScriptDir)
 #SingleInstance force
 DetectHiddenWindows(true)
-; v2: SetBatchLines was removed entirely, no replacement - v2's execution engine has no cooperative line-batching
-; concept left to throttle, so this line is simply dropped rather than translated to anything.
-; v2: #MaxThreadsBuffer takes a boolean (true/false), not v1's On/Off strings - "Parameter #1 invalid"
-; otherwise, confirmed empirically.
+; v2: SetBatchLines was removed entirely, no replacement - v2's execution engine has no cooperative
+; line-batching concept left to throttle, so this line is simply dropped rather than translated to anything.
+; v2: #MaxThreadsBuffer takes a boolean (true/false), not v1's On/Off strings - "Parameter #1 invalid" otherwise, confirmed empirically.
 #MaxThreadsBuffer true
 #MaxThreadsPerHotkey 3
 ; v2: #MaxHotkeysPerInterval is gone as a directive - it is now the assignable built-in A_MaxHotkeysPerInterval.
 A_MaxHotkeysPerInterval := 200
 
-; v2 fleet control protocol: replaces v1's master PostMessage to AutoHotkey's own reserved tray-command IDs (Edit/Exit/
-; ViewKeyHistory/Suspend), which is not guaranteed to carry over to v2 processes. Every managed script registers the
-; same custom message and handles it locally - see SharedHelpers.ahk for the full explanation.
+; v2 fleet control protocol: replaces v1's master PostMessage to AutoHotkey's own reserved tray-command IDs
+; (Edit/Exit/ViewKeyHistory/Suspend), which is not guaranteed to carry over to v2 processes.
+; Every managed script registers the same custom message and handles it locally - see SharedHelpers.ahk for
+; the full explanation.
 g_FleetControlMsg := DllCall("RegisterWindowMessage", "Str", "AHK_FleetControl_v2", "UInt")
 OnMessage(g_FleetControlMsg, HandleFleetControlMessage)
 HandleFleetControlMessage(wParam, lParam, msg, hwnd) {
@@ -42,29 +42,29 @@ class BrightnessSetter {
     ; https://github.com/qwerty12/AutoHotkeyScripts/tree/master/LaptopBrightnessSetter
     static _WM_POWERBROADCAST := 0x218, _osdHwnd := 0, hPowrprofMod := DllCall("LoadLibrary", "Str", "powrprof.dll", "Ptr")
 
-    ; v2: per-instance properties must have a declared default, or reading one before its first assignment
-    ; throws "has no property named ..." - v1's looser dynamic objects allowed a blind read to return blank.
+    ; v2: per-instance properties must have a declared default, or reading one before its first assignment throws
+    ; "has no property named ..." - v1's looser dynamic objects allowed a blind read to return blank.
     ; _AC is normally set in __New() below, but _lastTime/_cachedBrightness are only ever written inside
     ; SetBrightness() itself, so the very first call on a fresh instance reads them before that write ever runs.
     _AC := "", _lastTime := 0, _cachedBrightness := ""
 
     ; v2: every method below that is called as BrightnessSetter.MethodName(...) (class-qualified, not
-    ; this.MethodName(...)) must be declared `static` - confirmed empirically this session that calling
-    ; a non-static instance method via the bare class name hangs the interpreter at the CALL SITE (a
-    ; distinct bug from the OnMessage <4-param hang; see Migration-Notes.md's new subsection). None of
-    ; these reference `this`, so `static` is also the semantically correct fix, not just a workaround.
+    ; this.MethodName(...)) must be declared `static` - confirmed empirically this session that calling a
+    ; non-static instance method via the bare class name hangs the interpreter at the CALL SITE (a distinct
+    ; bug from the OnMessage <4-param hang; see Migration-Notes.md's new subsection).
+    ; None of these reference `this`, so `static` is also the semantically correct fix, not just a workaround.
     __New() {
         if (BrightnessSetter.IsOnAc(&AC))
             this._AC := AC
-        ; v2: this._WM_POWERBROADCAST (a STATIC prop) accessed via `this` hangs the interpreter at
-        ; runtime - confirmed empirically this session, a distinct bug from the two above. Static props
-        ; must be read via the class name (BrightnessSetter._WM_POWERBROADCAST), never via `this`, even
-        ; from inside an instance method.
+        ; v2: this._WM_POWERBROADCAST (a STATIC prop) accessed via `this` hangs the interpreter at runtime -
+        ; confirmed empirically this session, a distinct bug from the two above.
+        ; Static props must be read via the class name (BrightnessSetter._WM_POWERBROADCAST), never via
+        ; `this`, even from inside an instance method.
         ; v2: ObjBindMethod's resulting BoundFunc also hangs OnMessage's registration regardless of the
-        ; underlying method's declared param count (confirmed empirically - unlike a plain Func.Bind(),
-        ; which works fine). Fix: register the bare top-level Brightness_WM_POWERBROADCAST function
-        ; below (which operates on the BS singleton directly, since exactly one instance ever exists)
-        ; instead of binding this instance's own method.
+        ; underlying method's declared param count (confirmed empirically - unlike a plain Func.Bind(), which
+        ; works fine).
+        ; Fix: register the bare top-level Brightness_WM_POWERBROADCAST function below (which operates on the
+        ; BS singleton directly, since exactly one instance ever exists) instead of binding this instance's own method.
         if ((this.pwrAcNotifyHandle := DllCall("RegisterPowerSettingNotification", "Ptr", A_ScriptHwnd, "Ptr", BrightnessSetter._GUID_ACDC_POWER_SOURCE(), "UInt", DEVICE_NOTIFY_WINDOW_HANDLE := 0x00000000, "Ptr"))) ; Sadly the callback passed to *PowerSettingRegister*Notification runs on a new threadl
             OnMessage(BrightnessSetter._WM_POWERBROADCAST, (this.pwrBroadcastFunc := Brightness_WM_POWERBROADCAST))
     }
@@ -93,11 +93,12 @@ class BrightnessSetter {
             return
         }
 
-        ; v2: DllCall's "Ptr*" output parameter now needs an explicit &currSchemeGuid (v1 took the bare variable name
-        ; and auto-took its address). currSchemeGuid also needs to be pre-assigned before the call: it's used only
-        ; inside one branch of the ternary below, and a variable that has NEVER been assigned anywhere in the function
-        ; throws "This local variable has not been assigned a value" right at the DllCall itself when referenced via
-        ; &currSchemeGuid from inside a ternary branch - confirmed empirically (Migration-Notes.md 18.x).
+        ; v2: DllCall's "Ptr*" output parameter now needs an explicit &currSchemeGuid (v1 took the bare variable
+        ; name and auto-took its address).
+        ; currSchemeGuid also needs to be pre-assigned before the call: it's used only inside one branch of the
+        ; ternary below, and a variable that has NEVER been assigned anywhere in the function throws "This local
+        ; variable has not been assigned a value" right at the DllCall itself when referenced via &currSchemeGuid
+        ; from inside a ternary branch - confirmed empirically (Migration-Notes.md 18.x).
         currSchemeGuid := 0
         if (!ptrAnotherScheme ? DllCall(PowerGetActiveScheme, "Ptr", 0, "Ptr*", &currSchemeGuid, "UInt") == 0 : DllCall("powrprof\PowerDuplicateScheme", "Ptr", 0, "Ptr", ptrAnotherScheme, "Ptr*", &currSchemeGuid, "UInt") == 0) {
             if (autoDcOrAc == -1) {
@@ -207,8 +208,8 @@ class BrightnessSetter {
         ; ternary always resolved to in practice anyway on any real, modern AHK install.
         static PostMessagePtr := DllCall("GetProcAddress", "Ptr", DllCall("GetModuleHandle", "Str", "user32.dll", "Ptr"), "AStr", "PostMessageW", "Ptr")
         ,WM_SHELLHOOK := DllCall("RegisterWindowMessage", "Str", "SHELLHOOK", "UInt")
-        ; v2: legacy "if Var in MatchList" command syntax is gone - rewritten as an OR'd equality expression, same two
-        ; literal values checked as before.
+        ; v2: legacy "if Var in MatchList" command syntax is gone - rewritten as an OR'd equality expression, same
+        ; two literal values checked as before.
         if (A_OSVersion = "WIN_VISTA" || A_OSVersion = "WIN_7")
             return
         BrightnessSetter._RealiseOSDWindowIfNeeded()
@@ -227,17 +228,18 @@ class BrightnessSetter {
                 try if ((flyoutDisp := ComObjQuery(shellProvider, "{41f9d2fb-7834-4ab6-8b1b-73e74064b465}", "{41f9d2fb-7834-4ab6-8b1b-73e74064b465}"))) {
                     ; IFlyoutDisplay::ShowFlyout enum mapping on Windows 11:
                     ; 0 = Volume Flyout, 1 = Airplane Mode, 3 = Display Brightness Flyout
-                    ; v2 gotcha: NumGet's Type argument is mandatory here - omitting it hangs the whole file at load
-                    ; time (not a clean error), so "Ptr" is added to BOTH the inner and outer NumGet below.
+                    ; v2 gotcha: NumGet's Type argument is mandatory here - omitting it hangs the whole file at
+                    ; load time (not a clean error), so "Ptr" is added to BOTH the inner and outer NumGet below.
                     ; v2: `flyoutDisp+0` throws "Expected a Number but got a ComValue" - ComObjQuery() returns a
                     ; real ComValue wrapper, which (unlike v1) does not auto-coerce to a number via arithmetic.
                     ; Use its .Ptr property instead for NumGet's vtable walk (confirmed empirically, same class
                     ; of bug as SharedHelpers.ahk's GetMicrophoneMute/SetMicrophoneMute).
                     DllCall(NumGet(NumGet(flyoutDisp.Ptr, "Ptr") + 3*A_PtrSize, "Ptr"), "Ptr", flyoutDisp, "Int", 3, "UInt", 0)
-                    ; v2: flyoutDisp/shellProvider are ComValue wrappers, not raw pointers - ObjRelease on
-                    ; a wrapper throws "Parameter #1 of ObjRelease is invalid" (confirmed live, same class
-                    ; of bug as SharedHelpers.ahk's GetMicrophoneMute/SetMicrophoneMute). Both release their
-                    ; own COM reference automatically when garbage-collected, so both calls are simply dropped.
+                    ; v2: flyoutDisp/shellProvider are ComValue wrappers, not raw pointers - ObjRelease on a wrapper
+                    ; throws "Parameter #1 of ObjRelease is invalid" (confirmed live, same class of bug as
+                    ; SharedHelpers.ahk's GetMicrophoneMute/SetMicrophoneMute).
+                    ; Both release their own COM reference automatically when garbage-collected, so both calls
+                    ; are simply dropped.
                 }
                 if (BrightnessSetter._FindAndSetOSDWindow())
                     return
@@ -254,8 +256,8 @@ class BrightnessSetter {
 
     static _GUID_VIDEO_SUBGROUP()
     {
-        ; v2: VarSetCapacity's "already allocated?" self-check becomes an IsSet() check on the still-bare static - the
-        ; Buffer is only ever created and filled once, exactly mirroring the original's lazy-build-once intent.
+        ; v2: VarSetCapacity's "already allocated?" self-check becomes an IsSet() check on the still-bare static -
+        ; the Buffer is only ever created and filled once, exactly mirroring the original's lazy-build-once intent.
         static GUID_VIDEO_SUBGROUP__
         if (!IsSet(GUID_VIDEO_SUBGROUP__)) {
             GUID_VIDEO_SUBGROUP__ := Buffer(16, 0)
@@ -290,12 +292,13 @@ class BrightnessSetter {
 
 }
 
-; v2: moved out of the class (was an instance method bound via ObjBindMethod - see __New()'s comment
-; for why that hangs OnMessage's registration). Operates on the BS singleton directly; safe since
-; exactly one BrightnessSetter instance is ever constructed in this script.
-; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4
-; declared parameters and no `*` catch-all - confirmed empirically this session (Migration-Notes.md
-; 18.16/18.17). `*` is the fix.
+; v2: moved out of the class (was an instance method bound via ObjBindMethod - see __New()'s comment for why
+; that hangs OnMessage's registration).
+; Operates on the BS singleton directly; safe since exactly one BrightnessSetter instance is ever constructed
+; in this script.
+; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4 declared
+; parameters and no `*` catch-all - confirmed empirically this session (Migration-Notes.md 18.16/18.17).
+; `*` is the fix.
 Brightness_WM_POWERBROADCAST(wParam, lParam, *)
 {
     global BS
@@ -329,8 +332,9 @@ get_Brightness()
 set_Brightness(Gamma)
 {
     ; set brightness (0 .. 255)
-    ; v2: VarSetCapacity's dual role here (allocate the buffer AND return its byte size, used directly as the loop
-    ; count) doesn't map 1:1 - re-derived as Buffer(1536) then Loop GB.Size / 6, which yields the same 256 iterations.
+    ; v2: VarSetCapacity's dual role here (allocate the buffer AND return its byte size, used directly as the
+    ; loop count) doesn't map 1:1 - re-derived as Buffer(1536) then Loop GB.Size / 6, which yields the same
+    ; 256 iterations.
     GB := Buffer(1536)
     Loop GB.Size / 6 {
         N := (Gamma + 128) * (A_Index - 1)

@@ -9,11 +9,11 @@ UserProfile := EnvGet("USERPROFILE") ; Get Windows UserProfile directory
 #SingleInstance force
 DetectHiddenWindows(true)
 
-; v2 fleet control protocol: the g_FleetControlMsg/OnMessage/HandleFleetControlMessage definition now
-; lives only in SharedHelpers.ahk (included above) - this file used to carry its own independent copy,
-; which broke load with "function declaration conflicts with an existing Func" the moment both this
-; file's SharedHelpers.ahk include and its own copy landed in the same merged script. See LocalPaths.ahk
-; for the full explanation of why this consolidation was needed.
+; v2 fleet control protocol: the g_FleetControlMsg/OnMessage/HandleFleetControlMessage definition now lives
+; only in SharedHelpers.ahk (included above) - this file used to carry its own independent copy, which broke
+; load with "function declaration conflicts with an existing Func" the moment both this file's SharedHelpers.ahk
+; include and its own copy landed in the same merged script.
+; See LocalPaths.ahk for the full explanation of why this consolidation was needed.
 
 ; Always-on background automation with no hotkey trigger: things that should just be running, not things a keypress does.
 ; BasicTasks.ahk stays hotkey-only; everything here starts at boot (via StartupScript.ahk) and keeps running unattended for the rest of the session.
@@ -88,9 +88,10 @@ return ; End of auto-execute section
 ; WM_POWERBROADCAST handler - must stay lightweight; called on the AHK message pump.
 ;   wParam 18 (0x12) = PBT_APMRESUMEAUTOMATIC  (any system wake, incl. Modern Standby)
 ;   wParam  7 (0x07) = PBT_APMRESUMESUSPEND    (user-initiated resume after suspend)
-; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself (not at click/message time) if the
-; handler has fewer than 4 declared parameters and no `*` catch-all - confirmed empirically this session,
-; same class of bug as Menu.Add()'s zero-param hang (Migration-Notes.md 18.16). `*` is the fix.
+; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself (not at click/message time) if the handler
+; has fewer than 4 declared parameters and no `*` catch-all - confirmed empirically this session, same class
+; of bug as Menu.Add()'s zero-param hang (Migration-Notes.md 18.16).
+; `*` is the fix.
 Sefirah_WM_POWERBROADCAST(wParam, lParam, *) {
     if (wParam = 18 || wParam = 7)
         SetTimer(Sefirah_DoReconnect, -4000)      ; one-shot, 4s after wake
@@ -127,14 +128,14 @@ Sefirah_IsReachable(target) {
     global PATH_ADB_EXE
     if (!PATH_ADB_EXE || !target)
         return false
-    ; v2: A_ComSpec replaces v1's bare ComSpec - the legacy env-var-as-global no longer exists in v2,
-    ; and referencing the bare name hangs the interpreter at PARSE time (confirmed empirically this
-    ; session; see Migration-Notes.md's new ComSpec subsection). Same fix already applied in
-    ; SunshineDisplayWatchdog.ahk (Migration-Notes.md 18.13).
-    ; This two-command `&&` chain also needs the whole string wrapped in one extra outer quote pair
-    ; (open with "", close with a trailing " at the end) - matching Sefirah_ClaimActive() below - or
-    ; cmd.exe's legacy quote-stripping mangles the two inner quoted segments into an unresolvable path
-    ; (Migration-Notes.md 18.x: found live, this call always failed regardless of actual reachability).
+    ; v2: A_ComSpec replaces v1's bare ComSpec - the legacy env-var-as-global no longer exists in v2, and
+    ; referencing the bare name hangs the interpreter at PARSE time (confirmed empirically this session; see
+    ; Migration-Notes.md's new ComSpec subsection). Same fix already applied in SunshineDisplayWatchdog.ahk
+    ; (Migration-Notes.md 18.13).
+    ; This two-command `&&` chain also needs the whole string wrapped in one extra outer quote pair (open with
+    ; "", close with a trailing " at the end) - matching Sefirah_ClaimActive() below - or cmd.exe's legacy
+    ; quote-stripping mangles the two inner quoted segments into an unresolvable path (Migration-Notes.md 18.x:
+    ; found live, this call always failed regardless of actual reachability).
     return (RunWait(A_ComSpec ' /c ""' PATH_ADB_EXE '" connect ' target ' && "' PATH_ADB_EXE '" -s ' target ' get-state"', , "Hide") = 0)
 }
 
@@ -264,11 +265,12 @@ RestartNamedPythonServer(ProjectName, ScriptPath, WorkingDir:="", PythonExe:="",
 ; =============================================================================
 WatchSkillsLock() {
     ; v2 bug: g_SkillsCandidate/g_SkillsLastTriggered were missing from this list - both are top-level
-    ; script-scope globals (see the two `global g_Skills... :=` lines near this function's top), but
-    ; without declaring them here a function's default scope is local, so every read/write below silently
-    ; shadowed them instead. g_SkillsCandidate is read before any local write in this function, so it threw
-    ; "not assigned" live; g_SkillsLastTriggered was write-only here, so it never errored - it just silently
-    ; never persisted, breaking the dedup/debounce state across ticks without any visible symptom.
+    ; script-scope globals (see the two `global g_Skills... :=` lines near this function's top), but without
+    ; declaring them here a function's default scope is local, so every read/write below silently shadowed
+    ; them instead.
+    ; g_SkillsCandidate is read before any local write in this function, so it threw "not assigned" live;
+    ; g_SkillsLastTriggered was write-only here, so it never errored - it just silently never persisted,
+    ; breaking the dedup/debounce state across ticks without any visible symptom.
     global PATH_SKILLS_LOCK_SCRIPT, PATH_SKILLS_UNLOCK_SCRIPT, PATH_PWSH_EXE, g_SkillsAutoWatcherShowBadge
     global g_SkillsCandidate, g_SkillsLastTriggered
     if (!PATH_SKILLS_LOCK_SCRIPT || !PATH_SKILLS_UNLOCK_SCRIPT)

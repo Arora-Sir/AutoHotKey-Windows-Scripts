@@ -8,11 +8,11 @@ SetWorkingDir(A_ScriptDir)
 #SingleInstance force
 DetectHiddenWindows(true)
 
-; v2 fleet control protocol: the g_FleetControlMsg/OnMessage/HandleFleetControlMessage definition now
-; lives only in SharedHelpers.ahk (included above) - this file used to carry its own independent copy,
-; which broke load with "function declaration conflicts with an existing Func" the moment both this
-; file's SharedHelpers.ahk include and its own copy landed in the same merged script. See LocalPaths.ahk
-; for the full explanation of why this consolidation was needed.
+; v2 fleet control protocol: the g_FleetControlMsg/OnMessage/HandleFleetControlMessage definition now lives
+; only in SharedHelpers.ahk (included above) - this file used to carry its own independent copy, which broke
+; load with "function declaration conflicts with an existing Func" the moment both this file's SharedHelpers.ahk
+; include and its own copy landed in the same merged script.
+; See LocalPaths.ahk for the full explanation of why this consolidation was needed.
 
 ; =============================================================================
 ; WSL EXT4 BACKUP SSD - MOUNT, UNMOUNT, AUTO-MOUNT, SAFE EJECT
@@ -71,8 +71,9 @@ return ; End of auto-execute section
 ;     showFeedback is its own independent parameter (mirroring how UnmountExt4Ssd already had one), decoupled from openExplorer, so each caller states its own intent explicitly and neither existing caller's behavior changes.
 
 ; Matches mount_wsl_ssd.ps1's/unmount_wsl_ssd.ps1's own 12s stale-lock self-recovery threshold, with a small
-; margin (15s) since this check runs before the .ps1 even starts. A lock file older than that means whatever
-; process created it died without cleaning up (crash, Stop-Process, power loss) - treat it as gone.
+; margin (15s) since this check runs before the .ps1 even starts.
+; A lock file older than that means whatever process created it died without cleaning up (crash,
+; Stop-Process, power loss) - treat it as gone.
 IsSsdLockActive(lockPath) {
     if (!FileExist(lockPath))
         return false
@@ -81,11 +82,11 @@ IsSsdLockActive(lockPath) {
 
 MountExt4Ssd(openExplorer := false, showFeedback := false) {
     global g_Ext4SsdMounted, EXT4_SSD_LABEL
-    ; Guard: do not spawn if mount or unmount is actively in progress. Matches the same 12s staleness
-    ; threshold mount_wsl_ssd.ps1/unmount_wsl_ssd.ps1 use for their own lock self-recovery - this AHK-side
-    ; guard used to check existence only, so a stale lock (left behind by a crashed/killed PowerShell
-    ; process) permanently blocked every future mount/unmount attempt with zero feedback, since the .ps1's
-    ; own recovery logic never got a chance to run at all.
+    ; Guard: do not spawn if mount or unmount is actively in progress. Matches the same 12s staleness threshold
+    ; mount_wsl_ssd.ps1/unmount_wsl_ssd.ps1 use for their own lock self-recovery.
+    ; This AHK-side guard used to check existence only, so a stale lock (left behind by a crashed/killed
+    ; PowerShell process) permanently blocked every future mount/unmount attempt with zero feedback, since the
+    ; .ps1's own recovery logic never got a chance to run at all.
     if (IsSsdLockActive(A_Temp "\mount_wsl_ssd.lock") || IsSsdLockActive(A_Temp "\unmount_wsl_ssd.lock"))
         return
 
@@ -113,8 +114,8 @@ MountExt4Ssd(openExplorer := false, showFeedback := false) {
         ; script-reachable assignment hangs at load time instead of falling back gracefully like v1 did. IsSet() guards it.
         label := (IsSet(EXT4_SSD_LABEL) && EXT4_SSD_LABEL) ? EXT4_SSD_LABEL : "Linux Backup SSD"
         ; Bottom-right badge (matches the mic-mute/display-switch badge style elsewhere in the fleet) - the
-        ; auto-mount-on-hotplug path previously gave no toast/badge at all, just a silently-opened Explorer
-        ; window, so hotplugging the drive looked like nothing had happened until the folder popped up.
+        ; auto-mount-on-hotplug path previously gave no toast/badge at all, just a silently-opened Explorer window,
+        ; so hotplugging the drive looked like nothing had happened until the folder popped up.
         ShowBottomRightBadge("Mounted " label, "1A6E3C", 2500)
     }
 }
@@ -154,9 +155,9 @@ UnmountExt4Ssd(showFeedback := false, onlyIfDisconnected := false) {
 
 ; wParam 18 (0x12) = PBT_APMRESUMEAUTOMATIC (any system wake, incl. Modern Standby)
 ; wParam  7 (0x07) = PBT_APMRESUMESUSPEND    (user-initiated resume after suspend)
-; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4
-; declared parameters and no `*` catch-all - confirmed empirically this session (Migration-Notes.md
-; 18.16/18.17). `*` is the fix.
+; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4 declared
+; parameters and no `*` catch-all - confirmed empirically this session (Migration-Notes.md 18.16/18.17).
+; `*` is the fix.
 SsdManager_WM_POWERBROADCAST(wParam, lParam, *) {
     if (wParam = 18 || wParam = 7)
         SetTimer(ResumeExt4SsdOnWake, -4500) ; check/restore ext4 SSD mount 4.5s after wake
@@ -231,8 +232,8 @@ ReconcileExt4SsdState() {
         ; Drive mapping state is queried non-blockingly via DriveGetType above.
         if (!isDriveMapped && !isManuallyEjected) {
             g_Ext4SsdMounted := true
-            ; showFeedback=true so plugging the drive in fires the bottom-right badge, not just a silently
-            ; opened Explorer window - found live, the drive used to auto-mount with zero visible confirmation.
+            ; showFeedback=true so plugging the drive in fires the bottom-right badge, not just a silently opened
+            ; Explorer window - found live, the drive used to auto-mount with zero visible confirmation.
             MountExt4Ssd(true, true)
         }
         else if (isDriveMapped) {

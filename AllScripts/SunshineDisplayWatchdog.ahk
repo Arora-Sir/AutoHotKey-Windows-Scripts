@@ -550,9 +550,9 @@ UpdateTabletHibernateTrayIcon(isTabletOnly, forceRefresh := false) {
 	}
 }
 
-; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4
-; declared parameters and no `*` catch-all - confirmed empirically this session (Migration-Notes.md
-; 18.16/18.17). `*` is the fix.
+; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4 declared
+; parameters and no `*` catch-all - confirmed empirically this session (Migration-Notes.md 18.16/18.17).
+; `*` is the fix.
 SunshineDisplay_WM_TASKBARCREATED(wParam, lParam, *) {
 	UpdateTrayStatusAndTooltip(true)
 }
@@ -1066,9 +1066,9 @@ SunshineDisplay_EnforceTabletMouseSpeed() {
 ; HARDWARE EVENT HANDLERS (PowerBroadcast, DisplayChange, SessionChange)
 ; =============================================================================
 
-; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4
-; declared parameters and no `*` catch-all - confirmed empirically this session (Migration-Notes.md
-; 18.16/18.17). `*` is the fix.
+; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4 declared
+; parameters and no `*` catch-all - confirmed empirically this session (Migration-Notes.md 18.16/18.17).
+; `*` is the fix.
 SunshineDisplay_WM_POWERBROADCAST(wParam, lParam, *) {
 	global g_LastWakeLogSize, SunshineLog, g_ManualMouseOverride, g_ManualOverrideConnectId
 	g_ManualMouseOverride := false

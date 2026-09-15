@@ -104,8 +104,9 @@ if Set_IniSet
     Set_ShowExe := IniRead("Hotkey Help.ini", "Settings", "Set_ShowExe", Set_ShowExe)
     Set_ShowHotkey := IniRead("Hotkey Help.ini", "Settings", "Set_ShowHotkey", Set_ShowHotkey)
     ; v2: v1's original lines 95/96 each (likely by copy-paste) read back Set_ShowHotkey's OWN ini key into
-    ; Set_VarHotkey/Set_FlagHotkey instead of each variable's own key - preserved exactly as-is (behavior-
-    ; preserving port), not "fixed", since this is existing v1 behavior, not a v2 migration concern.
+    ; Set_VarHotkey/Set_FlagHotkey instead of each variable's own key.
+    ; Preserved exactly as-is (a behavior-preserving port, not a fix), since this is existing v1 behavior,
+    ; not a v2 migration concern.
     Set_VarHotkey := IniRead("Hotkey Help.ini", "Settings", "Set_ShowHotkey", Set_VarHotkey)
     Set_FlagHotkey := IniRead("Hotkey Help.ini", "Settings", "Set_ShowHotkey", Set_FlagHotkey)
     Set_ShowString := IniRead("Hotkey Help.ini", "Settings", "Set_ShowString", Set_ShowString)
@@ -400,14 +401,15 @@ RefreshHelpDisplay(*) {
                                 Line_Hot := RegExReplace(Line_Hot,"((^[^\Q" Set_Hotkey_Mod_Delimiter "\E]*|\Q" Set_Hotkey_Mod_Delimiter "\E[^\Q" Set_Hotkey_Mod_Delimiter "\E]*))","$T1")
                             else
                                 Line_Hot := RegExReplace(Line_Hot,"((^[^\Q" Set_Hotkey_Mod_Delimiter "\E]*|\Q" Set_Hotkey_Mod_Delimiter "\E[^\Q" Set_Hotkey_Mod_Delimiter "\E]*))","$U1")
-                        ; v2 bug fix: this used to read back as `Line_Help := Trim(HotkeyName)` - discarding the
-                        ; regex match entirely and re-displaying the hotkey's own (unformatted) name as its own
-                        ; "description". v1's original almost certainly reused HotkeyName as RegExMatch's output-var
-                        ; prefix (HotkeyName1 = the captured comment text), which the port dropped when it correctly
-                        ; switched to &Match/Match[1] elsewhere in this function but never did here. Found live: every
-                        ; regular hotkey's description column showed the hotkey name a second time (in a different
-                        ; case) instead of its real ";{ <- Description" comment text - confirmed once Scripts_Include's
-                        ; Map/Array bug (elsewhere in this file) stopped aborting the scan before it ever reached here.
+                        ; v2 bug fix: this used to read back as `Line_Help := Trim(HotkeyName)` - discarding the regex
+                        ; match entirely and re-displaying the hotkey's own (unformatted) name as its own "description".
+                        ; v1's original almost certainly reused HotkeyName as RegExMatch's output-var prefix
+                        ; (HotkeyName1 = the captured comment text), which the port dropped when it correctly switched
+                        ; to &Match/Match[1] elsewhere in this function but never did here.
+                        ; Found live: every regular hotkey's description column showed the hotkey name a second time
+                        ; (in a different case) instead of its real ";{ <- Description" comment text - confirmed once
+                        ; Scripts_Include's Map/Array bug (elsewhere in this file) stopped aborting the scan before it
+                        ; ever reached here.
                         HasComment := RegExMatch(File_Line,"::.*?;(.*)",&Match)
                         Line_Help := HasComment ? Trim(Match[1]) : ""
                         if Set_HideFold
@@ -1081,9 +1083,9 @@ ScriptHotkeys(Script)
 }
 
 ; Expand File Path
-; v2: A_LoopFileLongPath (v1 name) was renamed to A_LoopFileFullPath - the old v1 name resolves to an
-; ordinary (never-assigned) variable in v2 instead of the loop's special property, confirmed live via
-; a real "#Warn VarUnset" dialog the moment this code path actually ran.
+; v2: A_LoopFileLongPath (v1 name) was renamed to A_LoopFileFullPath - the old v1 name resolves to an ordinary
+; (never-assigned) variable in v2 instead of the loop's special property.
+; Confirmed live via a real "#Warn VarUnset" dialog the moment this code path actually ran.
 Get_Full_Path(path)
 {
     Loop Files, path, "F"
@@ -1137,14 +1139,15 @@ ArrayCrossRef(Array, Haystack, Needle, Cross)
 ;
 
 ; [Class] SearchEdit - Find Text within Edit Control (Edit Control Must have +0x100 Style for Unfocused Highlights)
-; v2: v1's bare `static` directive (making every local in Dialog() an implicitly-shared, persistent class
-; field) has no v2 equivalent - each piece of state that needs to persist/share across calls is now an
-; explicit `static` class property below. The labels that lived inside Dialog() (WrapToTop, FindText_Sub,
-; SearchEdit_DialogGuiEscape, StatusBar) were really Gui-event handlers matched by v1's magic naming
-; convention - they become real functions bound via .OnEvent() instead. Per Migration-Notes.md 18.21,
-; none of these are registered via ObjBindMethod (which would break OnMessage/click dispatch) - the two
-; low-level hooks (WM_LBUTTONDOWN, WM_WINDOWPOSCHANGED) are bare top-level functions instead, each with
-; a 4-param signature per 18.17.
+; v2: v1's bare `static` directive (making every local in Dialog() an implicitly-shared, persistent class field)
+; has no v2 equivalent - each piece of state that needs to persist/share across calls is now an explicit
+; `static` class property below.
+; The labels that lived inside Dialog() (WrapToTop, FindText_Sub, SearchEdit_DialogGuiEscape, StatusBar) were
+; really Gui-event handlers matched by v1's magic naming convention - they become real functions bound via
+; .OnEvent() instead.
+; Per Migration-Notes.md 18.21, none of these are registered via ObjBindMethod (which would break
+; OnMessage/click dispatch) - the two low-level hooks (WM_LBUTTONDOWN, WM_WINDOWPOSCHANGED) are bare top-level
+; functions instead, each with a 4-param signature per 18.17.
 class SearchEdit
 {
     static Docked := true
@@ -1290,8 +1293,8 @@ SearchEdit_WM_WINDOWPOSCHANGED(wParam, lParam, msg, hwnd) {
     SearchEdit.DialogGui.Show("h" Calc.h " w" Calc.w " x" Calc.x " y" Calc.y)
 }
 
-; v1's StatusBar double-click g-label has no direct v2 GuiControl event equivalent - reimplemented with
-; the same low-level WM_LBUTTONDBLCLK hook pattern already proven above for the drag-detection handler.
+; v1's StatusBar double-click g-label has no direct v2 GuiControl event equivalent - reimplemented with the
+; same low-level WM_LBUTTONDBLCLK hook pattern already proven above for the drag-detection handler.
 SearchEdit_WM_LBUTTONDBLCLK(wParam, lParam, msg, hwnd) {
     if (SearchEdit.StatusBarCtrl && hwnd = SearchEdit.StatusBarCtrl.Hwnd)
     {
@@ -1346,10 +1349,9 @@ SearchEdit_DialogGuiEscape(*) {
 ;     {Array}[n].Title
 ;     {Array}[n].hWnd
 ;
-; v2: WinGet's List sub-command is now the real WinGetList() function returning an array of HWNDs
-; directly - no more manufacturing AHK_Windows%A_Index%-style pseudo-array variable names (that
-; construct-a-variable-name-from-a-string trick has no v2 equivalent at all, per SharedHelpers.ahk's
-; CloseBrowserGracefully() precedent elsewhere in this fleet).
+; v2: WinGet's List sub-command is now the real WinGetList() function returning an array of HWNDs directly - no
+; more manufacturing AHK_Windows%A_Index%-style pseudo-array variable names (that construct-a-variable-name-from-a-string
+; trick has no v2 equivalent at all, per SharedHelpers.ahk's CloseBrowserGracefully() precedent elsewhere in this fleet).
 ;
 ; Example Code:
 /*
