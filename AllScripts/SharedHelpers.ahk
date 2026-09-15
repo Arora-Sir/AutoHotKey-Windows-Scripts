@@ -13,6 +13,12 @@
 ; =============================================================================
 #Requires AutoHotkey v2.0
 Persistent()
+; This file is a real managed entry in StartupScript.ahk's own Files[] (Script_12), launched standalone just like
+; every other managed script - it deserves the same duplicate-launch protection they all have. Confirmed
+; empirically safe to declare here even though every consumer #Includes this file and already has its own
+; #SingleInstance force: a duplicate directive with the same value across a merged script is a harmless no-op,
+; not a conflict or a load-time hang.
+#SingleInstance force
 
 ; v2 fleet control protocol: replaces v1's master PostMessage to AutoHotkey's own reserved tray-command IDs (Edit/Exit/
 ; ViewKeyHistory/Suspend), which is not guaranteed to carry over to v2 processes. Every managed script (this one included,
