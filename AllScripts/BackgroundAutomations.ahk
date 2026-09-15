@@ -1,13 +1,19 @@
-#Requires AutoHotkey v1.1
-#NoEnv
-#Persistent
-SendMode Input
-SetWorkingDir %A_ScriptDir%
+#Requires AutoHotkey v2.0
+; v2: #Persistent removed as a directive, replaced by the Persistent() function (see LocalPaths.ahk for the empirical note on why).
+Persistent()
+SendMode("Input")
+SetWorkingDir(A_ScriptDir)
 #Include *i %A_ScriptDir%\LocalPaths.ahk ; Include local custom paths if present (ignored by Git)
-EnvGet, UserProfile, USERPROFILE ; Get Windows UserProfile directory (AHK v1 compatibility)
+UserProfile := EnvGet("USERPROFILE") ; Get Windows UserProfile directory
 #Include %A_ScriptDir%\SharedHelpers.ahk ; Functions shared across scripts - see ARCHITECTURE.md
 #SingleInstance force
-DetectHiddenWindows, On
+DetectHiddenWindows(true)
+
+; v2 fleet control protocol: the g_FleetControlMsg/OnMessage/HandleFleetControlMessage definition now
+; lives only in SharedHelpers.ahk (included above) - this file used to carry its own independent copy,
+; which broke load with "function declaration conflicts with an existing Func" the moment both this
+; file's SharedHelpers.ahk include and its own copy landed in the same merged script. See LocalPaths.ahk
+; for the full explanation of why this consolidation was needed.
 
 ; Always-on background automation with no hotkey trigger: things that should just be running, not things a keypress does.
 ; BasicTasks.ahk stays hotkey-only; everything here starts at boot (via StartupScript.ahk) and keeps running unattended for the rest of the session.
@@ -22,17 +28,15 @@ DetectHiddenWindows, On
 ; Auto-start Tailscale's tray app in the same burst as the other scripts, deterministically, instead of racing 14+ other Startup-folder apps through Explorer with no ordering guarantee.
 ; tailscaled itself (the actual VPN backend CopyClip depends on) is a Windows service and starts independently of this either way - this only affects how soon the tray icon shows up.
 ; Guarded so a plain AHK reload doesn't relaunch an already-running copy.
-Process, Exist, tailscale-ipn.exe
-if (!ErrorLevel && PATH_TAILSCALE_IPN_EXE && FileExist(PATH_TAILSCALE_IPN_EXE))
-    Run, %PATH_TAILSCALE_IPN_EXE%
+if (!ProcessExist("tailscale-ipn.exe") && PATH_TAILSCALE_IPN_EXE && FileExist(PATH_TAILSCALE_IPN_EXE))
+    Run(PATH_TAILSCALE_IPN_EXE)
 
 ; Auto-start Google Drive in the same burst, silently.
 ; Its own native Run-key entry keeps getting toggled off in Task Manager's Startup Apps behind our backs (found disabled twice now), so this no longer depends on that staying on.
 ; GoogleDrivePath (LocalPaths.ahk) is the exact same registry-resolved, --startup_mode-flagged command the Run key itself uses, self-healing against Drive version bumps: launching it here just stops relying on a Windows toggle that doesn't reliably stay where we leave it.
 ; Guarded the same way as Tailscale above, so a plain AHK reload doesn't relaunch an already-running copy.
-Process, Exist, GoogleDriveFS.exe
-if (!ErrorLevel && GoogleDrivePath)
-    Run, %GoogleDrivePath%,, Hide
+if (!ProcessExist("GoogleDriveFS.exe") && GoogleDrivePath)
+    Run(GoogleDrivePath, , "Hide")
 
 ; Auto-start / reload GravityBridge Proxy Server & CopyClip.
 ; Named per-project so Task Manager's Name column shows "CopyClip_Python.exe" / "GravityBridge_Python.exe" instead of an anonymous "pythonw.exe" you can't tell apart.
@@ -60,13 +64,13 @@ RestartNamedPythonServer("CopyClip", PATH_COPYCLIP "\windows_app\tray.py",,, tru
 ;   SEFIRAH_PRIORITY_TARGET  - the one "ip:port" that should win ActiveDevice whenever reachable
 ; =============================================================================
 
-OnMessage(0x0218, "Sefirah_WM_POWERBROADCAST")
+OnMessage(0x0218, Sefirah_WM_POWERBROADCAST)
 
 ; Independent of laptop sleep/wake: catches the priority device (phone) reconnecting for any other reason (e.g. it left/rejoined Wi-Fi on its own, with the laptop never sleeping at all).
 ; Edge-triggered on the unreachable -> reachable transition only, so steady state costs two quick local `adb` calls per tick (one RunWait, see Sefirah_IsReachable) and nothing more: no busy loop (SetTimer is the same native, ~0%-idle-CPU mechanism Watchdog.ahk already uses at a 10s interval), no repeated re-authentication churn while nothing has changed.
 ; Also handles the reverse edge: the moment the priority target drops, hand ActiveDevice to whatever else is still reachable in SEFIRAH_ADB_TARGETS, so it doesn't sit "Selected" but unreachable.
 SefirahPriorityWasReachable := false
-SetTimer, Sefirah_PollPriorityTarget, 30000
+SetTimer(Sefirah_PollPriorityTarget, 30000)
 
 ; Skills Vault Auto-Focus Watcher
 ; claude.exe focus -> lock personal vaults (org safe); Antigravity.exe focus -> unlock. All other apps leave vault state unchanged. Silent: no popup, no console window.
@@ -78,15 +82,18 @@ global g_SkillsCandidate     := ""   ; debounce accumulator
 ; Flip to false to go back to a fully silent watcher (no popup, no console window) - the only thing WatchSkillsLock checks before showing/hiding its applying badge.
 global g_SkillsAutoWatcherShowBadge := true
 if (PATH_SKILLS_LOCK_SCRIPT && PATH_SKILLS_UNLOCK_SCRIPT)
-    SetTimer, WatchSkillsLock, 1500
+    SetTimer(WatchSkillsLock, 1500)
 return ; End of auto-execute section
 
 ; WM_POWERBROADCAST handler - must stay lightweight; called on the AHK message pump.
 ;   wParam 18 (0x12) = PBT_APMRESUMEAUTOMATIC  (any system wake, incl. Modern Standby)
 ;   wParam  7 (0x07) = PBT_APMRESUMESUSPEND    (user-initiated resume after suspend)
-Sefirah_WM_POWERBROADCAST(wParam, lParam) {
+; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself (not at click/message time) if the
+; handler has fewer than 4 declared parameters and no `*` catch-all - confirmed empirically this session,
+; same class of bug as Menu.Add()'s zero-param hang (Migration-Notes.md 18.16). `*` is the fix.
+Sefirah_WM_POWERBROADCAST(wParam, lParam, *) {
     if (wParam = 18 || wParam = 7)
-        SetTimer, Sefirah_DoReconnect, -4000      ; one-shot, 4s after wake
+        SetTimer(Sefirah_DoReconnect, -4000)      ; one-shot, 4s after wake
 }
 
 ; Fires once, ~4s after wake.
@@ -99,8 +106,8 @@ Sefirah_DoReconnect() {
     if (!PATH_ADB_EXE || !SEFIRAH_ADB_TARGETS)
         return
 
-    ; %A_Space% is the correct AHK v1 delimiter token for Loop Parse
-    Loop, Parse, SEFIRAH_ADB_TARGETS, %A_Space%
+    ; A_Space is the delimiter token for Loop Parse (bare reference in v2, no percent signs needed)
+    Loop Parse, SEFIRAH_ADB_TARGETS, A_Space
     {
         target := Trim(A_LoopField)
         if (target = "" || target = SEFIRAH_PRIORITY_TARGET)
@@ -115,13 +122,20 @@ Sefirah_DoReconnect() {
 
 ; Cheap reachability probe for one target.
 ; Reuses the same "connect, then run a second adb command" skeleton as the CONNECT intent below, but chained with `get-state` instead.
-; Its exit code (propagated through cmd's && chain into ErrorLevel) is 0 iff the target is actually connected, which is a more reliable signal across adb versions than matching on adb connect's own printed text.
+; Its exit code (the RunWait return value, propagated through cmd's && chain) is 0 iff the target is actually connected, which is a more reliable signal across adb versions than matching on adb connect's own printed text.
 Sefirah_IsReachable(target) {
     global PATH_ADB_EXE
     if (!PATH_ADB_EXE || !target)
         return false
-    RunWait, %ComSpec% /c ""%PATH_ADB_EXE%" connect %target% && "%PATH_ADB_EXE%" -s %target% get-state",, Hide
-    return (ErrorLevel = 0)
+    ; v2: A_ComSpec replaces v1's bare ComSpec - the legacy env-var-as-global no longer exists in v2,
+    ; and referencing the bare name hangs the interpreter at PARSE time (confirmed empirically this
+    ; session; see Migration-Notes.md's new ComSpec subsection). Same fix already applied in
+    ; SunshineDisplayWatchdog.ahk (Migration-Notes.md 18.13).
+    ; This two-command `&&` chain also needs the whole string wrapped in one extra outer quote pair
+    ; (open with "", close with a trailing " at the end) - matching Sefirah_ClaimActive() below - or
+    ; cmd.exe's legacy quote-stripping mangles the two inner quoted segments into an unresolvable path
+    ; (Migration-Notes.md 18.x: found live, this call always failed regardless of actual reachability).
+    return (RunWait(A_ComSpec ' /c ""' PATH_ADB_EXE '" connect ' target ' && "' PATH_ADB_EXE '" -s ' target ' get-state"', , "Hide") = 0)
 }
 
 ; Fires the foreground-service CONNECT intent alone - this is what Sefirah's NetworkService treats as a fresh authentication, and therefore an ActiveDevice claim.
@@ -129,9 +143,9 @@ Sefirah_IsReachable(target) {
 Sefirah_ClaimActive(target, wait) {
     global PATH_ADB_EXE
     if (wait)
-        RunWait, %ComSpec% /c ""%PATH_ADB_EXE%" -s %target% shell am start-foreground-service -a CONNECT -n com.castle.sefirah/sefirah.network.NetworkService",, Hide
+        RunWait(A_ComSpec ' /c ""' PATH_ADB_EXE '" -s ' target ' shell am start-foreground-service -a CONNECT -n com.castle.sefirah/sefirah.network.NetworkService"', , "Hide")
     else
-        Run, %ComSpec% /c ""%PATH_ADB_EXE%" -s %target% shell am start-foreground-service -a CONNECT -n com.castle.sefirah/sefirah.network.NetworkService",, Hide
+        Run(A_ComSpec ' /c ""' PATH_ADB_EXE '" -s ' target ' shell am start-foreground-service -a CONNECT -n com.castle.sefirah/sefirah.network.NetworkService"', , "Hide")
 }
 
 ; Independent of laptop sleep/wake: catches the priority device (phone) reconnecting for any other reason (e.g. it left/rejoined Wi-Fi on its own, with the laptop never sleeping at all).
@@ -153,7 +167,7 @@ Sefirah_PollPriorityTarget() {
 ; Sequential/blocking like the priority claim above - for the common two-device case there's only one candidate, but this stays correct if a third device is ever added to SEFIRAH_ADB_TARGETS.
 Sefirah_ClaimFallback() {
     global SEFIRAH_ADB_TARGETS, SEFIRAH_PRIORITY_TARGET
-    Loop, Parse, SEFIRAH_ADB_TARGETS, %A_Space%
+    Loop Parse, SEFIRAH_ADB_TARGETS, A_Space
     {
         target := Trim(A_LoopField)
         if (target = "" || target = SEFIRAH_PRIORITY_TARGET)
@@ -187,24 +201,26 @@ Sefirah_ClaimFallback() {
 RestartNamedPythonServer(ProjectName, ScriptPath, WorkingDir:="", PythonExe:="", ForceRestart:=false) {
     global PATH_PYTHON_EXE
 
-    ScriptPath := Trim(ScriptPath, """")
+    ; v2: Chr(34) instead of v1's doubled-double-quote escape ("""") - that pattern is ambiguous to v2's
+    ; parser and fails to load ("Missing space or operator before this"), confirmed empirically.
+    ScriptPath := Trim(ScriptPath, Chr(34))
     if (!ScriptPath || !FileExist(ScriptPath))
         return false
 
-    SplitPath, ScriptPath, FileName, Directory
+    SplitPath(ScriptPath, &FileName, &Directory)
     if (!WorkingDir)
         WorkingDir := Directory
     if (!PythonExe)
         PythonExe := PATH_PYTHON_EXE ? PATH_PYTHON_EXE : "pythonw.exe"
-    PythonExe := Trim(PythonExe, """")
+    PythonExe := Trim(PythonExe, Chr(34))
 
     NamedExeDir := A_ScriptDir "\PythonExes"
     if !FileExist(NamedExeDir)
-        FileCreateDir, %NamedExeDir%
+        DirCreate(NamedExeDir)
     NamedExeName := ProjectName "_Python.exe"
     NamedExePath := NamedExeDir "\" NamedExeName
     if !FileExist(NamedExePath)
-        FileCopy, %PythonExe%, %NamedExePath%
+        FileCopy(PythonExe, NamedExePath)
 
     ; Skip the kill+relaunch entirely when a single, correctly-named instance is already running and no stray/duplicate process exists.
     ; Killing and relaunching an already-healthy daemon here serves no purpose except interrupting it - for CopyClip specifically, that resets its in-memory "have I seen this device before" state and makes it silently drop the next clip as an unsynced baseline instead of syncing it (see bugs/ in the CopyClip repo, restart-drops-baseline).
@@ -231,23 +247,30 @@ RestartNamedPythonServer(ProjectName, ScriptPath, WorkingDir:="", PythonExe:="",
     try {
         for proc in ComObjGet("winmgmts:").ExecQuery(KillQuery)
             if (proc.Name = NamedExeName) || InStr(proc.CommandLine, FileName)
-                Process, Close, % proc.ProcessId
+                ProcessClose(proc.ProcessId)
     }
-    Sleep, 200
+    Sleep(200)
 
     ; Launch silently - the renamed pythonw.exe copy never creates a console window either
-    Run, "%NamedExePath%" "%ScriptPath%", %WorkingDir%, Hide
+    Run('"' NamedExePath '" "' ScriptPath '"', WorkingDir, "Hide")
     return true
 }
 
 ; =============================================================================
 ; [START: Skills Vault Auto-Focus Watcher]
 ; Fires every 1500ms via SetTimer (registered in auto-execute above).
-; WinGet ProcessName is one Win32 call with no I/O - CPU cost is negligible, so on the vast majority of ticks (no transition) this returns in under a millisecond.
+; WinGetProcessName is one Win32 call with no I/O - CPU cost is negligible, so on the vast majority of ticks (no transition) this returns in under a millisecond.
 ; On a confirmed app transition, the lock/unlock PS1 is launched BLOCKING (shell.Run flag 0=hidden, true=wait) so the cross-process mutex's held duration spans the real icacls work, not just the dispatch - this subroutine can therefore take as long as one icacls sweep (roughly hundreds of ms) on that rare tick.
 ; =============================================================================
-WatchSkillsLock:
+WatchSkillsLock() {
+    ; v2 bug: g_SkillsCandidate/g_SkillsLastTriggered were missing from this list - both are top-level
+    ; script-scope globals (see the two `global g_Skills... :=` lines near this function's top), but
+    ; without declaring them here a function's default scope is local, so every read/write below silently
+    ; shadowed them instead. g_SkillsCandidate is read before any local write in this function, so it threw
+    ; "not assigned" live; g_SkillsLastTriggered was write-only here, so it never errored - it just silently
+    ; never persisted, breaking the dedup/debounce state across ticks without any visible symptom.
     global PATH_SKILLS_LOCK_SCRIPT, PATH_SKILLS_UNLOCK_SCRIPT, PATH_PWSH_EXE, g_SkillsAutoWatcherShowBadge
+    global g_SkillsCandidate, g_SkillsLastTriggered
     if (!PATH_SKILLS_LOCK_SCRIPT || !PATH_SKILLS_UNLOCK_SCRIPT)
         return
 
@@ -261,7 +284,7 @@ WatchSkillsLock:
     ; If forced, pause auto-watcher focus detection until user switches back to Auto.
     modeFile := A_Temp "\skills_vault_mode.flag"
     if FileExist(modeFile) {
-        FileRead, curSkillsMode, %modeFile%
+        curSkillsMode := FileRead(modeFile)
         curSkillsMode := Trim(curSkillsMode)
         if (curSkillsMode = "locked" || curSkillsMode = "unlocked") {
             g_SkillsCandidate := ""
@@ -271,7 +294,13 @@ WatchSkillsLock:
         }
     }
 
-    WinGet, g_SkillsCurExe, ProcessName, A
+    ; v2: WinGet's ProcessName sub-command is now its own function; it can throw if there's ever no active window at all (never observed, but the mutex must still be released if it ever does).
+    try
+        g_SkillsCurExe := WinGetProcessName("A")
+    catch {
+        ReleaseNamedMutex(hMutex)
+        return
+    }
 
     ; Map exe -> app token. Anything else = neutral, reset debounce and exit.
     if (g_SkillsCurExe = "claude.exe")
@@ -324,17 +353,20 @@ WatchSkillsLock:
     }
 
     pwsh := (PATH_PWSH_EXE && FileExist(PATH_PWSH_EXE)) ? PATH_PWSH_EXE : "pwsh.exe"
-    shell := ComObjCreate("WScript.Shell")
+    shell := ComObject("WScript.Shell")
     ; Applying badge before the blocking call, THEN a real [LOCKED]/[UNLOCKED] confirmation afterward (via the shared ShowSkillsStatusBadge, which auto-dismisses itself after 3000ms - no explicit hide needed).
     ; Unlike the manual Win+Alt+L path, this watcher never shows an upfront "requested state" badge (it's a silent focus-change timer, not a keypress) - the applying flash is the ONLY signal the user gets before this point, so a done confirmation here is genuinely new information, not a redundant repeat the way it would be on the manual path.
     ; Gated by g_SkillsAutoWatcherShowBadge (declared above, near the other Skills Vault globals) - flip that one line to go back to a fully silent watcher instead of touching this logic again.
     if (g_SkillsAutoWatcherShowBadge)
         ShowBottomRightBadge("[APPLYING...] " (newApp = "claude" ? "Locking" : "Unlocking") " Skills Vault (Auto)", "6E5A00", 15000)
-    shell.Run("""" pwsh """ -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ targetScript """ -Silent", 0, true)
+    ; v2: single-quote string delimiters (literal double-quotes directly inside) instead of v1's doubled-
+    ; double-quote escaping, which is ambiguous to v2's parser and fails to load.
+    shell.Run('"' pwsh '" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' targetScript '" -Silent', 0, true)
     if (g_SkillsAutoWatcherShowBadge)
         ShowSkillsStatusBadge((newApp = "claude") ? "[LOCKED] Skills Vault (Auto)" : "[UNLOCKED] Skills Vault (Auto)")
     ReleaseNamedMutex(hMutex)
-return
+    return
+}
 
 ; AcquireSkillsVaultLock/ReleaseSkillsVaultLock now live in SharedHelpers.ahk as the generalized AcquireNamedMutex/ReleaseNamedMutex.
 ; [END: Skills Vault Auto-Focus Watcher]

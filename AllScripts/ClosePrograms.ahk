@@ -1,4 +1,4 @@
-#Requires AutoHotkey v1.1
+#Requires AutoHotkey v2.0
 
 ; ^ for Ctrl, ! for Alt, # for Win, + for Shift
 ; ~ prefix to prevent blocking native (original) functionality of that key
@@ -9,76 +9,75 @@
 
 ; Anydesk CiscoWebx Cortana Discord Filmora HotspotSheild IDM Opera MicrosoftTeams Skype Stremio Telegram UnityHub uTorrent wps Zoom
 
-#NoEnv ; Recommended for performance and compatibility with future AutoHotkey releases.
-SendMode Input ; Recommended for new scripts due to its superior speed and reliability.
-SetWorkingDir %A_ScriptDir% ; Ensures a consistent starting directory.
+SendMode("Input") ; Recommended for new scripts due to its superior speed and reliability.
+SetWorkingDir(A_ScriptDir) ; Ensures a consistent starting directory.
 #SingleInstance force ; Ensures that only the last executed instance of script is running
-DetectHiddenWindows, On
+DetectHiddenWindows(true)
 
 ; Ensures that programs also gets killed from the background processes
 CLoseCurrentlyActiveScreen()
 {
-    WinGet, Active_ID, ID, A
-    WinGet, Active_Process, ProcessName, ahk_id %Active_ID%
+    Active_ID := WinGetID("A")
+    Active_Process := WinGetProcessName("ahk_id " Active_ID)
 
     switch Active_Process
     {
-        Case "AnyDesk.exe": Run cmd.exe /c taskkill /F /IM AnyDesk.exe ,,Hide
-        Case "CiscoCollabHost.exe": Run cmd.exe /c taskkill /F /IM Ciscowebexstart.exe & taskkill /F /IM CiscoCollabHost.exe & taskkill /F /IM webexmta.exe & taskkill /F /IM washost.exe & taskkill /F /IM atmgr.exe & taskkill /F /IM webex.exe ,,Hide
-        Case "ApplicationFrameHost.exe": Run cmd.exe /c taskkill /F /IM Cortana.exe ,,Hide ;Cortana
-        Case "Discord.exe": Run cmd.exe /c taskkill /F /IM Discord.exe ,,Hide
-        Case "IDMan.exe": Run cmd.exe /c taskkill /F /IM IDMan.exe ,,Hide
-        Case "Opera.exe": Run cmd.exe /c taskkill /F /IM Opera.exe & taskkill /F /IM browser_assistant.exe,,Hide
-        Case "Teams.exe": Run cmd.exe /c taskkill /F /IM Teams.exe ,,Hide
-        Case "msteams.exe": Run cmd.exe /c taskkill /F /IM msteams.exe ,,Hide
-        Case "stremio.exe": Run cmd.exe /c taskkill /F /IM stremio.exe ,,Hide
-        Case "Skype.exe": Run cmd.exe /c taskkill /F /IM Skype.exe ,,Hide
-        Case "Telegram.exe": Run cmd.exe /c taskkill /F /IM Telegram.exe ,,Hide
-        Case "Unity Hub.exe": Run cmd.exe /c taskkill /F /IM "Unity Hub.exe" ,,Hide
-        Case "uTorrent.exe": Run cmd.exe /c taskkill /F /IM uTorrent.exe ,,Hide
-        Case "Wondershare Filmora X.exe": Run cmd.exe /c taskkill /F /IM WSHelper.exe ,,Hide
-        Case "WhatsApp.Root.exe": Run cmd.exe /c taskkill /F /IM WhatsApp.Root.exe ,,Hide
-        Case "wps.exe": Run cmd.exe /c taskkill /F /IM wpscenter.exe & taskkill /F /IM wpscloudsvr.exe,,Hide
-        Case "Zoom.exe": Run cmd.exe /c taskkill /F /IM zoom.exe ,,Hide
- 	    Case "hsscp.exe": Run cmd.exe /c taskkill /F /IM hsscp.exe ,,Hide ;HotSpot Sheild
+        Case "AnyDesk.exe": Run("cmd.exe /c taskkill /F /IM AnyDesk.exe", , "Hide")
+        Case "CiscoCollabHost.exe": Run("cmd.exe /c taskkill /F /IM Ciscowebexstart.exe & taskkill /F /IM CiscoCollabHost.exe & taskkill /F /IM webexmta.exe & taskkill /F /IM washost.exe & taskkill /F /IM atmgr.exe & taskkill /F /IM webex.exe", , "Hide")
+        Case "ApplicationFrameHost.exe": Run("cmd.exe /c taskkill /F /IM Cortana.exe", , "Hide") ;Cortana
+        Case "Discord.exe": Run("cmd.exe /c taskkill /F /IM Discord.exe", , "Hide")
+        Case "IDMan.exe": Run("cmd.exe /c taskkill /F /IM IDMan.exe", , "Hide")
+        Case "Opera.exe": Run("cmd.exe /c taskkill /F /IM Opera.exe & taskkill /F /IM browser_assistant.exe", , "Hide")
+        Case "Teams.exe": Run("cmd.exe /c taskkill /F /IM Teams.exe", , "Hide")
+        Case "msteams.exe": Run("cmd.exe /c taskkill /F /IM msteams.exe", , "Hide")
+        Case "stremio.exe": Run("cmd.exe /c taskkill /F /IM stremio.exe", , "Hide")
+        Case "Skype.exe": Run("cmd.exe /c taskkill /F /IM Skype.exe", , "Hide")
+        Case "Telegram.exe": Run("cmd.exe /c taskkill /F /IM Telegram.exe", , "Hide")
+        Case "Unity Hub.exe": Run('cmd.exe /c taskkill /F /IM "Unity Hub.exe"', , "Hide")
+        Case "uTorrent.exe": Run("cmd.exe /c taskkill /F /IM uTorrent.exe", , "Hide")
+        Case "Wondershare Filmora X.exe": Run("cmd.exe /c taskkill /F /IM WSHelper.exe", , "Hide")
+        Case "WhatsApp.Root.exe": Run("cmd.exe /c taskkill /F /IM WhatsApp.Root.exe", , "Hide")
+        Case "wps.exe": Run("cmd.exe /c taskkill /F /IM wpscenter.exe & taskkill /F /IM wpscloudsvr.exe", , "Hide")
+        Case "Zoom.exe": Run("cmd.exe /c taskkill /F /IM zoom.exe", , "Hide")
+        Case "hsscp.exe": Run("cmd.exe /c taskkill /F /IM hsscp.exe", , "Hide") ;HotSpot Sheild
         Default:
     }
-    
-    send !{F4}
+
+    Send("!{F4}")
     return
 }
 
 CLoseAllPrograms()
 {
-    DetectHiddenWindows, on
+    DetectHiddenWindows(true)
     CLoseSpecificPrograms()
-    DetectHiddenWindows, off
-    WinGet, mylist, list, , , ,Program Manager
+    DetectHiddenWindows(false)
+    mylist := WinGetList(, , , "Program Manager")
     str := ""
-    Loop % mylist {
-        hwnd := mylist%A_Index%
-        WinGetTitle, title, % "ahk_id " hwnd
+    Loop mylist.Length {
+        hwnd := mylist[A_Index]
+        title := WinGetTitle("ahk_id " hwnd)
         if (title == "")
         {
             continue
         }
         ; msgbox % str
         str .= "HWND: " hwnd ", Title: " title "`n"
-        WinClose % "ahk_id " hwnd
+        WinClose("ahk_id " hwnd)
     }
     ; msgbox % str
     return
 
-    ; IfEqual, AppName, "AutoHotKey.exe"
-    ; Winget,AppName,ProcessName,ahk_id %this_id%
-    ; if AppName = "AutoHotkey.exe"
+    ; if (AppName = "AutoHotKey.exe")
+    ; AppName := WinGetProcessName("ahk_id " this_id)
+    ; if (AppName = "AutoHotkey.exe")
     ; {
     ;     MsgBox, [ Options, Title, Text, Timeout]
     ;     Continue
     ; }
-    ; else if AppName = "Zoom.exe"
+    ; else if (AppName = "Zoom.exe")
     ; {
-    ;     Run cmd.exe /c taskkill /F /IM zoom.exe ,,Hide
+    ;     Run("cmd.exe /c taskkill /F /IM zoom.exe", , "Hide")
     ;     Continue
     ; }
 }
@@ -88,40 +87,40 @@ CLoseSpecificPrograms()
     ; WinClose, ahk_exe stremio.exe
     if WinExist("ahk_exe WhatsApp.exe")
     {
-        Run cmd.exe /c taskkill /F /IM WhatsApp.exe,,Hide
+        Run("cmd.exe /c taskkill /F /IM WhatsApp.exe", , "Hide")
         ; Run cmd.exe /c start WhatsApp.exe ,,Hide
         return
     }
 
     if WinExist("ahk_exe IDMan.exe")
     {
-        Run cmd.exe /c taskkill /F /IM IDMan.exe ,,Hide
+        Run("cmd.exe /c taskkill /F /IM IDMan.exe", , "Hide")
     }
 
     if WinExist("ahk_exe stremio.exe")
     {
-        Run cmd.exe /c taskkill /F /IM stremio.exe ,,Hide
+        Run("cmd.exe /c taskkill /F /IM stremio.exe", , "Hide")
     }
 
     if WinExist("ahk_exe uTorrent.exe") or WinExist("ahk_exe utorrentie.exe") or WinExist("ahk_exe utorrent.exe")
     {
-        Run cmd.exe /c taskkill /F /IM uTorrent.exe & taskkill /F /IM utorrentie.exe & taskkill /F /IM utorrent.exe,,Hide
+        Run("cmd.exe /c taskkill /F /IM uTorrent.exe & taskkill /F /IM utorrentie.exe & taskkill /F /IM utorrent.exe", , "Hide")
     }
 
     if WinExist("ahk_exe wps.exe") or WinExist("ahk_exe wpscloudsvr.exe")
     {
-        Run cmd.exe /c taskkill /F /IM wpscenter.exe,,Hide
-        Run cmd.exe /c taskkill /F /IM wpscloudsvr.exe,,Hide
+        Run("cmd.exe /c taskkill /F /IM wpscenter.exe", , "Hide")
+        Run("cmd.exe /c taskkill /F /IM wpscloudsvr.exe", , "Hide")
     }
 
     if WinExist("ahk_exe Teams.exe")
     {
-        Run cmd.exe /c taskkill /F /IM Teams.exe ,,Hide
+        Run("cmd.exe /c taskkill /F /IM Teams.exe", , "Hide")
     }
 
     if WinExist("ahk_exe Zoom.exe")
     {
-        Run cmd.exe /c taskkill /F /IM zoom.exe ,,Hide
+        Run("cmd.exe /c taskkill /F /IM zoom.exe", , "Hide")
     }
 
     ; if WinExist("ahk_class ZPPTMainFrmWndClassEx.exe")
@@ -132,25 +131,29 @@ CLoseSpecificPrograms()
 }
 
 ; Suspend hotkeys during startup key-release to prevent Alt+F4 misfiring
-Suspend, On
-KeyWait, F4
-KeyWait, Alt
-Suspend, Off
+Suspend(true)
+KeyWait("F4")
+KeyWait("Alt")
+Suspend(false)
 
 isReady := false
-SetTimer, InitDone, -300
+SetTimer(InitDone, -300)
 
-InitDone:
-isReady := true
-return
+InitDone() {
+    global isReady
+    isReady := true
+}
 
 ; Alt+F4 -> Close currently active program
 ; $!F4:: CLoseCurrentlyActiveScreen() ;{ <- CLose Currently Active Screen
-$!F4:: ;{ <- CLose Currently Active Screen
-if (!isReady || !GetKeyState("F4", "P"))
-    return
-CLoseCurrentlyActiveScreen()
-return
+; v2: a multi-line hotkey body needs explicit braces now - v1 let the body implicitly extend to the next
+; `return`/hotkey with no braces at all, but v2 fails to load that shape ("Hotkey or hotstring is missing
+; its opening brace"), confirmed empirically down to the minimal case.
+$!F4:: { ;{ <- CLose Currently Active Screen
+	if (!isReady || !GetKeyState("F4", "P"))
+		return
+	CLoseCurrentlyActiveScreen()
+}
 
 ; Alt+Shift+F4 -> Close specific active program
 $!+F4:: CLoseSpecificPrograms() ;{ <- CLose Specific Programs
