@@ -718,6 +718,40 @@ GetRunningBrowsers() {
 	return running
 }
 
+; Narrow "is a Chromium browser active right now" predicate - deliberately does NOT use GetActiveBrowser()'s
+; 20s recent-focus cache or Z-order fallback, since several BasicTasks.ahk hotkeys need "literally active
+; this instant," not "was recently active" (using GetActiveBrowser() here would broaden when these hotkeys
+; fire beyond their original intent). Was duplicated inline across half a dozen functions before being
+; pulled out here.
+IsChromiumBrowserActive() {
+	return WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe")
+}
+
+; Shared "run action in the active Chromium browser, or activate one and then run it" pattern - was
+; duplicated inline (with Brave preferred over Chrome) across several BasicTasks.ahk hotkeys. sleepMs
+; matches each call site's own prior behavior exactly (0 by default, since most call sites never actually
+; slept between WinActivate and the action - only pass a nonzero value where live code already did).
+; Returns true if a browser was found (active or activated) and action ran, false if neither is running.
+ActivateChromiumBrowserOrRun(action, sleepMs := 0) {
+	if IsChromiumBrowserActive() {
+		action.Call()
+		return true
+	} else if WinExist("ahk_exe brave.exe") {
+		WinActivate("ahk_exe brave.exe")
+		if (sleepMs)
+			Sleep(sleepMs)
+		action.Call()
+		return true
+	} else if WinExist("ahk_exe chrome.exe") {
+		WinActivate("ahk_exe chrome.exe")
+		if (sleepMs)
+			Sleep(sleepMs)
+		action.Call()
+		return true
+	}
+	return false
+}
+
 GetTargetBrowsersForDRM() {
 	active := GetActiveBrowser()
 	if (active != "")

@@ -265,7 +265,7 @@ DoubleTapCapsLock() {
 
 ; Close legacy bottom downloads shelf in Chrome (Brave uses a modern top toolbar popup, so this issue only applies to Chrome)
 CloseBrowserBottomDownloadsBar() {
-	if (WinActive("ahk_exe chrome.exe") || WinActive("ahk_exe brave.exe")) {
+	if (IsChromiumBrowserActive()) {
 		Send("^j") ; Open downloads tab (Normal Functionality)
 		if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250) {
 			Sleep(100)
@@ -435,7 +435,7 @@ MoveBGApp() {
 
 OpenYoutube() {
 	; For more tweak read this : https://www.autohotkey.com/boards/viewtopic.php?t=86160
-	if WinActive("ahk_exe chrome.exe") || WinActive("ahk_exe brave.exe") {
+	if IsChromiumBrowserActive() {
 		if (openYT()) {
 			Sleep(600)
 			Send("{LCtrl down}{LShift down}{Tab down}")
@@ -470,21 +470,17 @@ openYT() {
 OpenNewTab() {
 	; If youtube is going to active then disable opening new tab and open YT instead
 	if (A_PriorHotkey != "~^Y") {
-		if (WinActive("ahk_exe chrome.exe") || WinActive("ahk_exe brave.exe")) {
+		if (IsChromiumBrowserActive()) {
 			; MsgBox("[ Options, " A_PriorHotkey ", Timeout]")
 			Send("^t")
-		} else if (WinExist("ahk_exe brave.exe") && A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250) {
-			WinActivate("ahk_exe brave.exe")
-			Sleep(250)
-			Send("^t")
-		} else if (WinExist("ahk_exe chrome.exe") && A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250) {
-			WinActivate("ahk_exe chrome.exe")
-			Sleep(250)
-			Send("^t")
 		} else if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250) {
-			Run("brave.exe")
-			Sleep(250)
-			Send("^t")
+			; Activate whichever Chromium browser exists (Brave preferred); if neither is running, launch
+			; Brave fresh - only reached on the double-tap, matching the original gated behavior exactly.
+			if !ActivateChromiumBrowserOrRun((*) => Send("^t"), 250) {
+				Run("brave.exe")
+				Sleep(250)
+				Send("^t")
+			}
 		}
 	}
 }
@@ -626,30 +622,17 @@ WatchMicrophoneMute() {
 ; }
 
 OpenCalendar() {
-	if (WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe")) {
-		Send("!x")
-	} else if WinExist("ahk_exe brave.exe") {
-		WinActivate("ahk_exe brave.exe")
-		; Sleep, 250
-		Send("!x")
-	} else if WinExist("ahk_exe chrome.exe") {
-		WinActivate("ahk_exe chrome.exe")
-		; Sleep, 100
-		Send("!x")
-	}
+	; Sleep, 250 (brave) / Sleep, 100 (chrome) - neither ever actually ran live, so no sleep is passed here.
+	ActivateChromiumBrowserOrRun(() => Send("!x"))
 }
 
 OpenChatGPT() {
 	; if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250) {
-	if (WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe")) {
+	; WinActivate, ahk_exe brave.exe / WinActivate, ahk_exe chrome.exe
+	; Every branch here ran the identical Run() regardless of which browser was found, so the three-way
+	; active/exists-brave/exists-chrome check collapses to one predicate.
+	if (IsChromiumBrowserActive() || GetRunningBrowsers().Length)
 		Run("https://chatgpt.com")
-	} else if WinExist("ahk_exe brave.exe") {
-		; WinActivate, ahk_exe brave.exe
-		Run("https://chatgpt.com")
-	} else if WinExist("ahk_exe chrome.exe") {
-		; WinActivate, ahk_exe chrome.exe
-		Run("https://chatgpt.com")
-	}
 	; }
 }
 
@@ -683,7 +666,7 @@ RevertVideoIntruption() {
 	; Hotkey("^+v", "Off")
 	; Send("^+v")
 	; Hotkey("^+v", "On")
-	if (WinActive("ahk_exe chrome.exe") || WinActive("ahk_exe brave.exe")) {
+	if (IsChromiumBrowserActive()) {
 		; static prevURL := ""
 		; Get the URL of the active tab
 		; ControlGetText(&url, "Edit1", "ahk_class Chrome_WidgetWin_1")
@@ -1291,6 +1274,11 @@ UpdateDRMTrayStatus() {
 	PublishBasicTasksManifest()
 }
 
+; Deliberately does NOT call the shared GetActiveBrowser() despite the surface-level duplication below -
+; this runs on a 250ms hot-loop timer, and GetActiveBrowser()'s Z-order-scanning fallback would then run
+; an unconditional DllCall walk 4x/second the entire time neither browser has focus (e.g. while working in
+; any other app), which is both wasteful and would start writing g_LastActiveBrowser from a merely-topmost-
+; but-unfocused window instead of only a genuinely active one. Keep this narrow and cheap on purpose.
 TrackActiveBrowser() {
 	global g_LastActiveBrowser, g_LastActiveBrowserTime
 	if WinActive("ahk_exe brave.exe") {
