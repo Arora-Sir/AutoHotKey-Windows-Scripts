@@ -227,42 +227,49 @@ try {
     $ssd = Find-TargetSSD -Config $cfg
 
     if (-not $ssd) {
-        Log-Mount "SSD hardware not detected on USB bus. Exiting." "INFO"
-        exit 0
-    }
-
-    $driveNum = $ssd.Number
-    Log-Mount "Found target SSD: Disk #$driveNum ($($ssd.FriendlyName), $($ssd.OperationalStatus))" "INFO"
-
-    # ---- 3. Remove any Windows-assigned RAW drive letter ---------------
-    $part = Get-Partition -DiskNumber $driveNum -PartitionNumber 1 -ErrorAction SilentlyContinue
-    if ($part -and $part.DriveLetter) {
-        $vol = Get-Volume -DriveLetter $part.DriveLetter -ErrorAction SilentlyContinue
-        if ($vol -and $vol.FileSystem -and $vol.FileSystem -ne '') {
-            Log-Mount "Disk has a recognized Windows filesystem ($($vol.FileSystem)). Aborting for safety." "WARN"
+        # Check if a matching USB device exists in dormant/ejected state
+        $ejectedDev = Find-EjectedTargetUSBDevice -Config $cfg
+        if ($ejectedDev) {
+            Log-Mount "Target USB device detected in dormant/ejected state ($($ejectedDev.InstanceId)). Initiating elevated revival & attach..." "INFO"
+        } else {
+            Log-Mount "SSD hardware not detected on USB bus. Exiting." "INFO"
             exit 0
         }
-        Log-Mount "Removing RAW drive letter ($($part.DriveLetter):) assigned by Windows..." "INFO"
-        Remove-PartitionAccessPath -DiskNumber $driveNum -PartitionNumber 1 -AccessPath "$($part.DriveLetter):" -ErrorAction SilentlyContinue
+    } else {
+        $driveNum = $ssd.Number
+        Log-Mount "Found target SSD: Disk #$driveNum ($($ssd.FriendlyName), $($ssd.OperationalStatus))" "INFO"
+
+        # ---- 3. Remove any Windows-assigned RAW drive letter ---------------
+        $part = Get-Partition -DiskNumber $driveNum -PartitionNumber 1 -ErrorAction SilentlyContinue
+        if ($part -and $part.DriveLetter) {
+            $vol = Get-Volume -DriveLetter $part.DriveLetter -ErrorAction SilentlyContinue
+            if ($vol -and $vol.FileSystem -and $vol.FileSystem -ne '') {
+                Log-Mount "Disk has a recognized Windows filesystem ($($vol.FileSystem)). Aborting for safety." "WARN"
+                exit 0
+            }
+            Log-Mount "Removing RAW drive letter ($($part.DriveLetter):) assigned by Windows..." "INFO"
+            Remove-PartitionAccessPath -DiskNumber $driveNum -PartitionNumber 1 -AccessPath "$($part.DriveLetter):" -ErrorAction SilentlyContinue
+        }
     }
 
     # ---- 4. Check if attached in WSL -----------------------------------
     $isAttached = $false
     try {
-        $lsblkOut = wsl -d $distro -e lsblk -nlo KNAME,TYPE 2>$null
-        $partMatch = ($lsblkOut | Select-String 'sd([b-z]1)\s+part')
-        if ($partMatch) {
-            $partDev = $partMatch.Matches[0].Groups[1].Value
-            # Verify partition responsiveness against ghost devices from previous abrupt cable pulls.
-            # If unresponsive, wsl.exe --shutdown clears the faulted Hyper-V SCSI state.
-            wsl -d $distro -e head -c 512 "/dev/$partDev" 2>$null | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                $isAttached = $true
-                Log-Mount "Partition /dev/$partDev verified attached and responsive in WSL." "INFO"
-            } else {
-                Log-Mount "Partition /dev/$partDev in lsblk is unresponsive (dead ghost from cable pull). Triggering fast wsl.exe --shutdown reset..." "WARN"
-                wsl.exe --shutdown
-                Start-Sleep -Milliseconds 1200
+        $lsblkOut = wsl -d $distro -e lsblk -b -nlo KNAME,TYPE,FSTYPE,SIZE,MOUNTPOINTS 2>$null
+        foreach ($line in $lsblkOut) {
+            $cols = -split $line.Trim()
+            if ($cols.Count -ge 4) {
+                $kname = $cols[0]
+                $fstype = $cols[2]
+                $sizeBytes = [int64]0
+                [int64]::TryParse($cols[3], [ref]$sizeBytes) | Out-Null
+                $mounts = if ($cols.Count -ge 5) { $cols[4..($cols.Count - 1)] -join ' ' } else { '' }
+
+                if ($sizeBytes -gt 10GB -and $mounts -notmatch '^/(mnt/wslg/distro)?$') {
+                    $isAttached = $true
+                    Log-Mount "Target block device verified in WSL: /dev/$kname ($fstype, $([math]::Round($sizeBytes / 1GB, 1))GB)" "INFO"
+                    break
+                }
             }
         }
     } catch {}
@@ -278,57 +285,48 @@ try {
                 Log-Mount "Triggering elevated Scheduled Task: $mountTask" "INFO"
                 schtasks /run /tn $mountTask | Out-Null
                 $schtaskRan = $true
-                for ($i = 0; $i -lt 12; $i++) {
+                for ($i = 0; $i -lt 24; $i++) {
                     Start-Sleep -Milliseconds 500
-                    $chk = wsl -d $distro -e lsblk -nlo KNAME,TYPE 2>$null | Select-String 'sd[b-z]1\s+part'
-                    if ($chk) { $isAttached = $true; break }
+                    $chkLines = wsl -d $distro -e lsblk -b -nlo KNAME,TYPE,FSTYPE,SIZE,MOUNTPOINTS 2>$null
+                    foreach ($line in $chkLines) {
+                        $cols = -split $line.Trim()
+                        if ($cols.Count -ge 4) {
+                            $sizeBytes = [int64]0
+                            [int64]::TryParse($cols[3], [ref]$sizeBytes) | Out-Null
+                            $mounts = if ($cols.Count -ge 5) { $cols[4..($cols.Count - 1)] -join ' ' } else { '' }
+                            if ($sizeBytes -gt 10GB -and $mounts -notmatch '^/(mnt/wslg/distro)?$') {
+                                $isAttached = $true
+                                break
+                            }
+                        }
+                    }
+                    if ($isAttached) { break }
                 }
             }
         } catch {}
 
-        # Fall back to elevated Start-Process with 6s watchdog timeout if needed
+        # Fall back to elevated Start-Process with watchdog timeout if needed
         if (-not $isAttached) {
-            Log-Mount "Scheduled task did not attach block device in time. Using timeout-guarded elevated attach..." "INFO"
+            Log-Mount "Scheduled task did not attach block device in time. Using timeout-guarded elevated fallback..." "INFO"
             $runSilentExe = Join-Path $scriptDir "run_silent.exe"
+            $elevatedMountScript = Join-Path $scriptDir "wsl_mount_elevated.ps1"
             $psi = New-Object System.Diagnostics.ProcessStartInfo
             if (Test-Path $runSilentExe) {
                 $psi.FileName = $runSilentExe
-                $psi.Arguments = "powershell.exe -NoProfile -WindowStyle Hidden -Command wsl --mount \\.\PHYSICALDRIVE$driveNum --bare"
+                $psi.Arguments = "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$elevatedMountScript`""
             } else {
                 $psi.FileName = "powershell.exe"
-                $psi.Arguments = "-NoProfile -WindowStyle Hidden -Command wsl --mount \\.\PHYSICALDRIVE$driveNum --bare"
+                $psi.Arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$elevatedMountScript`""
             }
             $psi.Verb = "RunAs"
             $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
 
             try {
                 $proc = [System.Diagnostics.Process]::Start($psi)
-                if ($proc.WaitForExit(6000)) {
+                if ($proc.WaitForExit(20000)) {
                     Log-Mount "Elevated attach process exited with code $($proc.ExitCode)" "INFO"
-                    if ($proc.ExitCode -ne 0) {
-                        # Self-healing: if disk was in a dirty attach state, unmount first and retry
-                        Log-Mount "Attach returned non-zero code. Attempting self-healing unmount reset..." "WARN"
-                        $unmountPsi = New-Object System.Diagnostics.ProcessStartInfo
-                        if (Test-Path $runSilentExe) {
-                            $unmountPsi.FileName = $runSilentExe
-                            $unmountPsi.Arguments = "powershell.exe -NoProfile -WindowStyle Hidden -Command wsl --unmount \\.\PHYSICALDRIVE$driveNum"
-                        } else {
-                            $unmountPsi.FileName = "powershell.exe"
-                            $unmountPsi.Arguments = "-NoProfile -WindowStyle Hidden -Command wsl --unmount \\.\PHYSICALDRIVE$driveNum"
-                        }
-                        $unmountPsi.Verb = "RunAs"
-                        $unmountPsi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
-                        $uProc = [System.Diagnostics.Process]::Start($unmountPsi)
-                        if ($uProc.WaitForExit(4000)) {
-                            Start-Sleep -Milliseconds 600
-                            # Retry attach once
-                            Log-Mount "Retrying elevated attach after reset..." "INFO"
-                            $retryProc = [System.Diagnostics.Process]::Start($psi)
-                            $retryProc.WaitForExit(6000) | Out-Null
-                        }
-                    }
                 } else {
-                    Log-Mount "Elevated attach process timed out after 6s. Terminating." "ERROR"
+                    Log-Mount "Elevated attach process timed out after 20s. Terminating." "ERROR"
                     $proc.Kill()
                 }
             } catch {
@@ -336,8 +334,19 @@ try {
             }
 
             Start-Sleep -Milliseconds 500
-            $chk = wsl -d $distro -e lsblk -nlo KNAME,TYPE 2>$null | Select-String 'sd[b-z]1\s+part'
-            if ($chk) { $isAttached = $true }
+            $chkLines = wsl -d $distro -e lsblk -b -nlo KNAME,TYPE,FSTYPE,SIZE,MOUNTPOINTS 2>$null
+            foreach ($line in $chkLines) {
+                $cols = -split $line.Trim()
+                if ($cols.Count -ge 4) {
+                    $sizeBytes = [int64]0
+                    [int64]::TryParse($cols[3], [ref]$sizeBytes) | Out-Null
+                    $mounts = if ($cols.Count -ge 5) { $cols[4..($cols.Count - 1)] -join ' ' } else { '' }
+                    if ($sizeBytes -gt 10GB -and $mounts -notmatch '^/(mnt/wslg/distro)?$') {
+                        $isAttached = $true
+                        break
+                    }
+                }
+            }
         }
     } else {
         Log-Mount "Partition is already attached in WSL." "INFO"

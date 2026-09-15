@@ -46,6 +46,20 @@ function Log-Unmount {
 Log-Unmount "--------------------------------------------------------"
 Log-Unmount "Unmount invocation initiated (OnlyIfDisconnected: $OnlyIfDisconnected)."
 
+# ---- 0. Anti-race lock guard with stale detection ----------------------
+$lockFile = [System.IO.Path]::Combine($env:TEMP, 'unmount_wsl_ssd.lock')
+if (Test-Path $lockFile) {
+    $lockAge = (Get-Date) - (Get-Item $lockFile).LastWriteTime
+    if ($lockAge.TotalSeconds -lt 12) {
+        Log-Unmount "Concurrent unmount operation in progress (age: $($lockAge.TotalSeconds)s). Exiting." "WARN"
+        exit 0
+    } else {
+        Log-Unmount "Purging stale lockfile (age: $($lockAge.TotalSeconds)s)" "WARN"
+        Remove-Item $lockFile -Force -ErrorAction SilentlyContinue
+    }
+}
+Set-Content -Path $lockFile -Value (Get-Date).ToString() -Force -ErrorAction SilentlyContinue
+
 $flagFile = [System.IO.Path]::Combine($env:TEMP, 'pixel_ssd_ejected.flag')
 
 try {
@@ -300,4 +314,8 @@ try {
 }
 catch {
     Log-Unmount "Fatal exception during unmount: $_" "ERROR"
+}
+finally {
+    Remove-Item $lockFile -Force -ErrorAction SilentlyContinue
+    Log-Unmount "Released unmount lockfile." "INFO"
 }

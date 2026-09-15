@@ -64,3 +64,28 @@ function Find-TargetSSD {
         $matchesModel -and $matchesBus -and $matchesSize
     } | Select-Object -First 1
 }
+
+function Find-EjectedTargetUSBDevice {
+    <#
+    .SYNOPSIS
+        Discovers any connected USB storage hardware devnode currently held in an ejected state
+        (CM_PROB_HELD_FOR_EJECT or CM_PROB_NEED_RESTART).
+    .PARAMETER Config
+        Optional configuration object. If omitted, loaded dynamically via Get-SSDConfig.
+    #>
+    param($Config)
+    if (-not $Config) { $Config = Get-SSDConfig }
+
+    Get-PnpDevice | Where-Object {
+        $dev = $_
+        $isEjectedState = ($dev.Problem -in 'CM_PROB_HELD_FOR_EJECT', 'CM_PROB_NEED_RESTART', 'CM_PROB_WILL_BE_REMOVED', 'CM_PROB_DISABLED') -or
+                          ($dev.ConfigManagerErrorCode -in 'CM_PROB_HELD_FOR_EJECT', 'CM_PROB_NEED_RESTART', 'CM_PROB_WILL_BE_REMOVED', 'CM_PROB_DISABLED')
+        $isPresent = $dev.Present
+
+        $matchesHardware = ($dev.InstanceId -match 'VID_0BDA&PID_9210|USBSTOR|UASPStor') -or
+                           ($dev.Class -in 'SCSIAdapter', 'USB', 'DiskDrive')
+
+        $isEjectedState -and $isPresent -and $matchesHardware
+    } | Select-Object -First 1
+}
+

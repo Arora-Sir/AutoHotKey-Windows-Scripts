@@ -653,6 +653,19 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
      - `StartupScript.ahk` (`TrayIconRemove`) explicitly exempts both scripts from cleanup sweeps.
   4. **Multiline Tray Tooltip DOTALL Regex**: `StartupScript.ahk`'s `TrimAtDelim` helper uses `RegExMatch(SubStr(String, 1, Length + 1), "s)(.*)" Delim, &match)` with the `s)` PCRE DOTALL flag, allowing `.*` to span across newlines and display the maximum number of loaded child scripts within Windows' 124-character tooltip budget.
 
+### 16. WSL2 Ext4 Backup SSD Mount Pipeline, PnP Device Revival, and Silent Watchdog Reconciliation (`Ext4SsdManager.ahk` & PowerShell Engine)
+- **Context**: Automating the mounting, unmounting, and hardware safe removal of an external Linux ext4 NVMe SSD (Pixel 1 Backup SSD) on Windows 11 via WSL2 and Samba.
+- **Problem**:
+  1. **WSL2 Swap Partition Crash Loop**: Probing partitions with `head -c 512 /dev/sdb` triggered permission denied on the root-owned swap disk, causing false `wsl.exe --shutdown` invocations.
+  2. **PnP Device Dormancy (`CM_PROB_HELD_FOR_EJECT`)**: Safely ejecting the SSD via `CM_Request_Device_EjectW` transitioned the USB bridge into a dormant state (Code 47). Pressing `Win+Alt+M` failed to mount because `Get-Disk` returned nothing until physical cable reconnection.
+  3. **Toast Notification Spam**: The 5-second background reconciliation watchdog (`ReconcileExt4SsdState`) repeatedly fired user-facing toast badges.
+  4. **Unmount Race Conditions**: Lack of lockfile mutual exclusion allowed rapid remount attempts while unmount operations were mid-flight.
+- **Architectural Solution**:
+  1. **Deterministic Root lsblk Filtering**: `mount_wsl_ssd.ps1` runs `lsblk -b -n -o NAME,SIZE,TYPE,MOUNTPOINT` as root to strictly discover non-root partitions exceeding 10 GB, completely eliminating false VM restarts.
+  2. **Automated PnP Hardware Revival**: `Find-EjectedTargetUSBDevice` in `ssd_common.ps1` identifies dormant USB devnodes (`VID_0BDA&PID_9210`). `wsl_mount_elevated.ps1` runs `pnputil /restart-device <InstanceId>` with fallback to `pnputil /remove-device <InstanceId> /force` and `pnputil /scan-devices`, reviving the bridge and re-attaching `\\.\PHYSICALDRIVE*` in under 2 seconds.
+  3. **Silent Background Daemon Discipline**: Background watchdog passes explicitly set `showFeedback = false`. User-facing HUD badges are strictly reserved for direct keypresses (`Win+Alt+M`, `Win+Alt+U`), tray clicks, and physical hardware arrivals.
+  4. **Mutual Exclusion Lockfile Discipline**: Both `mount_wsl_ssd.ps1` and `unmount_wsl_ssd.ps1` enforce `$env:TEMP\*.lock` files with 30-second staleness auto-recovery, preventing conflicting background or manual operations.
+
 ---
 
 ## Fleet Script Inventory & Global Hotkeys Cheatsheet

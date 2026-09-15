@@ -243,3 +243,15 @@ When clicking the Windows taskbar "Safely Remove Hardware" icon instead of using
 3. Displays a non-intrusive status tooltip: _"<Drive Label> in use by WSL. Safely unmounting and ejecting..."_ (default: _"Linux Backup SSD in use by WSL..."_).
 4. Invokes `unmount_wsl_ssd.ps1`, which unmounts Ubuntu, detaches from WSL, synchronizes via completion flag, and invokes `CM_Request_Device_EjectW`.
 5. Safe removal completes on that **single action**, and Windows displays its native "Safe to Remove Hardware" toast.
+
+### Scenario E: Software-Driven Remount Without Physical Re-plug (`Win+Alt+M` PnP Revival)
+
+When the drive was safely software-ejected (via Scenario C or D) but remains physically plugged in:
+
+1. **Hotkey Trigger**: Pressing `Win+Alt+M` or selecting "Mount Pixel SSD" from the tray menu initiates the mount.
+2. **Dormant Node Discovery**: If `Get-Disk` finds no active disk, `Find-EjectedTargetUSBDevice` locates the dormant USB parent node held in `CM_PROB_HELD_FOR_EJECT`.
+3. **Elevated PnP Bus Re-enumeration**: `wsl_mount_elevated.ps1` issues `pnputil /restart-device <InstanceId>` with fallback to `pnputil /remove-device <InstanceId> /force` and `pnputil /scan-devices`.
+4. **Hardware Wake**: Windows re-enumerates the USB root hub, wakes the NVMe storage bridge, and re-initializes `\\.\PHYSICALDRIVE*`.
+5. **Mount Pipeline Completion**: The script attaches the raw disk to WSL2 (`--bare`), runs `fsck.ext4 -p`, starts Samba, maps network drive `P:`, and opens Explorer.
+6. **Zero Physical Cable Handling**: The SSD is fully remounted and accessible without having to unplug and replug the USB connector.
+

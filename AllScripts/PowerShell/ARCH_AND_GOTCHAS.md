@@ -54,11 +54,14 @@ This document is the engineering reference for the ext4 external SSD automation 
   - A VM shutdown terminates the virtual SCSI bus cleanly in 1.2 seconds,
     allowing the subsequent `--bare` attach to succeed immediately in 2.6 seconds.
 
-### Gotcha 6: Ghost Partitions in Linux lsblk Table
+### Gotcha 6: The WSL2 Swap Partition (`/dev/sdb`) Permission Trap in Block Probing
 
-- **Symptom**: After reconnecting the SSD, `mount_wsl_ssd.ps1` checks `lsblk` and sees `sde1 part`, assuming the drive is already attached. It skips attaching the newly connected physical drive, leaving `P:` mapped to a dead, disconnected Linux device.
-- **Root Cause**: Unclean disconnections leave stale partition entries in the guest Linux device tree until an I/O operation is attempted.
-- **Resolution**: Perform an active block read test using `head -c 512 /dev/$partDev`. If reading sector 0 fails with an I/O error, the partition is confirmed as a dead ghost. The script executes `wsl.exe --shutdown` to flush Hyper-V, and then cleanly attaches the real physical drive.
+- **Symptom**: When attempting to mount the external SSD, `mount_wsl_ssd.ps1` intermittently triggered `wsl.exe --shutdown` right after attaching the disk, killing the VM and entering a reboot loop.
+- **Root Cause**:
+  1. WSL2 automatically creates an internal swap disk attached as `/dev/sdb`.
+  2. Probing block devices using unprivileged `head -c 512 /dev/$partDev` returned exit code 1 with `Permission denied` because `/dev/sdb` is owned by root and represents swap space.
+  3. The script mistook this non-zero exit code for an unresponsive ghost partition and triggered `wsl.exe --shutdown` to flush Hyper-V, killing the newly attached storage VM.
+- **Resolution**: Filter `lsblk` as root (`wsl.exe -d $distro -u root lsblk -b -n -o NAME,SIZE,TYPE,MOUNTPOINT`) to strictly discover non-root (`MOUNTPOINT != '/'`), non-swap partitions exceeding 10 GB (`SIZE -gt 10000000000`). This completely eliminates false-positive VM shutdowns while ensuring reliable target device selection.
 
 ---
 
@@ -148,11 +151,34 @@ This document is the engineering reference for the ext4 external SSD automation 
   3. **Multi-Attempt Retry Loop**: Step 6 now executes up to 6 retry attempts (spaced 350ms apart) for `CM_Request_Device_EjectW`, gracefully accommodating any brief driver-stack teardown latency.
   4. **Single-Action Guarantee**: Safe removal now completes reliably on the very first click, displaying Windows native "Safe to Remove Hardware" toast.
 
+### Gotcha 12: PnP Device Dormancy (`CM_PROB_HELD_FOR_EJECT`) and DevNode Bus Re-Enumeration
+
+- **The Symptom**: After safely ejecting the ext4 SSD via `Win+Alt+U`, pressing `Win+Alt+M` or attempting to remount failed with "Pixel SSD is not connected via USB", even though the cable was never unplugged.
+- **Diagnosis**:
+  - Safely ejecting a USB storage bridge transitions the USB device node into `CM_PROB_HELD_FOR_EJECT` (Code 47).
+  - Windows shuts down the NVMe disk PDO (`\\.\PHYSICALDRIVE*`), making `Get-Disk` return empty.
+  - The parent USB device instance (`USB\VID_0BDA&PID_9210\...`) remains in the PnP device tree in a dormant state awaiting physical removal or bus reset.
+- **The Resolution**:
+  1. **Dormant Device Detection**: `Find-EjectedTargetUSBDevice` in `ssd_common.ps1` and `Win32_PnPEntity` queries in `Ext4SsdManager.ahk` detect dormant bridge instances.
+  2. **Elevated PnP Revival**: `wsl_mount_elevated.ps1` invokes `pnputil /restart-device <InstanceId>` with fallback to `pnputil /remove-device <InstanceId> /force` followed by `pnputil /scan-devices`.
+  3. **Instant Re-enumeration**: Windows re-scans the USB root hub, wakes the bridge, and re-attaches `\\.\PHYSICALDRIVE*` within 1 to 2 seconds without requiring physical cable reconnection.
+
+### Gotcha 13: Mutual Exclusion Lockfile Discipline Across Concurrent Mount and Unmount Pipelines
+
+- **The Symptom**: Rapid succession of unmount and mount hotkey presses or background timer collisions resulted in corrupted detach states and hung Hyper-V SCSI channels.
+- **Diagnosis**:
+  - `unmount_wsl_ssd.ps1` lacked a lockfile guard, allowing background timers or mount scripts to start while teardown was mid-flight.
+  - An aborted or crashed script could leave a permanent lock on disk.
+- **The Resolution**:
+  1. **Lockfile Enforcement**: Both `mount_wsl_ssd.ps1` and `unmount_wsl_ssd.ps1` maintain dedicated lockfiles (`mount_wsl_ssd.lock` and `unmount_wsl_ssd.lock`).
+  2. **Staleness Auto-Recovery**: Each script inspects existing lockfile timestamps. If older than 30 seconds, the stale lock is purged automatically.
+  3. **Cross-Pipeline Collision Guard**: `mount_wsl_ssd.ps1` inspects `unmount_wsl_ssd.lock` on startup and aborts gracefully if an unmount is active.
+
 ---
 
 ## 7. Multi-Resolution Display Switching & Desktop Layout Engine
 
-### Gotcha 12: The 73px Logical Screen Width Deficit (1536px vs 1463px) & Boundary Clamping Cascade
+### Gotcha 14: The 73px Logical Screen Width Deficit (1536px vs 1463px) & Boundary Clamping Cascade
 
 - **Symptom**: When switching from Laptop mode to Tablet mode, Simple Sticky Notes windows clump together in the middle of the screen or cascade into each other, instead of maintaining their neat column positions.
 - **Root Cause**:
@@ -169,7 +195,7 @@ This document is the engineering reference for the ext4 external SSD automation 
   - **Laptop Profile**: Col 0 at $X = 0$, Col 1 at $X = 728$, Col 2 at $X = 968$, Col 3 at $X = 1268$ (flush at 1536px).
   - **Tablet Profile**: Shift columns leftward to fit within 1463px: Col 0 at $X = 0$, Col 1 at $X = 640$, Col 2 at $X = 885$, Col 3 at $X = 1190$ ($1190 + 268 = 1458\text{px}$, leaving a safe 5px margin before the 1463px edge).
 
-### Gotcha 13: Dynamic Window Position Snapshotting Poisoning
+### Gotcha 15: Dynamic Window Position Snapshotting Poisoning
 
 - **Symptom**: AutoHotkey scripts that try to remember positions dynamically by reading `WinGetPos` on switch and saving to an INI file end up corrupting positions permanently after 1 or 2 display toggles.
 - **Root Cause**:
@@ -178,7 +204,7 @@ This document is the engineering reference for the ext4 external SSD automation 
   3. Dynamic snapshotting relies on the assumption that windows are in their intended positions at the moment of capture, which is violated during automated lid events, disconnects, and rapid re-toggles.
 - **Resolution**: Use static deterministic coordinate profiles. Never dynamically snapshot live coordinates at switch time. The exact pixel coordinates for each note profile are hardcoded in `apply_ssn_layout.ps1` based on mathematical layout rules.
 
-### Gotcha 14: Ephemeral HWNDs and Post-WM_DISPLAYCHANGE Destruction/Recreation
+### Gotcha 16: Ephemeral HWNDs and Post-WM_DISPLAYCHANGE Destruction/Recreation
 
 - **Symptom**: Restoring notes by saved window handle (`HWND`) fails because half or all of the windows report as invalid or do not move.
 - **Root Cause**: `ssn.exe` responds to the Windows `WM_DISPLAYCHANGE` (0x007E) message by destroying its existing `UINoteWindow` handles and recreating new Win32 windows with entirely new HWNDs to adapt to the new display device context.
@@ -187,7 +213,7 @@ This document is the engineering reference for the ext4 external SSD automation 
   2. Dimension signature $(W, H)$ which Simple Sticky Notes preserves across instances (e.g. $240 \times 120$ for small note, $300 \times 240$ for medium note, $268 \times 548$ for expanded "Today" note, $268 \times 32$ for minimized title bars).
   3. Vertical sorting ($Y$ coordinate) to break ties when multiple notes share identical dimensions.
 
-### Gotcha 15: Hardware EDID / DWM Topology Renegotiation Race Condition (Dual-Wave Settle)
+### Gotcha 17: Hardware EDID / DWM Topology Renegotiation Race Condition (Dual-Wave Settle)
 
 - **Symptom**: The layout script executes, reports success, but notes are still clumped or partially displaced.
 - **Root Cause**:
@@ -199,7 +225,7 @@ This document is the engineering reference for the ext4 external SSD automation 
   2. Primary wave: Positions all notes once windows are detected.
   3. Secondary wave (Dual-wave lock): Sleeps 1.2 seconds to allow DWM and `ssn.exe` to complete any late `WM_DISPLAYCHANGE` handling, then applies `SetWindowPos` a second time with `SWP_NOZORDER | SWP_NOACTIVATE`.
 
-### Gotcha 16: Desktop Window Station Isolation in AutoHotkey (`WinGet` Failure)
+### Gotcha 18: Desktop Window Station Isolation in AutoHotkey (`WinGet` Failure)
 
 - **Symptom**: During or immediately following a display switch, AutoHotkey's built-in `WinGetList("ahk_class UINoteWindow")` returns 0 windows, even while sticky notes are clearly visible on screen.
 - **Root Cause**:
@@ -210,7 +236,7 @@ This document is the engineering reference for the ext4 external SSD automation 
   2. Attach the worker thread via `SetThreadDesktop(hDesktop)`.
   3. Query `GetProcessByName("ssn")` and iterate through all process threads using `EnumThreadWindows`. This guarantees enumeration of every note window regardless of desktop transition state.
 
-### Gotcha 17: 16:9 vs 16:10 Vertical Aspect Ratio Variance (864px vs 914px DIP)
+### Gotcha 19: 16:9 vs 16:10 Vertical Aspect Ratio Variance (864px vs 914px DIP)
 
 - **Symptom**: On the tablet screen, there is approximately 50 pixels of extra empty space between the bottom notes and the taskbar compared to the laptop.
 - **Root Cause**:
