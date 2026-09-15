@@ -30,6 +30,17 @@ SendMode("Input") ; Recommended for new scripts due to its superior speed and re
 SetWorkingDir(A_ScriptDir) ; Ensures a consistent starting directory.
 #SingleInstance force ; Ensures that only the last executed instance of script is running
 DetectHiddenWindows(true)
+
+; Set the custom master icon as early as possible, before any of the slower work below (building the Scripts
+; map, launching all 11 children one by one) - Windows creates this process's tray icon the instant it starts,
+; showing AHK's own stock icon until something calls TraySetIcon(); the later this runs, the longer that stock
+; icon stays visible. Moved up from right before the child-launch loop, where it used to run only after every
+; child had already been spawned - found live: that ordering caused a roughly one-second flash of the generic
+; AHK icon on every reload before it swapped to the real one.
+if FileExist(A_ScriptDir "\..\StartupScript.ico")
+	TraySetIcon(A_ScriptDir "\..\StartupScript.ico")
+else if FileExist(A_ScriptDir "\..\Startup_Script.ico")
+	TraySetIcon(A_ScriptDir "\..\Startup_Script.ico")
 ;}
 
 ; Enable dark-mode support for the native tray popup menu (follows Windows' current theme).
@@ -200,12 +211,6 @@ DllCall("User32\ChangeWindowMessageFilterEx", "Ptr", A_ScriptHwnd, "UInt", WM_TA
 DllCall("User32\ChangeWindowMessageFilterEx", "Ptr", A_ScriptHwnd, "UInt", 0x0404, "UInt", 1, "Ptr", 0) ; 0x0404 AHK_NOTIFYICON
 DllCall("User32\ChangeWindowMessageFilterEx", "Ptr", A_ScriptHwnd, "UInt", 0x007E, "UInt", 1, "Ptr", 0) ; 0x007E WM_DISPLAYCHANGE
 
-; Ensure Master Tray Icon is explicitly visible
-if FileExist(A_ScriptDir "\..\StartupScript.ico")
-	TraySetIcon(A_ScriptDir "\..\StartupScript.ico")
-else if FileExist(A_ScriptDir "\..\Startup_Script.ico")
-	TraySetIcon(A_ScriptDir "\..\Startup_Script.ico")
-
 ; Global hotkey-suspend state - see SuspendAllToggle() below.
 ; A plain single-process boolean is the source of truth; the PostMessage cascade to every child is a one-way toggle with no way to query a remote process's real suspend state, so this variable (not the children's own internal state) is what the tray checkmark reflects.
 GlobalHotkeysSuspended     := false
@@ -341,7 +346,12 @@ TrayTipBuild() {
 	for line in sortedLines
 		tipText .= line "`n"
 	tipText := TrimAtDelim(Trim(tipText, " `n"))
-	TrayTip(tipText) ; Tooltip is limited to first 127 characters
+	; v2: Menu,Tray,Tip maps to A_IconTip (persistent hover text), not TrayTip() (a one-shot balloon notification) -
+	; the port here called TrayTip() instead, which fired a spammy balloon on every reload/status change and left
+	; the actual hover tooltip stuck on the default "StartupScript.exe" text. Same bug already fixed in
+	; SharedHelpers.ahk's UpdateMicrophoneTrayIcon() (Migration-Notes.md 18.32), missed here since that earlier
+	; fix wasn't cross-checked against every other TrayTip()/A_IconTip call site in the fleet.
+	A_IconTip := tipText ; Tooltip is limited to first 127 characters
 }
 
 ; Stop All the Scripts with Status true (Called When this Script Exits)
@@ -784,9 +794,18 @@ GetCurrentDisplayTopology() {
 	return NumGet(topologyId, 0, "UInt")
 }
 
+; Pre-existing bug (present identically in the original v1 source, not introduced by the v2 port): PCRE's "."
+; does not match a newline by default, so the old "(.*)" Delim pattern could only ever match up through the
+; FIRST line, then stop - it never actually found the LAST complete line before the length limit like the
+; function's own name/intent implies. This stayed invisible for years because the merged multi-line tipText
+; apparently used to stay under the 124-char threshold entirely, so the truncation branch never ran; with 11
+; scripts now merged into one tray tip, it always exceeds 124 chars, so the tooltip always collapsed down to
+; just the first sorted script name ("BackgroundAutomations...") instead of the intended fuller list. Fixed by
+; adding the "s)" inline option, which makes "." match newlines too (PCRE DOTALL mode), so the greedy (.*) can
+; now span every complete line up to the last one that still fits within the length budget.
 TrimAtDelim(String, Length := 124, Delim := "`n", Tail := "...") {
 	if (StrLen(String) > Length) {
-		if RegExMatch(SubStr(String, 1, Length + 1), "(.*)" Delim, &match)
+		if RegExMatch(SubStr(String, 1, Length + 1), "s)(.*)" Delim, &match)
 			Result := match[1] Tail
 		else
 			Result := SubStr(String, 1, Length) Tail
