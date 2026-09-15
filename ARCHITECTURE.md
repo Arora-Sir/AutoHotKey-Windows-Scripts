@@ -13,14 +13,14 @@ Every script that needs one of these includes it with an **explicit** `%A_Script
 
 **Never a bare `#Include SharedHelpers.ahk`.**
 
-- AHK v1.1 resolves a bare relative `#Include` path against the *process's initial working directory* at load-time preprocessing, not necessarily the including script's own folder.
-- This only "worked" for the pre-existing bare `#Include *i LocalPaths.ahk` because of exactly how `StartupScript.ahk` happens to launch each script.
+- In AutoHotkey, a bare relative `#Include` path resolves against the *process's initial working directory* at load-time preprocessing, not necessarily the including script's own folder.
+- This only "worked" historically for a bare `#Include *i LocalPaths.ahk` because of exactly how `StartupScript.ahk` happened to launch each script.
 - Launch a script any other way (a manual reload from a shell with a different working directory, for instance) and a bare include can silently fail to resolve.
 
 `SharedHelpers.ahk` also runs standalone as its own `StartupScript.ahk` tray entry, for quick Edit access (same reason `LocalPaths.ahk` does below).
 
 - This uses a narrow exception to its own "no top-level directives" rule: a single `Persistent()` call at the top.
-- `#Persistent` is a v1-only directive; in v2 it silently hangs the process at load time instead of erroring (confirmed empirically, see Migration-Notes.md SS18.1) - `Persistent()` is the runtime function call that replaces it.
+- `#Persistent` was a v1-only directive; in v2 it silently hangs the process at load time instead of erroring (confirmed empirically, see `Official Documentation/AHK-v1-to-v2-Migration-Notes.md` §18.1), and `Persistent()` is the runtime function call that replaces it.
 - That's a pure lifecycle call rather than meaningful executable code, so it's a no-op for every `#Include`ing script (they all already stay alive via their own hotkeys/loops).
 - It only actually matters for this standalone run.
 - The explicit `%A_ScriptDir%\` form is immune to this regardless of how the script is launched.
@@ -29,44 +29,44 @@ Every script that needs one of these includes it with an **explicit** `%A_Script
 
 - AHK's auto-execute section ends at the first hotkey/hotstring definition, `Return`, or `Exit` encountered during a top-to-bottom load-time scan.
 - That scan *skips over function bodies* entirely (recognized and deferred, never executed inline).
-- v2 has no plain (non-hotkey) label at all in the v1 sense - every `SetTimer`/`OnMessage` target here (`RemoveBottomRightBadge`, `RemoveTimedToolTip`, etc.) is a real zero-parameter function, which the language requires and which auto-execute scanning correctly skips over.
-- If you add a new `SetTimer` target to this file, it must be a function reference - v2 has no label-based `SetTimer` dispatch to fall back on.
+- v2 has no plain (non-hotkey) label at all in the v1 sense: every `SetTimer`/`OnMessage` target here (`RemoveBottomRightBadge`, `RemoveTimedToolTip`, etc.) is a real zero-parameter function, which the language requires and which auto-execute scanning correctly skips over.
+- If you add a new `SetTimer` target to this file, it must be a function reference: v2 has no label-based `SetTimer` dispatch to fall back on.
 
 ### What's in the file, and why
 
-- **`AcquireNamedMutex(mutexName, timeoutMs)` / `ReleaseNamedMutex(hMutex)`** - cross-process mutual exclusion via a real Win32 named mutex, not a file-existence convention.
+- **`AcquireNamedMutex(mutexName, timeoutMs)` / `ReleaseNamedMutex(hMutex)`**: cross-process mutual exclusion via a real Win32 named mutex, not a file-existence convention.
   - A plain lock *file* can be left permanently stuck if the owning process crashes mid-critical-section.
     A named mutex cannot: Windows marks it "abandoned" and the next waiter picks it up cleanly.
   - The mutex name is a parameter, not hardcoded, specifically so this is reusable for *any* future resource needing cross-process exclusion, not just one.
   - Pick a distinct, descriptive name per logical resource (e.g. `"SkillsVaultLock_AHK_v1"`); every caller sharing that exact string, across however many separate processes, contends on the same kernel object.
 
-- **`DebounceArmTimer` / `DebounceTryBeginCommit` / `DebounceEndCommit`** - the "settle after N ms of quiet, then act once" pattern. See the worked example below.
+- **`DebounceArmTimer` / `DebounceTryBeginCommit` / `DebounceEndCommit`**: the "settle after N ms of quiet, then act once" pattern. See the worked example below.
 
 - **`ShowBottomRightBadge(msg, bgColorHex, displayMs := 0)` / `HideBottomRightBadge()` / `RemoveBottomRightBadge()`**
   - A colored toast, bottom-right corner, singleton: a second call while one is showing updates its color/text *in place*, never destroys/recreates or stacks.
     The window is created once and reused, so there is no visible gap between transitions.
   - `displayMs := 0` means "stay until the next Show/Hide call"; pass an explicit value for anything that should auto-dismiss on its own.
-  - `HideBottomRightBadge()` dismisses immediately without a replacement badge - use it when real work has finished and there's nothing new worth telling the user.
+  - `HideBottomRightBadge()` dismisses immediately without a replacement badge: use it when real work has finished and there's nothing new worth telling the user.
     (See the Skills Vault commit phase in `BasicTasks.ahk`, which hides the "applying" badge on completion instead of showing a third, redundant "done" badge that would just repeat what was already shown at press time.)
   - See the badge section below for the DPI subtlety this encodes.
 
-- **`ShowSkillsStatusBadge(msg)`** - thin color-mapping wrapper over `ShowBottomRightBadge`, specific to the Skills Vault feature (maps a `[LOCKED]`/`[UNLOCKED]`/`[AUTO]`/error-shaped message to its color, shown for 3000ms).
+- **`ShowSkillsStatusBadge(msg)`**: thin color-mapping wrapper over `ShowBottomRightBadge`, specific to the Skills Vault feature (maps a `[LOCKED]`/`[UNLOCKED]`/`[AUTO]`/error-shaped message to its color, shown for 3000ms).
   - Shared by `BasicTasks.ahk` (manual toggle's fast-phase requested-state badge) and `BackgroundAutomations.ahk` (`WatchSkillsLock`'s post-commit confirmation) so the color convention is defined exactly once.
 
-- **`ShowTimedToolTip(msg, displayMs)` / `RemoveTimedToolTip()`** - a native `ToolTip` auto-dismissed after N ms.
+- **`ShowTimedToolTip(msg, displayMs)` / `RemoveTimedToolTip()`**: a native `ToolTip` auto-dismissed after N ms.
   - Use this for simple near-cursor feedback; use `ShowBottomRightBadge` when you want color/fixed-position control.
 
-- **`PublishTrayMenuManifest(itemsArray)` / `HandleRemoteTrayMenuTrigger`** - publishes a script's custom tray-menu items so `StartupScript.ahk`'s master submenu can mirror them generically.
+- **`PublishTrayMenuManifest(itemsArray)` / `HandleRemoteTrayMenuTrigger`**: publishes a script's custom tray-menu items so `StartupScript.ahk`'s master submenu can mirror them generically.
   - Call once per script, near the top of its auto-execute section:
   ```ahk
   PublishTrayMenuManifest([ ["Display Label 1", "TrayLabel1"]
                           , ["-"]
                           , ["Display Label 2", "TrayLabel2"] ])
   ```
-  - Each script gets its own manifest file (`%A_Temp%\ahk_traymenu_<ScriptName>.txt`, keyed by that script's own filename), so sharing this one function across multiple processes is safe - there's no cross-process state beyond the convention of one manifest file per script.
+  - Each script gets its own manifest file (`%A_Temp%\ahk_traymenu_<ScriptName>.txt`, keyed by that script's own filename), so sharing this one function across multiple processes is safe: there's no cross-process state beyond the convention of one manifest file per script.
   - **Separator Support**: An entry of `["-"]` or a string `"-"` serializes to `"-|"` in the manifest. When `StartupScript.ahk` reads the manifest, any item whose first token is `"-"` (or empty) calls a bare `.Add()` on that script's per-PID `Menu` object to insert a native Win32 horizontal separator line, grouping custom items cleanly.
   - If a script stops publishing items it previously did (a feature moved elsewhere, say), delete its stale manifest file once by hand.
-    `StartupScript.ahk`'s `HandleRemoteTrayMenuTrigger` guard (a `Map.Has()` check against the fleet's registered handler names, replacing v1's `IsLabel`) keeps a leftover manifest from raising an error dialog, but won't clean up the dead entry on its own.
+    `StartupScript.ahk`'s `HandleRemoteTrayMenuTrigger` guard (a `Map.Has()` check against the fleet's registered handler names, replacing legacy v1 `IsLabel`) keeps a leftover manifest from raising an error dialog, but won't clean up the dead entry on its own.
 
   **Tray menu shape**, built by `StartupScript.ahk`'s `MenuBuild()`:
   - Each managed script's own submenu is deliberately minimal: `View Key History` / `Edit` / `Restart` / `Exit`, plus that script's own published items.
@@ -75,12 +75,24 @@ Every script that needs one of these includes it with an **explicit** `%A_Script
     That's why Suspend was chosen over Pause, which would freeze those too.
   - This replaces AutoHotkey's own native Suspend Hotkeys/Pause Script/Exit tray items (which only ever acted on the master script's own hotkeys, not the fleet) rather than sitting alongside them.
     So there is exactly one Suspend action and one Exit action, not two of each.
-  - `StartupScript.ahk`'s own 4 hotkeys need no exemption mechanism at all (no `Suspend, Permit`, no `#SuspendExempt`).
+  - `StartupScript.ahk`'s own 4 hotkeys need no exemption mechanism at all (no legacy `Suspend, Permit`, no `#SuspendExempt`).
     `SuspendAllToggle` only ever posts to the managed child scripts, never to this master script's own window, so none of its hotkeys can ever actually become suspended.
   - "Restart" kills a script and relaunches it fresh without moving it to the Load submenu (unlike Exit).
     Useful when just one script needs a clean restart without a full fleet reload.
 
-- **`ShowDRMStatusBadge(msg)`** - thin color-mapping wrapper over `ShowBottomRightBadge`, specific to the DRM Video Streaming Mode feature (maps `[ACTIVE]` to deep green `#1A6E3C`, and `[OFF]` to dark slate grey `#3A3D40`, shown for 3000ms).
+- **`ShowDRMStatusBadge(msg)`**: thin color-mapping wrapper over `ShowBottomRightBadge`, specific to the DRM Video Streaming Mode feature (maps `[ACTIVE]` to deep green `#1A6E3C`, and `[OFF]` to dark slate grey `#3A3D40`, shown for 3000ms).
+- **`ShowBottomRightBadge(msg, bgHex, durationMs)`**: the core drawing function. Creates a borderless, captionless, non-activating (`+E0x08000000` / `WS_EX_NOACTIVATE`) GUI window with large white bold text on the requested background color. Dynamically queries monitor work area dimensions, places the GUI in the lower-right corner (offset 20px from right, 60px from bottom to clear taskbars), applies 210/255 transparency, and schedules auto-dismiss via a non-blocking `SetTimer`. If a badge is already active, resets the timer to avoid overlap.
+
+### Color Palette Reference
+
+| Color Name  | Hex Code | Semantic Meaning                                |
+| ----------- | -------- | ----------------------------------------------- |
+| Deep Red    | `8B0000` | Critical failure / hard stop / kill action      |
+| Dark Red    | `6E1A1A` | Feature turned OFF (mute, stream close)         |
+| Deep Green  | `1A6E3C` | Feature turned ON (unmute, stream start)        |
+| Blue        | `1A4E6E` | Info / cycle state change                       |
+| Slate Grey  | `3A3D40` | Passive status / dismiss                        |
+| Amber       | `6E5A00` | Work in progress ("applying..."), not an error  |
 
 - **Chromium browser lifecycle helpers (`GetTargetBrowsersForDRM`, `GetBrowserHardwareAcceleration`, `SetBrowserHardwareAcceleration`, `CloseBrowserGracefully`, `LaunchBrowserInstance`)**
   - Cross-cutting utility functions providing graceful session-preserving shutdown, preference parsing, and headless/GPU flag manipulation for Chromium-based browsers (Brave and Google Chrome).
@@ -108,20 +120,20 @@ They only ever lived in this shared file because two other generic scripts happe
 ## The debounce pattern
 
 **The problem this solves**: a hotkey whose real work is slow (in this repo's case, an `icacls` sweep across 14 folders taking ~2.3-3.5 seconds) needs instant visual feedback on every press.
-But it should only actually do that slow work once the user stops pressing - a rapid burst of presses should show a toast every time but commit only the *last* one.
+But it should only actually do that slow work once the user stops pressing: a rapid burst of presses should show a toast every time but commit only the *last* one.
 
-Each feature owns its own state as three plain globals: a pending-value variable, a busy flag, and an interval, passed into the shared functions by name/`ByRef`.
+Each feature owns its own state as three plain globals: a pending-value variable, a busy flag, and an interval, passed into the shared functions by name/`&var`.
 Nothing in `SharedHelpers.ahk` stores any feature-specific state itself.
 
 ```ahk
 global g_MyFeatureDebounceMs := 2000   ; 2000ms is the default this codebase
-                                        ; uses everywhere the pattern appears -
+                                        ; uses everywhere the pattern appears:
                                         ; keep new features consistent unless
                                         ; you have a specific reason not to.
 global g_MyFeaturePendingValue := ""
 global g_MyFeatureCommitBusy := false
 
-; Fast phase - the actual hotkey/tray target. Never blocks.
+; Fast phase: the actual hotkey/tray target. Never blocks.
 MyFeatureFastPhase() {
     global g_MyFeaturePendingValue, g_MyFeatureDebounceMs
 
@@ -131,10 +143,10 @@ MyFeatureFastPhase() {
     DebounceArmTimer(MyFeatureCommit, g_MyFeatureDebounceMs)
 }
 
-; Commit phase - an ordinary zero-parameter function, reached only via the timer armed above.
-; v1's original shape used a label here (real SetTimer/Gosub targets in v1 could be either), but v2's
-; SetTimer requires a real function reference - there is no remaining reason for a commit phase to ever
-; be a label (see Migration-Notes.md SS11 for the full history of this specific change).
+; Commit phase: an ordinary zero-parameter function, reached only via the timer armed above.
+; Legacy v1's original shape used a label here (real SetTimer/Gosub targets in v1 could be either), but v2's
+; SetTimer requires a real function reference: there is no remaining reason for a commit phase to ever
+; be a label (see `Official Documentation/AHK-v1-to-v2-Migration-Notes.md` §11 for the full history of this specific change).
 MyFeatureCommit() {
     global g_MyFeaturePendingValue, g_MyFeatureCommitBusy, g_MyFeatureDebounceMs
 
@@ -156,47 +168,46 @@ MyFeatureCommit() {
 - `DebounceEndCommit`'s reconciliation is the subtle but important part:
   - If a press lands *while the commit is already running* (not just within the debounce window, but seconds later while the real work is genuinely mid-flight), that intent can't safely cancel already-dispatched work, so it doesn't try.
   - Instead, comparing the live pending value against a snapshot taken before the slow work started detects the newer press and re-arms one more time, so it gets applied immediately after, never silently dropped.
-- **Real commits can't be cancelled once started.** If your feature's "real work" is an external process launch (like `shell.Run(cmd, 0, true)`), killing it partway through to honor a newer press risks leaving it in a half-applied state, worse than letting it finish and following up immediately after.
+- **Real commits can't be cancelled once started.** If your feature's "real work" is an external process launch (like `RunWait`), killing it partway through to honor a newer press risks leaving it in a half-applied state, worse than letting it finish and following up immediately after.
   Don't try to make commits interruptible; let the reconciliation tail handle catching up instead.
 
 **Why plain global variables plus `&var` by-reference parameters, not a bound-function/closure approach:**
 
-- v1's `ByRef` parameter becomes v2's `&var` (same by-reference semantics, new syntax) - used throughout the debounce helpers (`DebounceTryBeginCommit`, `DebounceEndCommit`) exactly as before.
-- v1's dynamic `%var%`-label `Gosub` dispatch (used for the tray manifest handlers) has no v2 equivalent at all - v2 requires a real function reference wherever v1 accepted a label or a constructed label-name string. Every timer/dispatch target in this pattern is now an ordinary function reference, not a string.
+- AutoHotkey v2 uses `&var` for by-reference parameters (replacing legacy v1 `ByRef`), used throughout the debounce helpers (`DebounceTryBeginCommit`, `DebounceEndCommit`) exactly as before.
+- Legacy v1 dynamic `%var%`-label `Gosub` dispatch (used for old tray manifest handlers) has no v2 equivalent: v2 requires a real function reference wherever v1 accepted a label or a constructed label-name string. Every timer/dispatch target in this pattern is now an ordinary function reference registered in a `Map()`, not a string.
 - A `Func().Bind()` closure-per-feature approach was considered and rejected: it would need rebuilding the bound object on every re-arm (an object-target timer is deleted after firing, unlike a function-reference timer which just goes `Off` and can be reused), for no benefit over the existing plain-globals-plus-`&var` shape every feature in this codebase already uses.
 
 ## The bottom-right badge system
 
-Colors follow a simple convention - pick from these when adding a new message, or extend `ShowSkillsStatusBadge` (a `SharedHelpers.ahk` wrapper over `ShowBottomRightBadge` that maps a `[LOCKED]`/`[UNLOCKED]`/`[AUTO]`/error message to its color automatically, shared by both `BasicTasks.ahk`'s manual toggle and `BackgroundAutomations.ahk`'s auto watcher) if you need new ones:
+Colors follow a simple convention: pick from these when adding a new message, or extend `ShowSkillsStatusBadge` (a `SharedHelpers.ahk` wrapper over `ShowBottomRightBadge` that maps a `[LOCKED]`/`[UNLOCKED]`/`[AUTO]`/error message to its color automatically, shared by both `BasicTasks.ahk`'s manual toggle and `BackgroundAutomations.ahk`'s auto watcher) if you need new ones:
 
 | Color       | Hex      | Meaning                                         |
 | :---------- | :------- | :---------------------------------------------- |
 | Deep green  | `1A6E3C` | Unlocked / open / permissive state              |
 | Deep red    | `8B1A1A` | Locked / restricted state                       |
 | Deep blue   | `0D4F8B` | Automatic / focus-driven state                  |
-| Amber       | `6E5A00` | Work in progress ("applying...") - not an error |
+| Amber       | `6E5A00` | Work in progress ("applying..."), not an error |
 | Dark orange | `7A3B00` | Error                                           |
 
 **The DPI subtlety `ShowBottomRightBadge` encodes:**
 
-- Under Windows display scaling above 100%, AHK v1's default Gui coordinate space is DPI-virtualized: a `Gui`'s rendered size can be inflated by the DPI scale factor relative to what was requested, even though `x`/`y` position values pass through unscaled.
-- **The fix**: the `Gui` is created with `-DPIScale`, which maps every coordinate and dimension AHK sets or reads for that Gui 1:1 to physical screen pixels - the inflation problem is avoided at the root instead of being measured and corrected after the fact.
+- Under Windows display scaling above 100%, AutoHotkey GUI coordinate space without `-DPIScale` is DPI-virtualized: a GUI's rendered size can be inflated by the DPI scale factor relative to what was requested, even though `x`/`y` position values pass through unscaled.
+- **The fix**: the `Gui` is created with `-DPIScale`, which maps every coordinate and dimension AHK sets or reads for that Gui 1:1 to physical screen pixels: the inflation problem is avoided at the root instead of being measured and corrected after the fact.
 - Because sizing is physical-pixel-exact, the badge can be sized directly from a live GDI `DrawTextW` (`DT_CALCRECT`) measurement of the actual message text, taken fresh on every call, rather than created at a fixed nominal size and corrected afterward. This is also what makes the auto-sizing pill shape possible: badge width tracks the measured text width, falling back to a word-wrapped box only for messages too long to fit inline.
-- `GetToastTargetMonitor()` re-resolves which monitor is under the cursor on every call, and the work area (`SysGet MonitorWorkArea`) is recalculated every call too - together these keep the badge anchored to the monitor actually in use (and its exact bottom-right work-area corner) across a Sunshine/Moonlight display-topology switch, rather than to a monitor index that goes stale the moment the active display changes.
+- `GetToastTargetMonitor()` re-resolves which monitor is under the cursor on every call, and the work area (`MonitorGetWorkArea()`) is recalculated every call too: together these keep the badge anchored to the monitor actually in use (and its exact bottom-right work-area corner) across a Sunshine/Moonlight display-topology switch, rather than to a monitor index that goes stale the moment the active display changes.
 - If you copy this pattern for a new kind of popup, keep `-DPIScale` plus a live text measurement on every call; don't fall back to a fixed nominal size with an after-the-fact position correction, which can't follow a monitor change or a message-length change without recomputing everything anyway.
 
-**Create once, update in place - no destroy/recreate:**
+**Create once, update in place: no destroy/recreate:**
 
-- Destroying and rebuilding the whole `Gui` on every call (`Destroy` → `Sleep` → rebuild) produces a visible blank gap between badge transitions.
-- `ShowBottomRightBadge` instead creates the window once (guarded by a `static created` flag) and every later call just does `Gui, ...: Color`, `GuiControl` on the text, and re-`Show`s if hidden - no destroy, no sleep, no rebuild, so transitions are instant.
-- Dismissal (both the timer-driven path and the explicit `HideBottomRightBadge()`) uses `Gui, ...: Hide`, never `Destroy`, so the window stays alive and ready for the next instant update.
+- Destroying and rebuilding the whole `Gui` on every call (`Destroy` -> `Sleep` -> rebuild) produces a visible blank gap between badge transitions.
+- `ShowBottomRightBadge` instead creates the window once (guarded by a `static created` flag) and every later call just updates `badgeGui.BackColor`, updates `badgeTextCtl.Text`, and re-`Show`s if hidden: no destroy, no sleep, no rebuild, so transitions are instant.
+- Dismissal (both the timer-driven path and the explicit `HideBottomRightBadge()`) uses `badgeGui.Hide()`, never `Destroy`, so the window stays alive and ready for the next instant update.
 - Keep this create-once/update-in-place shape for any similar popup; reintroducing Destroy/Sleep brings the visible gap back.
 
-**The v1 `Hwnd`-vs-`v` GUI hang no longer applies in v2:**
+**The legacy v1 `Hwnd`-vs-`v` GUI hang does not apply in v2:**
 
-- On AHK v1.1.37.02, `Gui, Name: Add, Text, ... vSomeVar, text` hung indefinitely (not an error, no dialog, just a dead thread) the instant that `Add` line executed *from inside a user-defined function* - the exact same line at top-level auto-execute scope worked instantly.
-- The v1 workaround was an `Hwnd` option instead of `v` (`... BackgroundTrans HwndhTextCtl, text`), storing the resulting HWND in a `static` and addressing the control later via `GuiControl, Name:, %hTextCtl%, newText`.
-- **v2 has no equivalent bug and no `Hwnd`-vs-`v` distinction to worry about**: `GuiObj.AddText(...)` (and every other `.Add*()` method) always returns the real `GuiControl` object directly, from any calling context, function or auto-execute alike (confirmed empirically, see Migration-Notes.md SS8). `ShowBottomRightBadge` in `SharedHelpers.ahk` now stores that returned control object directly in a `global` and calls `.Text := newText` on it - no HWND indirection needed at all.
+- On legacy AHK v1.1, adding a text control inside a user-defined function using the `v` variable option could hang the thread.
+- **v2 has no equivalent bug and no `Hwnd`-vs-`v` distinction**: `GuiObj.AddText(...)` (and every other `.Add*()` method) always returns the real `GuiControl` object directly, from any calling context, function or auto-execute alike (confirmed empirically, see `Official Documentation/AHK-v1-to-v2-Migration-Notes.md` §8). `ShowBottomRightBadge` in `SharedHelpers.ahk` now stores that returned control object directly in a `global` and calls `.Text := newText` on it: no HWND indirection needed at all.
 - If you add a new Gui-based helper function to this file, just keep the object `.Add*()` returns; there is nothing left to work around here.
 
 ## Path-leak prevention
@@ -213,11 +224,11 @@ Two independent layers guard against a real path leaking into a tracked file any
    - Hard-blocks committing any of the 3 real config files if ever force-staged.
    - Hard-blocks any *other* staged file containing this machine's username, computer name, or a generic per-user Windows profile path pattern.
    - Warns (non-blocking) if a real config file has grown a variable/key its tracked `.example` hasn't caught up to yet.
-   - Activated via a **local-only** git config: `git config core.hooksPath .githooks` (not itself tracked - a fresh clone needs to run this once).
-2. **`.github/workflows/no-local-path-leak.yml`** - a server-side backstop, since the local hook alone is bypassable (`--no-verify`, or simply never configuring `core.hooksPath`).
+   - Activated via a **local-only** git config: `git config core.hooksPath .githooks` (not itself tracked: a fresh clone needs to run this once).
+2. **`.github/workflows/no-local-path-leak.yml`**: a server-side backstop, since the local hook alone is bypassable (`--no-verify`, or simply never configuring `core.hooksPath`).
    Can only check the same generic per-user Windows profile path pattern, never this machine's specific values (a CI runner has no legitimate way to know them, and a tracked workflow file embedding them would defeat the purpose).
 
-A local, gitignored `CLAUDE.md` at the repo root carries additional contributor/tooling notes specific to this machine - not tracked, so not reproduced here.
+A local, gitignored `CLAUDE.md` at the repo root carries additional contributor/tooling notes specific to this machine (not tracked, so not reproduced here).
 
 ## Cross-file state via a shared marker file
 
@@ -271,8 +282,8 @@ When streaming desktop video to a tablet (such as Samsung Galaxy Tab S10 Ultra) 
 - **The Architecture Solution (`BasicTasks.ahk` + `SharedHelpers.ahk`)**:
   - Rather than switching monitor topologies or disabling system-wide virtual display drivers, the toggle operates strictly at the browser application level via `ToggleDRMStreamingMode()`:
   1. **Target Browser Resolution**: Detects whether Brave or Chrome is active. When actively on Brave or Chrome (via immediate focus, recent focus tracking across tray interactions, or topmost unminimized window in desktop Z-order), the toggle acts strictly on that particular browser instead of parallel-restarting both. If neither browser is active, it halts gracefully with a notification badge without disrupting background processes.
-  2. **Graceful Shutdown (`CloseBrowserGracefully`)**: Sends `WM_CLOSE` to all top-level windows (`WinClose ahk_id %this_id%`). This allows Chromium to write open tabs, history, and active sessions to disk cleanly. Lingering background watcher processes are terminated to release file locks on Chromium profile files.
-  3. **Atomic `Local State` Modification (`SetBrowserHardwareAcceleration`)**: Reads Chromium's root `Local State` JSON file in UTF-8. Atomically sets `"hardware_acceleration_mode": {"enabled": false}` (and updates `hardware_acceleration_mode_previous`). Writes to a `.tmp` file and performs an atomic replace (`FileMove ... 1`) to eliminate corruption risks.
+  2. **Graceful Shutdown (`CloseBrowserGracefully`)**: Sends `WM_CLOSE` to all top-level windows (`WinClose("ahk_id " . this_id)`). This allows Chromium to write open tabs, history, and active sessions to disk cleanly. Lingering background watcher processes are terminated to release file locks on Chromium profile files.
+  3. **Atomic `Local State` Modification (`SetBrowserHardwareAcceleration`)**: Reads Chromium's root `Local State` JSON file in UTF-8. Atomically sets `"hardware_acceleration_mode": {"enabled": false}` (and updates `hardware_acceleration_mode_previous`). Writes to a `.tmp` file and performs an atomic replace (`FileMove(tmpPath, targetPath, 1)`) to eliminate corruption risks.
   4. **Targeted Relaunch (`LaunchBrowserInstance`)**: Relaunches the browser with:
      - `--disable-gpu`: Disables the GPU process, forcing software rasterization for video presentation surfaces.
      - `--restore-last-session`: Automatically restores all previously open tabs without requiring manual user intervention.
@@ -289,8 +300,8 @@ When streaming desktop video to a tablet (such as Samsung Galaxy Tab S10 Ultra) 
   - The master script keeps only its own single tray icon active. Mouseover (`WM_MOUSEMOVE` `0x200`) proactively cleans up any ghost icons left by terminated child processes.
 
 - **Click Action Dispatch (`AHK_NOTIFYICON`)**:
-  - Tray interactions are intercepted via `OnMessage(0x404, "AHK_NOTIFYICON")`:
-    - **Left-Click (`WM_LBUTTONUP` `0x202`) & Right-Click (`WM_RBUTTONUP` `0x205`)**: Both left-click and right-click open the master tray context menu (`Menu, Tray, Show`).
+  - Tray interactions are intercepted via `OnMessage(0x404, AHK_NOTIFYICON)`:
+    - **Left-Click (`WM_LBUTTONUP` `0x202`) & Right-Click (`WM_RBUTTONUP` `0x205`)**: Both left-click and right-click open the master tray context menu (`A_TrayMenu.Show()`).
     - **Hover Tooltip (`WM_MOUSEMOVE` `0x200`)**: Displays a dynamic sorted list of all active scripts and cleans up any ghost tray icons.
 
 - **Menu Hierarchy & Pinned Scripts**:
@@ -502,14 +513,14 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 
 ### 3. Full AutoHotkey v2 Migration (superseding an earlier decision to stay on v1.1)
 - **Context**: The fleet originally stayed on v1.1 specifically because `StartupScript.ahk`'s dynamic runtime tray-submenu reflection (`Menu, SubMenu_%PID%, Add`, addressed by a constructed name string per child process) appeared tied to v1-only mechanics, with no clear v2 equivalent and no functional benefit seen in rewriting a stable, heavily-integrated codebase.
-- **What actually happened**: the fleet was fully ported to AutoHotkey v2.0. The submenu-mirroring concern that originally blocked this was resolved by replacing name-string-addressed submenus with real per-PID `Menu` objects held in a `Map()` (`g_ScriptMenus` in `StartupScript.ahk`) - v2 attaches a submenu by object reference, not by a constructed name string, so the original blocker simply doesn't apply to the v2-native approach.
-- **Process**: every script was ported and verified live (not just "loads clean") against its real, actually-invoked feature set. Roughly 30 genuine v1->v2 language-migration bugs were found this way and are documented in full in `Official Documentation/AHK-v1-to-v2-Migration-Notes.md` - missing `global` declarations, `DllCall` output-parameter quirks, `Gui.Show()`'s argument-count change, `FileDelete` now throwing on a missing target where v1 was silent, and more. A companion parity audit confirmed every hotkey, hotstring, function, and explanatory comment in v1 has a working v2 counterpart.
+- **What actually happened**: the fleet was fully ported to AutoHotkey v2.0. The submenu-mirroring concern that originally blocked this was resolved by replacing name-string-addressed submenus with real per-PID `Menu` objects held in a `Map()` (`g_ScriptMenus` in `StartupScript.ahk`): v2 attaches a submenu by object reference, not by a constructed name string, so the original blocker simply does not apply to the v2-native approach.
+- **Process**: every script was ported and verified live (not just "loads clean") against its real, actually-invoked feature set. Roughly 30 genuine v1->v2 language-migration bugs were found this way and are documented in full in `Official Documentation/AHK-v1-to-v2-Migration-Notes.md`: missing `global` declarations, `DllCall` output-parameter quirks, `Gui.Show()`'s argument-count change, `FileDelete` now throwing on a missing target where v1 was silent, and more. A companion parity audit confirmed every hotkey, hotstring, function, and explanatory comment in v1 has a working v2 counterpart.
 - **Result**: `#Requires AutoHotkey v2.0` across the entire fleet; `build_startup_exe.ps1` compiles against `AutoHotkey\v2\AutoHotkey64.exe`. The two backup git tags (`backup/pre-v2-migration`, `backup/original-refs-heads-master`) and normal commit history remain the rollback path if a v1-only behavior is ever found to have no working v2 equivalent after all.
 
 ### 4. Global Hotkey Suspension Over Script Pausing (`SuspendAllToggle`)
 - **Context**: Providing a single kill-switch hotkey (`Win+ScrollLock`) to disable productivity hotkeys during gaming or full-screen apps.
-- **Alternative**: Pausing all child scripts (`Pause, Toggle`).
-- **Decision**: Cascading hotkey suspension (`PostMessage, 0x111, 65305`) while keeping script event loops running.
+- **Alternative**: Pausing all child scripts (`Pause(-1)`).
+- **Decision**: Cascading hotkey suspension (`PostMessage(g_FleetControlMsg, 4, 0, ...)`) while keeping script event loops running.
 - **Rationale**: Pausing a script freezes its underlying timers, watchdog threads, and window message handlers. Background watchdogs (such as `SunshineDisplayWatchdog.ahk` and `WatchSkillsLock`) must continue monitoring system state even when typing shortcuts are suspended. Hotkey suspension disables keyboard hooks while leaving background automation fully operational.
 
 ### 5. Debounced Commit Pattern for Slow Workflows
@@ -533,10 +544,10 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 ### 8. Keyword Expansion Engine and Settle Delay in PersonalKeywords.ahk
 - **Context**: Expanding short keywords into email addresses, website URLs, government IDs, and large multi-line AI reasoning prompt directives.
 - **Problem**: When `:X*:` hotstrings for URLs used clipboard pasting (`PasteText()`), typing `linpro.` in Chromium address bars (Chrome/Brave) caused the URL to collapse into `://` and produce an invalid scheme navigation error.
-- **Root Cause**: AutoHotkey sends 7 backspaces to erase `linpro.`. In `PasteText()`, dispatching `SendInput, ^v` with 0 ms delay created a race condition: Chromium was still draining backspaces from the Windows input queue when `Ctrl+V` landed. Two backspaces drained before the paste, and the remaining 5 backspaces drained after `https://` was pasted, deleting `https` (5 characters) and leaving only `://`.
-- **Decision**: Added a 50 ms backspace-drain settle delay (`Sleep, 50`) inside `PasteText()` before `SendInput, ^v`:
+- **Root Cause**: AutoHotkey sends 7 backspaces to erase `linpro.`. In `PasteText()`, dispatching `SendInput("^v")` with 0 ms delay created a race condition: Chromium was still draining backspaces from the Windows input queue when `Ctrl+V` landed. Two backspaces drained before the paste, and the remaining 5 backspaces drained after `https://` was pasted, deleting `https` (5 characters) and leaving only `://`.
+- **Decision**: Added a 50 ms backspace-drain settle delay (`Sleep(50)`) inside `PasteText()` before `SendInput("^v")`:
   1. **URLs, Emails, and AI Prompts (`PasteText()`)**:
-     - Uses `ClipboardAll` backup, sets clipboard, waits via `ClipWait, 1`, sleeps 50 ms to allow the target window's message loop to completely drain all backspaces, issues `SendInput, ^v`, and waits 100 ms before restoring previous clipboard content.
+     - Uses `ClipboardAll()` backup, sets clipboard, waits via `ClipWait(1)`, sleeps 50 ms to allow the target window's message loop to completely drain all backspaces, issues `SendInput("^v")`, and waits 100 ms before restoring previous clipboard content.
      - Provides instant expansion (0 ms visual feel) across both browser Omnibox fields and rich text editors with zero character loss or scheme corruption.
   2. **Government IDs and Tax Numbers (`AadharNo.`, `PanNo.`) via Native Keystrokes (`:*:`)**:
      - Indian banking, tax, and government KYC portals frequently enforce JavaScript paste blockers (`onpaste="return false;"`).
@@ -544,13 +555,13 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 
 ### 9. Arrow Notation & Hotkey Help Comment Architecture
 - **Context**: In-file documentation comments, header shortcut summaries, and the two-column GUI built by `HotkeyHelp.ahk`.
-- **Problem**: Historical scripts mixed multi-hyphen arrows (`-->` forward and `<--` backward). The double-hyphen substring created friction with the zero double-hyphens documentation invariant and risked false positives in automated linters. Additionally, hotkeys defined without an inline semicolon comment (such as multi-line declarations `$!F4::` or taskbar wheel controls `WheelUp::Send {Volume_Up}`) caused `HotkeyHelp.ahk` to display blank descriptions in the GUI because its parser searches specifically for `::.*?;(.*)`.
+- **Problem**: Historical scripts mixed multi-hyphen arrows (`-->` forward and `<--` backward). The double-hyphen substring created friction with the zero double-hyphens documentation invariant and risked false positives in automated linters. Additionally, hotkeys defined without an inline semicolon comment (such as multi-line declarations `$!F4::` or taskbar wheel controls `WheelUp::Send("{Volume_Up}")`) caused `HotkeyHelp.ahk` to display blank descriptions in the GUI because its parser searches specifically for `::.*?;(.*)`.
 - **Decision**: Standardized all arrow symbols across the repository to single-hyphen notation without exceptions:
   1. **Header & Block Comments (`->`)**:
      - Format: `; Key -> Action` (e.g. `; Win+F -> Run Firefox`).
      - Uses single-hyphen right arrow `->` to represent causal triggers cleanly while completely eliminating ASCII double-hyphens.
   2. **Hotkey Help Inline Comments (`<-`)**:
-     - Format: `Key::Action ;{ <- Description` (e.g. `WheelUp::Send {Volume_Up} ;{ <- (Taskbar) Volume Up`).
+     - Format: `Key::Action ;{ <- Description` (e.g. `WheelUp::Send("{Volume_Up}") ;{ <- (Taskbar) Volume Up`).
      - `HotkeyHelp.ahk` splits output into two columns: Hotkey Name (padded to 25 characters on the left) and Description (on the right). The single-hyphen left arrow `<-` visually points back toward the hotkey name, preserving intuitive layout cues with zero double-hyphens.
      - Multi-line hotkeys and context-sensitive directives require an explicit inline comment on the hotkey declaration line so `RegExMatch(File_Line, "::.*?;(.*)", Match)` captures the intended description.
 
@@ -559,7 +570,7 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 - **Problem**: Previously, display switching was coupled into `BasicTasks.ahk` while the mouse watchdog was in a separate script (`SunshineMouseWatchdog.ahk`). When switching back to PC Screen Only, the watchdog would frequently re-boost mouse speed to 20 because it saw active Sunshine log entries without checking the active display topology. In addition, when extending displays, the streaming client suffered because Windows 11 only shows system tray icons on the primary display.
 - **Decision**: Consolidated all display switching, multi-monitor topology, and watchdog logic into `SunshineDisplayWatchdog.ahk`:
   1. **Second Screen Only Isolation (`IsSecondScreenOnly()`)**:
-     - Queries all active monitors via `SysGet` and returns true only if the internal laptop panel (`DISPLAY1`) is completely absent.
+     - Queries active monitors and display topology via `GetCurrentDisplayTopology()` and `MonitorGetCount()`, returning true only if the internal laptop panel (`DISPLAY1`) is completely absent.
      - In Extend or Duplicate mode, `DISPLAY1` remains attached and active, so `IsSecondScreenOnly()` reliably returns false.
   2. **Active Display Topology Guard & Stream State Synchronization**:
      - Watchdog actively inspects display topology via `GetCurrentDisplayTopology()` and tracks stream status via `sunshine.log`.
@@ -577,7 +588,7 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 - **Decision**:
   1. **Direct WASAPI COM calls via Win32 `DllCall`**: Implemented in `AllScripts/SharedHelpers.ahk` using `IMMDeviceEnumerator` and `IAudioEndpointVolume`. Simultaneously targets both `eConsole` (0) and `eCommunications` (2) capture endpoints in under 5ms with zero external process spawning.
   2. **Dynamic Tray Indicator (Mute-Only Visibility)**: The tray icon (`mic_muted.ico`) appears in the notification area strictly when the microphone is muted (`A_IconHidden := false`), and is completely hidden when unmuted (`A_IconHidden := true`). This eliminates taskbar clutter during normal operation while providing an unmistakable indicator when the microphone is muted.
-  3. **Single-Click Unmuting**: Configured `Menu, Tray, Click, 1` with a default action that directly unmutes the microphone on a single left-click.
+  3. **Single-Click Unmuting**: Configured `A_TrayMenu.Default := "Unmute Microphone"` with single-click execution (`A_TrayMenu.ClickCount := 1`) to directly unmute the microphone on a single left-click.
   4. **Background State Watcher (`WatchMicrophoneMuteState`)**: A lightweight 1500ms timer in `BasicTasks.ahk` synchronizes the tray icon with hardware mute buttons or third-party app toggles without firing disruptive notifications.
   5. **High-Contrast Option 1 Icon Design**: Created a custom multi-resolution `.ico` (16px to 64px) featuring a solid pure-white (`#FFFFFF`) microphone body for maximum luminance contrast on dark taskbars (`#202020`), crossed by a vivid neon-red (`#FF2D55`) diagonal slash with dark borders. Ensures instant silhouette recognition at arm length on 100% scale displays (16 physical pixels).
   6. **StartupScript Tray Exemption**: `StartupScript.ahk` (`TrayIconRemove`) explicitly exempts `BasicTasks` to prevent mouseover sweeps from removing the active mute indicator.
@@ -592,7 +603,7 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 - **Decision**: Implemented pre-hibernation display restoration driven by a dynamic Tablet Only tray indicator:
   1. **Dynamic Taskbar Tray Indicator**: The watchdog displays a custom high-contrast power icon (`tablet_hibernate.ico`) in the notification area strictly while in Tablet Only mode (`topo == 8`). In all other modes (`PC Screen Only`, `Extend`, `Duplicate`), the icon is completely hidden (`A_IconHidden := true`) to prevent taskbar clutter. `StartupScript.ahk` (`TrayIconRemove`) explicitly exempts `SunshineDisplayWatchdog` from mouseover cleanup sweeps.
   2. **Double-Click Confirmation with 5-Second Countdown HUD**: Double-clicking the tray icon initiates a live 5-second countdown HUD badge (`[HIBERNATE] Workstation Hibernating in 5s... Press Esc, Del, or click to Cancel`). Tapping `Esc`, `Delete` (essential on tablet keyboards lacking an Esc key), or clicking the badge immediately aborts the timer.
-  3. **Pre-Hibernation Display Restoration**: When the 5-second countdown expires, `ExecuteSafeHibernate()` synchronously runs `SwitchToLaptopOnlyMode(0, true, true)` (`RunWait, DisplaySwitch.exe /internal`), allows a 200ms driver settle delay, and then invokes `shutdown.exe /h`.
+  3. **Pre-Hibernation Display Restoration**: When the 5-second countdown expires, `ExecuteSafeHibernate()` synchronously runs `SwitchToLaptopOnlyMode(0, true, true)` (`RunWait("DisplaySwitch.exe /internal")`), allows a 200ms driver settle delay, and then invokes `shutdown.exe /h`.
   4. **Guaranteed Wake Experience**: Because the hardware display topology is transitioned to `SDC_TOPOLOGY_INTERNAL` before `hiberfil.sys` is written, turning on the laptop immediately illuminates the internal 144Hz panel with the Windows lock screen, requiring zero tablet interaction.
   5. **Elimination of Flawed Reversion Heuristics**:
      - Purged both the timer-gap heuristic (`nowTick - g_LastTickCount > 4500`) and the legacy 'lid opened' check (`hasInternal && monCount <= 1`) in `WM_DISPLAYCHANGE`. In Windows DWM, the dummy plug in Tablet Only mode is automatically assigned device name `\\.\DISPLAY1`, which previously caused `WM_DISPLAYCHANGE` to falsely assume the laptop lid had been opened and revert to PC Screen Only every 4 seconds.
@@ -625,9 +636,40 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
      - `Skills Vault: Auto (Focus-Driven)`tWin+Alt+L`
      - `Skills Vault: Locked (Org Safe Mode)`
      - `Skills Vault: Unlocked (Personal Mode)`
-  2. **Real-Time Win32 Checkmarks**: `StartupScript.ahk` (`UpdateBasicTasksMenuChecks`) evaluates `%TEMP%\skills_vault_mode.flag` and applies native Win32 `Menu, Check` to the active mode while unchecking the other two. Invoked both on initialization and dynamically on mouse up (`WM_LBUTTONUP` / `WM_RBUTTONUP`), ensuring the active checkmark is strictly accurate before the menu appears.
+  2. **Real-Time Win32 Checkmarks**: `StartupScript.ahk` (`UpdateBasicTasksMenuChecks`) evaluates `%TEMP%\skills_vault_mode.flag` and applies native Win32 `A_TrayMenu.Check()` to the active mode while unchecking the other two. Invoked both on initialization and dynamically on mouse up (`WM_LBUTTONUP` / `WM_RBUTTONUP`), ensuring the active checkmark is strictly accurate before the menu appears.
   3. **Direct 1-Click Mode Selection**: Each entry maps to a dedicated label (`TraySkillsVaultAuto`, `TraySkillsVaultLocked`, `TraySkillsVaultUnlocked`) invoking `SetPersonalSkillsMode(targetMode)` with a fast 300ms debounce.
   4. **Preserved Keyboard Cycling**: `Win+Alt+L` remains mapped to `TogglePersonalSkillsLock()` with its 2000ms debounce settle window for rapid keyboard cycling, automatically synchronizing checkmark placement on next menu view.
+
+### 15. Fleet Tray Icon Management & `#NoTrayIcon` Invariant (`StartupScript.ahk` & Child Fleet)
+- **Context**: In a consolidated fleet architecture, `StartupScript.ahk` presents a single, unified tray icon and context menu for all 11 managed scripts. Individual child scripts must never pollute the Windows notification area with redundant icons.
+- **Problem**:
+  1. **Boot/Reload Multi-Icon Flash**: When child scripts lacked `#NoTrayIcon`, Windows Explorer rendered tray icons for all 11 child processes during startup, requiring `StartupScript.ahk`'s `TrayIconRemove()` loop to sweep and delete them over several seconds.
+  2. **Suspend Icon Resurrection**: AutoHotkey v2's built-in `Suspend()` command internally modifies the tray icon to show the suspended 'S' badge. If an icon was previously deleted from Explorer via `Shell_NotifyIcon(NIM_DELETE)` without `#NoTrayIcon` set in the script, calling `Suspend()` caused AutoHotkey's internal engine to assume the icon was active and dispatch `Shell_NotifyIcon(NIM_ADD)`, resurrecting all 11 child icons in the task tray on every `Win+Fn+ScrollLock` press.
+- **Architectural Solution**:
+  1. **Mandatory `#NoTrayIcon` Directive**: Every managed child script declares `#NoTrayIcon` directly after `#Requires AutoHotkey v2.0`. This ensures `A_IconHidden == 1` inside AutoHotkey's engine from process creation.
+  2. **Clean Fleet Suspend**: Broadcasting `g_FleetControlMsg` code 4 (`Suspend(!A_IsSuspended)`) leaves child scripts in their hidden state (`A_IconHidden` remains true), completely eliminating icon resurrection.
+  3. **Dynamic Indicator Exception**:
+     - `BasicTasks.ahk` (microphone mute status) and `SunshineDisplayWatchdog.ahk` (tablet hibernate power button) explicitly set `A_IconHidden := false` when and only when their visual indicators are needed, and reset to `A_IconHidden := true` when dismissed.
+     - `StartupScript.ahk` (`TrayIconRemove`) explicitly exempts both scripts from cleanup sweeps.
+  4. **Multiline Tray Tooltip DOTALL Regex**: `StartupScript.ahk`'s `TrimAtDelim` helper uses `RegExMatch(SubStr(String, 1, Length + 1), "s)(.*)" Delim, &match)` with the `s)` PCRE DOTALL flag, allowing `.*` to span across newlines and display the maximum number of loaded child scripts within Windows' 124-character tooltip budget.
+
+---
+
+## Fleet Script Inventory & Global Hotkeys Cheatsheet
+
+| Script | Purpose | Key Hotkeys & Actions |
+| :--- | :--- | :--- |
+| `StartupScript.ahk` | Master process orchestrator & unified tray menu | `Win+ScrollLock` (Suspend all), `Win+Ctrl+Alt+ScrollLock` (Exit all), `Win+Ctrl+Alt+R` (Reload all), `Win+Ctrl+Alt+W` (Window Spy) |
+| `BasicTasks.ahk` | Productivity hotkeys, clipboard converters, microphone mute, DRM mode | `Alt+M` (Mic mute toggle), `Win+Alt+L` (Cycle Skills Vault mode), `Win+Alt+D` (DRM stream toggle), `Ctrl+Shift+C` (Terminal / Admin pwsh) |
+| `BackgroundAutomations.ahk` | Unattended background daemons & watchers | Sefirah sleep/wake auto-reconnect (port 5150), Skills Vault auto-focus watcher, Tailscale/Google Drive auto-launcher |
+| `Brightness.ahk` | Native Win32 display brightness engine | `F1` / `Shift+F1` (Step brightness), `Ctrl+PgUp` / `Ctrl+PgDn` (Extreme brightness curves) |
+| `ClosePrograms.ahk` | Window management & graceful application termination | `Alt+F4` (Close active window), `Alt+Shift+F4` (Close specific app), `Alt+Ctrl+F4` (Close all apps) |
+| `Ext4SsdManager.ahk` | WSL2 ext4 backup SSD auto-mount & safe ejection | `Win+Alt+M` (Mount SSD & open Explorer), `Win+Alt+U` (Safe unmount), auto-mount on USB arrival, `#32770` dialog auto-resolver |
+| `HotkeyHelp.ahk` | Self-introspecting two-column hotkey cheatsheet GUI | `Win+F1` (Open Hotkey Help GUI), `Win+Alt+F1` (Hotkey Help Settings) |
+| `PersonalKeywords.ahk` | Personal hotstrings, snippet expansions, prompt templates | Dynamic string expansions (`:X*:...`), LLM prompt blueprints |
+| `SunshineDisplayWatchdog.ahk` | Remote streaming display topology & mouse acceleration guard | `Win+Alt+P` (Toggle PC / Tablet Only), `Win+Alt+Shift+P` (Extend / Duplicate), auto mouse speed 20 on Moonlight connect |
+| `Watchdog.ahk` | Generic process health monitor | Background polling loop auto-relaunching crashed background utilities |
+| `SharedHelpers.ahk` | Central function library | Named mutexes, debounce engine, bottom-right badges, WASAPI COM mute controls, tray manifests |
 
 ---
 
@@ -671,11 +713,11 @@ To keep all scripts maintainable and prevent regressions across AI assistants an
 `AllScripts/HotkeyHelp.ahk` parses `.ahk` files via regular expressions to build its two-column GUI. To ensure hotkeys render accurately:
 - **Right arrow for headers**: Use `->` in section header comments (`Key -> Action`).
 - **Left arrow for inline descriptions**: Use `<-` in inline comments (`Key::Action ;{ <- Description}`). The left arrow visually and syntactically links the description back to the hotkey in the GUI.
-- **Explicit comment on multi-line hotkeys**: Hotkeys spanning multiple lines (e.g. `$!F4::`) or defined within `#If` context blocks (e.g. `WheelUp::Send {Volume_Up}`) must have an inline semicolon comment on the declaration line itself. Without this, Hotkey Help cannot determine the intended description and renders the entry blank.
+- **Explicit comment on multi-line hotkeys**: Hotkeys spanning multiple lines (e.g. `$!F4:: {`) or defined within `#HotIf` context blocks (e.g. `WheelUp::Send("{Volume_Up}")`) must have an inline semicolon comment on the declaration line itself. Without this, Hotkey Help cannot determine the intended description and renders the entry blank.
 
 ### 2. Chromium Omnibox Settle Delay
 When automating string expansions or URL navigation via `:X*:key.::PasteText("...")` in Chromium-based browsers (Chrome, Brave), AutoHotkey's simulated backspaces race against clipboard paste operations.
-- Always include a 50ms settle delay (`Sleep, 50`) inside clipboard paste helpers between setting clipboard data and executing `SendInput, ^v`.
+- Always include a 50ms settle delay (`Sleep(50)`) inside clipboard paste helpers between setting clipboard data and executing `SendInput("^v")`.
 
 ### 3. Strict Path Decoupling
 - **No hardcoded fallback leaks**: Never write ternary fallbacks like `PATH_VAR ? PATH_VAR : "C:\Program Files\..."` in tracked scripts. Even behind a conditional check, the string literal leaks machine-specific paths into the public git log.

@@ -1,6 +1,6 @@
 # AutoHotKey Fleet: AI Handoff & Session Context
 
-This document is the operational scratchpad for AI coding assistants working in this repository. It provides an immediate mental model of the fleet topology, verified runtime state, and development conventions without needing to parse the full 500-line ARCHITECTURE.md.
+This document is the operational scratchpad for AI coding assistants working in this repository. It provides an immediate mental model of the fleet topology, verified runtime state, and development conventions without needing to parse the full 700-line ARCHITECTURE.md.
 
 ---
 
@@ -12,7 +12,7 @@ Personal Windows 10 and 11 automation fleet providing global productivity hotkey
 
 ## 2. Fleet Topology
 
-The fleet runs under AutoHotkey v2.0. Every script starts with `#Requires AutoHotkey v2.0`; the master binary compiles against `AutoHotkey\v2\AutoHotkey64.exe` (see `build_startup_exe.ps1`). The v1->v2 migration is complete and merged - see `Official Documentation/AHK-v1-to-v2-Migration-Notes.md` for every language-level gotcha found along the way.
+The fleet runs under AutoHotkey v2.0. Every script starts with `#Requires AutoHotkey v2.0`; the master binary compiles against `AutoHotkey\v2\AutoHotkey64.exe` (see `build_startup_exe.ps1`). The v1->v2 migration is complete and merged: see `Official Documentation/AHK-v1-to-v2-Migration-Notes.md` for every language-level gotcha found along the way.
 
 | Process / Script | Role | Lifecycle | Key Invariants |
 | :--- | :--- | :--- | :--- |
@@ -38,7 +38,7 @@ The fleet runs under AutoHotkey v2.0. Every script starts with `#Requires AutoHo
 ## 4. Critical Engineering Invariants
 
 1. **Explicit Include Prefix**: Always use `#Include %A_ScriptDir%\SharedHelpers.ahk`. Never use a bare `#Include SharedHelpers.ahk` (relative paths break if the working directory differs).
-2. **Callback Parameter Counts Matter**: `OnMessage()` and `Menu.Add()` callbacks hang at the registration call itself (not at call time) if the handler has fewer parameters than the callback contract expects and no `*` catch-all - confirmed empirically across this fleet, see Migration-Notes.md SS18.16-18.17. A plain label can no longer be passed as a `SetTimer`/`OnMessage` target at all in v2 - it must be a real function reference.
+2. **Callback Parameter Counts Matter**: `OnMessage()` and `Menu.Add()` callbacks hang at the registration call itself (not at call time) if the handler has fewer parameters than the callback contract expects and no `*` catch-all: confirmed empirically across this fleet, see `Official Documentation/AHK-v1-to-v2-Migration-Notes.md` §18.16-18.17. A plain label can no longer be passed as a `SetTimer`/`OnMessage` target at all in v2: it must be a real function reference.
 3. **Named Mutex Over Lock Files**: Cross-process exclusion must use `AcquireNamedMutex(name, timeoutMs)` so crashed processes do not leave stuck lock files on disk.
 4. **Debounce Slow Operations**: Any operation taking over 100ms (such as `icacls` sweeps or ADB queries) must use the two-phase debounce pattern (`DebounceArmTimer` and `DebounceTryBeginCommit`) to keep the UI non-blocking.
 5. **Punctuation Standards**: Zero em-dashes (`\u2014`), zero en-dashes (`\u2013`), zero double-hyphens (`--`) in comments or documentation. Always run `python scripts/clean_dashes.py --check` before committing.

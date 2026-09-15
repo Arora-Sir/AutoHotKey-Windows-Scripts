@@ -38,14 +38,14 @@ This guide documents the complete procedure to configure, provision, and recover
    SEFIRAH_PRIORITY_TARGET := "100.x.y.w:5555"
    ```
 4. Register the automatic boot task in Windows Task Scheduler:
-   `powershell
+   ```powershell
    powershell.exe -ExecutionPolicy Bypass -File .\setup_startup_task.ps1
-   `
+   ```
    This registers the scheduled task AHK Startup Script to execute AllScripts\StartupScript.exe with highest privileges on user logon.
 5. Compile and launch the master executable:
-   `powershell
+   ```powershell
    powershell.exe -ExecutionPolicy Bypass -File .\build_startup_exe.ps1 -Relaunch
-   `
+   ```
 
 ---
 
@@ -59,7 +59,7 @@ This guide documents the complete procedure to configure, provision, and recover
    - Test and save the resolution profile.
 3. If using Custom Resolution Utility (CRU):
    - Add a Detailed Resolution entry: 2560x1600 at 120Hz with CVT-RB timing.
-   - Restart the display driver using estart64.exe or press Win+Ctrl+Shift+B.
+   - Restart the display driver using restart64.exe or press Win+Ctrl+Shift+B.
 
 ---
 
@@ -67,9 +67,9 @@ This guide documents the complete procedure to configure, provision, and recover
 
 1. Download and run the Sunshine Windows installer (LizardByte/Sunshine).
 2. Verify SunshineService is installed and running:
-   `powershell
+   ```powershell
    Get-Service -Name SunshineService
-   `
+   ```
 3. Open the Sunshine Web UI at https://localhost:47990/ and configure administrative credentials.
 4. Open Configuration -> Audio/Video:
    - **Video Codec**: HEVC (H.265).
@@ -82,9 +82,9 @@ This guide documents the complete procedure to configure, provision, and recover
 ## Step 4: Sunshine application profiles provisioning
 
 1. Run the administrative provisioning script:
-   `powershell
+   ```powershell
    Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File AllScripts\PowerShell\Sunshine\update_sunshine_apps.ps1' -Verb RunAs
-   `
+   ```
    Or double-click AllScripts\PowerShell\Sunshine\update_sunshine_apps.bat.
 2. This script writes C:\Program Files\Sunshine\config\apps.json with two desktop streaming profiles:
    - **Desktop**: Captures primary display (DISPLAY1), used for PC Screen Only and Duplicate modes.
@@ -134,9 +134,9 @@ All display modes and mouse speed settings are synchronized by SunshineDisplayWa
    - **Laptop geometry (1536x864 DIPs)**: Column 0 at X=0, Column 1 at X=728, Column 2 at X=968, Column 3 at X=1268 (ends flush at 1536px).
    - **Tablet geometry (1463x914 DIPs)**: Column 0 at X=0, Column 1 at X=640, Column 2 at X=885, Column 3 at X=1190 (ends at 1458px with a 5px margin).
 3. Test alignment by executing:
-   `powershell
+   ```powershell
    powershell.exe -ExecutionPolicy Bypass -File .\AllScripts\PowerShell\apply_ssn_layout.ps1 -Mode Auto
-   `
+   ```
 
 ---
 
@@ -159,15 +159,15 @@ All fleet scripts run under a single master tray icon:
 Run these diagnostic commands to verify workstation health:
 
 1. **Verify fleet processes**:
-   `powershell
+   ```powershell
    Get-Process -Name 'AutoHotkey*', 'StartupScript*' | Format-Table Id, ProcessName
-   `
+   ```
    Expect exactly 11 AutoHotkey64 child processes and 1 StartupScript master process.
 
 2. **Verify live mouse speed**:
-   `powershell
-   python -c import ctypes; speed = ctypes.c_int(); ctypes.windll.user32.SystemParametersInfoW(0x0070, 0, ctypes.byref(speed), 0); print('Mouse Speed:', speed.value)
-   `
+   ```powershell
+   python -c "import ctypes; speed = ctypes.c_int(); ctypes.windll.user32.SystemParametersInfoW(0x0070, 0, ctypes.byref(speed), 0); print('Mouse Speed:', speed.value)"
+   ```
    Expect 10 when on PC Screen Only or Extend mode; 20 when on Tablet Only or Duplicate mode.
 
 3. **Verify active monitor count**:
@@ -177,11 +177,11 @@ Run these diagnostic commands to verify workstation health:
    Expect 1 when on PC Screen Only, Tablet Only, or Duplicate mode; 2 when on Extend mode.
 
 4. **Verify Sunshine service status**:
-   `powershell
+   ```powershell
    Get-Service SunshineService
-   `
+   ```
 
 5. **Restart fleet cleanly**:
-   `powershell
+   ```powershell
    powershell.exe -ExecutionPolicy Bypass -File .\build_startup_exe.ps1 -Relaunch
-   `
+   ```
