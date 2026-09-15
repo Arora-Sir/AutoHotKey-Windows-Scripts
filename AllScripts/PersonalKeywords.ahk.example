@@ -1,4 +1,4 @@
-#Requires AutoHotkey v1.1
+#Requires AutoHotkey v2.0
 
 ; Example Personal Keywords Configuration
 ; Copy or rename this file to "PersonalKeywords.ahk" in the AllScripts directory.
@@ -13,11 +13,10 @@
 ; Keywords E1.-E8.  -> Paste email addresses (instant, unicode-safe)
 ; Keywords *Pro.    -> Paste profile and website URLs
 
-#NoEnv
-SendMode Input
-SetWorkingDir %A_ScriptDir%
-#SingleInstance force
-DetectHiddenWindows, On
+SendMode("Input") ; Recommended for new scripts due to its superior speed and reliability.
+SetWorkingDir(A_ScriptDir) ; Ensures a consistent starting directory.
+#SingleInstance force ; Ensures that only the last executed instance of script is running
+DetectHiddenWindows(true)
 
 ; =============================================================================
 ; KEYWORDS AND EXPANSIONS
@@ -67,16 +66,15 @@ DetectHiddenWindows, On
 ;     :*:keyword.::text to type
 ;
 PasteText(text) {
-    clipBackup := ClipboardAll
-    Clipboard := ""
-    Clipboard := text
-    ClipWait, 1
-    if ErrorLevel
+    clipBackup := ClipboardAll()
+    A_Clipboard := ""
+    A_Clipboard := text
+    if !ClipWait(1)
         return
-    Sleep, 50 ; Settle delay: ensures target window drains all backspaces before pasting
-    SendInput, ^v
-    Sleep, 100 ; Settle delay: ensures target window reads clipboard before restoration
-    Clipboard := clipBackup
+    Sleep(50) ; Settle delay: ensures target window drains all backspaces before pasting
+    SendInput("^v")
+    Sleep(100) ; Settle delay: ensures target window reads clipboard before restoration
+    A_Clipboard := clipBackup
     clipBackup := ""
 }
 
@@ -168,7 +166,7 @@ OpenSamsungNotes(){
         WinActivate
     }
     else{
-        Run, shell:AppsFolder\YourPackageFamilyName!App
+        Run("shell:AppsFolder\YourPackageFamilyName!App")
     }
     return
 }
@@ -180,7 +178,7 @@ OpenNotion(){
         WinActivate
     }
     else{
-        Run, shell:AppsFolder\YourPackageFamilyName
+        Run("shell:AppsFolder\YourPackageFamilyName")
     }
     return
 }
@@ -204,7 +202,7 @@ OpenPass()
         WinActivate
     }
     else{
-        Run, shell:AppsFolder\8bitSolutionsLLC.bitwardendesktop_h4e712dmw3xyy!bitwardendesktop
+        Run("shell:AppsFolder\8bitSolutionsLLC.bitwardendesktop_h4e712dmw3xyy!bitwardendesktop")
     }
     return
 
@@ -213,31 +211,31 @@ OpenPass()
     /*
     if (WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe"))
     {
-        Send ^t
-        Sleep, 10
-        SendInput, chrome://password-manager/passwords
-        Sleep, 10
-        Send, {Return}
+        Send("^t")
+        Sleep(10)
+        SendInput("chrome://password-manager/passwords")
+        Sleep(10)
+        Send("{Return}")
     }
     else{
-        If WinExist ("ahk_exe brave.exe")
+        If WinExist("ahk_exe brave.exe")
         {
-            WinActivate, ahk_exe brave.exe
+            WinActivate("ahk_exe brave.exe")
         }
-        else If WinExist ("ahk_exe chrome.exe")
+        else If WinExist("ahk_exe chrome.exe")
         {
-            WinActivate, ahk_exe chrome.exe
+            WinActivate("ahk_exe chrome.exe")
         }
         else{
-            Run, brave.exe
-            ; Run, chrome.exe
+            Run("brave.exe")
+            ; Run("chrome.exe")
         }
-        Sleep, 500
-        Send ^t
-        Sleep, 10
-        SendInput, chrome://password-manager/passwords
-        Sleep, 10
-        Send, {Return}
+        Sleep(500)
+        Send("^t")
+        Sleep(10)
+        SendInput("chrome://password-manager/passwords")
+        Sleep(10)
+        Send("{Return}")
     }
     return
     */
