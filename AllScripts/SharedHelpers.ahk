@@ -1018,6 +1018,11 @@ ToggleMicrophoneMute(showBadge := true, displayMs := 1200) {
 	return SetMicrophoneMute(newMute, showBadge, displayMs)
 }
 
+; v2: Menu,Tray,Icon (bare, un-hide) / Menu,Tray,NoIcon (hide) map to the writable A_IconHidden boolean -
+; the port dropped this entirely, so the icon bitmap got set but this dedicated tray icon never actually
+; became visible. Menu,Tray,Tip maps to A_IconTip (persistent hover text), not TrayTip() (a one-shot
+; balloon notification) - found live, confirmed by the working sibling pattern in
+; SunshineDisplayWatchdog.ahk's UpdateTabletHibernateTrayIcon().
 UpdateMicrophoneTrayIcon(isMuted) {
 	if (isMuted = 1) {
 		iconPath := A_ScriptDir "\..\AutoHotkey Companion Files\mic_muted.ico"
@@ -1025,8 +1030,10 @@ UpdateMicrophoneTrayIcon(isMuted) {
 			iconPath := A_ScriptDir "\AutoHotkey Companion Files\mic_muted.ico"
 		if (FileExist(iconPath))
 			TraySetIcon(iconPath)
-		TrayTip("Microphone Muted (Click or Win+Ctrl+Alt+M to unmute)")
+		A_IconTip := "Microphone Muted (Click or Win+Ctrl+Alt+M to unmute)"
+		A_IconHidden := false
 	} else {
 		TraySetIcon()
+		A_IconHidden := true
 	}
 }

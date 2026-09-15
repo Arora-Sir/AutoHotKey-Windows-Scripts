@@ -112,7 +112,10 @@ MountExt4Ssd(openExplorer := false, showFeedback := false) {
         ; v2 gotcha: EXT4_SSD_LABEL comes from LocalPaths.ahk and was read in a truthy context - a global with no
         ; script-reachable assignment hangs at load time instead of falling back gracefully like v1 did. IsSet() guards it.
         label := (IsSet(EXT4_SSD_LABEL) && EXT4_SSD_LABEL) ? EXT4_SSD_LABEL : "Linux Backup SSD"
-        ShowTimedToolTip("Opening " label "...", 1500)
+        ; Bottom-right badge (matches the mic-mute/display-switch badge style elsewhere in the fleet) - the
+        ; auto-mount-on-hotplug path previously gave no toast/badge at all, just a silently-opened Explorer
+        ; window, so hotplugging the drive looked like nothing had happened until the folder popped up.
+        ShowBottomRightBadge("Mounted " label, "1A6E3C", 2500)
     }
 }
 
@@ -228,7 +231,9 @@ ReconcileExt4SsdState() {
         ; Drive mapping state is queried non-blockingly via DriveGetType above.
         if (!isDriveMapped && !isManuallyEjected) {
             g_Ext4SsdMounted := true
-            MountExt4Ssd(true) ; Runs 100% silently in background, opens Explorer only when fully finished
+            ; showFeedback=true so plugging the drive in fires the bottom-right badge, not just a silently
+            ; opened Explorer window - found live, the drive used to auto-mount with zero visible confirmation.
+            MountExt4Ssd(true, true)
         }
         else if (isDriveMapped) {
             g_Ext4SsdMounted := true
@@ -259,7 +264,7 @@ IsPixelSsdConnected() {
 
 ; v2: was a Gosub-only label; now a real function. No globals referenced, so no global declaration is needed.
 TrayMountPixelSsd() {
-    MountExt4Ssd(true)
+    MountExt4Ssd(true, true)
 }
 
 ; v2: was a Gosub-only label; now a real function. No globals referenced, so no global declaration is needed.
