@@ -2,6 +2,8 @@
 ; Copy or rename this file to "LocalPaths.ahk" in the AllScripts folder.
 ; "LocalPaths.ahk" is automatically ignored by Git to protect your privacy and personal folder locations.
 #Requires AutoHotkey v2.0
+; Suppress individual child tray icon so only StartupScript.ahk's master icon is visible.
+#NoTrayIcon
 ; OVERVIEW: PATH_* vars for personal folders/tools, WATCHDOG_APPS (apps Watchdog.ahk
 ; auto-relaunches), and the Sefirah section (SEFIRAH_ADB_TARGETS / SEFIRAH_PRIORITY_TARGET
 ; for phone/tablet reconnect + priority). Detail lives in the comment above each group below.
@@ -11,7 +13,7 @@
 Persistent()
 
 ; Pulls in the shared fleet-control protocol (g_FleetControlMsg/OnMessage/HandleFleetControlMessage)
-; for this file's own standalone run - #Include auto-dedupes by resolved file path, so any other
+; for this file's own standalone run: #Include auto-dedupes by resolved file path, so any other
 ; script that also #Includes SharedHelpers.ahk directly still only merges it once.
 #Include %A_ScriptDir%\SharedHelpers.ahk
 PATH_JAVA_COURSE := "D:\Path\To\Your\Java\Course"
@@ -48,8 +50,8 @@ PATH_SUNSHINE_SCRIPTS := "D:\Path\To\Your\Sunshine\Scripts"
 SUNSHINE_TABLET_TAILSCALE_IP := "100.x.y.z"
 
 ; Sefirah (Phone Link alternative) Sleep Auto-Reconnect + Phone Priority
-; SEFIRAH_ADB_TARGETS     - space-separated "ip:port" of every device to reconnect on wake
-; SEFIRAH_PRIORITY_TARGET - the one device that should win Sefirah's ActiveDevice slot whenever it's reachable: must exactly match one entry in SEFIRAH_ADB_TARGETS above
+; SEFIRAH_ADB_TARGETS: space-separated "ip:port" of every device to reconnect on wake
+; SEFIRAH_PRIORITY_TARGET: the one device that should win Sefirah's ActiveDevice slot whenever it's reachable: must exactly match one entry in SEFIRAH_ADB_TARGETS above
 PATH_ADB_EXE := "D:\Path\To\Your\adb.exe"
 SEFIRAH_ADB_TARGETS := "192.168.1.50:5555 192.168.1.60:5555"
 SEFIRAH_PRIORITY_TARGET := "192.168.1.50:5555"

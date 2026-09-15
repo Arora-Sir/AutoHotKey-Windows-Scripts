@@ -1,22 +1,27 @@
-param([switch]$OpenExplorer)
+<#
+.SYNOPSIS
+    Hardened ext4 backup SSD mount and automation engine for WSL2 and Windows 11.
 
-# =============================================================================
-# mount_wsl_ssd.ps1 - Hardened ext4 Backup SSD Mount & Automation Engine
-# =============================================================================
-# Features:
-#   1. Structured diagnostic logging to AllScripts\Logs\pixel_ssd_mount.log
-#   2. Dynamic JSON configuration (ssd_config.json / ssd_config.json.example)
-#   3. Intelligent IP-matching check (preserves valid Reconnecting/Disconnected drives)
-#   4. Fast TCP 445 socket probe (prevents Windows kernel SMB I/O hangs)
-#   5. WSL_E_DISK_ALREADY_MOUNTED self-healing (recovers from dirty detach)
-#   6. Lockfile anti-race with stale lock recovery
-#   7. Strict watchdog timeouts on all external elevated processes
-#   8. Silent elevation via Scheduled Task (falls back to timeout-guarded RunAs)
-#   9. Ubuntu helper script execution (/usr/local/bin/mount_pixel_ssd.sh with fsck)
-#  10. Authenticated Samba mapping (net use <Drive>: \\<WSL_IP>\<Share>)
-#  11. Explorer window deduplication (never opens duplicate windows)
-#  12. Automatic cleanup of redundant Network Shortcut (.lnk)
-# =============================================================================
+.DESCRIPTION
+    Automates the full mount lifecycle for an external ext4 Linux SSD via WSL2:
+      1. Structured diagnostic logging to AllScripts\Logs\pixel_ssd_mount.log
+      2. Dynamic JSON configuration (ssd_config.json / ssd_config.json.example)
+      3. Intelligent IP-matching check (preserves valid Reconnecting/Disconnected drives)
+      4. Fast TCP 445 socket probe (prevents Windows kernel SMB I/O hangs)
+      5. WSL_E_DISK_ALREADY_MOUNTED self-healing (recovers from dirty detach)
+      6. Lockfile anti-race with stale lock recovery
+      7. Strict watchdog timeouts on all external elevated processes
+      8. Silent elevation via Scheduled Task (falls back to timeout-guarded RunAs)
+      9. Ubuntu helper script execution (/usr/local/bin/mount_pixel_ssd.sh with fsck)
+     10. Authenticated Samba mapping (net use <Drive>: \\<WSL_IP>\<Share>)
+     11. Explorer window deduplication (never opens duplicate windows)
+     12. Automatic cleanup of redundant Network Shortcut (.lnk)
+
+.PARAMETER OpenExplorer
+    Opens or focuses an Explorer window navigated to the mounted SSD upon successful mount.
+#>
+
+param([switch]$OpenExplorer)
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$scriptDir\ssd_common.ps1"
@@ -94,7 +99,7 @@ function Start-SilentProcess {
 
 # Ensure WSL keep-alive is active immediately so WSL never idles down during or after mount
 $keepAlivePattern = "*$distro*sleep infinity*"
-$keepAliveProc = Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like $keepAlivePattern }
+$keepAliveProc = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like $keepAlivePattern }
 if (-not $keepAliveProc) {
     Start-SilentProcess "wsl.exe" "-d $distro -e sleep infinity"
     Log-Mount "Started WSL background keep-alive process silently." "INFO"
@@ -189,7 +194,7 @@ try {
             }
 
             if ($isPortAlive -and $isFolderAlive) {
-                $keepAliveProc = Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like $keepAlivePattern }
+                $keepAliveProc = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like $keepAlivePattern }
                 if (-not $keepAliveProc) {
                     Start-SilentProcess "wsl.exe" "-d $distro -e sleep infinity"
                 }
@@ -248,8 +253,8 @@ try {
         $partMatch = ($lsblkOut | Select-String 'sd([b-z]1)\s+part')
         if ($partMatch) {
             $partDev = $partMatch.Matches[0].Groups[1].Value
-            # CRITICAL: Verify the partition is actually responsive and not a dead ghost
-            # from a previous abrupt cable pull. If unresponsive, wsl.exe --shutdown clears Hyper-V SCSI.
+            # Verify partition responsiveness against ghost devices from previous abrupt cable pulls.
+            # If unresponsive, wsl.exe --shutdown clears the faulted Hyper-V SCSI state.
             wsl -d $distro -e head -c 512 "/dev/$partDev" 2>$null | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 $isAttached = $true
@@ -415,13 +420,13 @@ try {
     }
 
     # Ensure WSL keep-alive is active so WSL never idles down while SSD is mounted
-    $keepAliveProc = Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like $keepAlivePattern }
+    $keepAliveProc = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like $keepAlivePattern }
     if (-not $keepAliveProc) {
         Start-SilentProcess "wsl.exe" "-d $distro -e sleep infinity"
         Log-Mount "Active WSL keep-alive process verified silently." "INFO"
     }
 
-    # ---- 8. Set Explorer custom label in registry ----------------------
+    # ---- 9. Set Explorer custom label in registry ----------------------
     try {
         $mountKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\MountPoints2\##$($currentWslIp)#$shareName"
         if (Test-Path $mountKey) {
@@ -430,7 +435,7 @@ try {
         }
     } catch {}
 
-    # ---- 9. Broadcast Shell change notification to update 'This PC' silently ----
+    # ---- 10. Broadcast Shell change notification to update 'This PC' silently ----
     try {
         Add-Type -TypeDefinition @"
         using System;
@@ -447,7 +452,7 @@ try {
         Log-Mount "Shell notification notice: $_" "WARN"
     }
 
-    # ---- 10. Open Explorer only after ALL background operations are completely verified ----
+    # ---- 11. Open Explorer only after ALL background operations are completely verified ----
     if ($OpenExplorer) {
         $target = if ($openFolder -and (Test-Path "$($driveLetter)\$openFolder")) { "$($driveLetter)\$openFolder" } else { "$($driveLetter)\" }
         Log-Mount "All background processes finished. Launching Explorer to $target." "INFO"

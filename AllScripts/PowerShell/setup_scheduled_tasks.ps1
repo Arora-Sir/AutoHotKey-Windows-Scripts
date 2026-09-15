@@ -1,13 +1,15 @@
-# =============================================================================
-# setup_scheduled_tasks.ps1 - One-Time Elevation Registration for WSL ext4 Mount
-# =============================================================================
-# Registers two elevated tasks in Windows Task Scheduler:
-#   1. Mount Task    - Strips RAW drive letter and attaches SSD to WSL
-#   2. Unmount Task  - Safely detaches SSD from WSL
-#
-# Running them via 'schtasks /run' allows non-elevated scripts (AHK, user shells)
-# to execute wsl --mount with ZERO UAC prompts and ZERO background hanging!
-# =============================================================================
+<#
+.SYNOPSIS
+    One-time elevation registration for WSL ext4 mount/unmount scheduled tasks.
+
+.DESCRIPTION
+    Registers two elevated tasks in Windows Task Scheduler:
+      1. Mount Task: Strips RAW drive letter and attaches SSD to WSL2
+      2. Unmount Task: Safely detaches SSD from WSL2
+
+    Executing them via 'schtasks /run' allows non-elevated scripts (AutoHotkey, user shells)
+    to execute wsl --mount with zero UAC prompts and zero background hanging.
+#>
 
 # Check for Administrator elevation
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)

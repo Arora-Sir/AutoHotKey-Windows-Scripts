@@ -1,24 +1,20 @@
 ; =============================================================================
-; SHARED HELPERS - functions used by more than one script in this repo.
+; SHARED HELPERS: functions used by more than one script in this repo.
 ;
-; #Include this file (with an explicit %A_ScriptDir%\ prefix, never a bare filename - see ARCHITECTURE.md for why) from any script that needs one of these.
+; #Include this file (with an explicit %A_ScriptDir%\ prefix, never a bare filename: see ARCHITECTURE.md for why) from any script that needs one of these.
 ; Every function below is self-contained and takes its inputs as parameters rather than reaching for a specific script's own globals, so it behaves identically no matter which script includes it.
-; Full design rationale (why these moved here, the debounce pattern as a reusable template) lives in ARCHITECTURE.md at the repo root - read that before adding a new feature that needs any of this.
+; Full design rationale (why these moved here, the debounce pattern as a reusable template) lives in ARCHITECTURE.md at the repo root: read that before adding a new feature that needs any of this.
 ;
-; v2 port notes: #Persistent is not usable as a directive in v2 (confirmed empirically: it does not proceed past itself, even after an 8s wait, regardless of what other reference material claims - Persistent() the function is the proven-working replacement, used below).
+; v2 port notes: #Persistent is not usable as a directive in v2 (confirmed empirically: it does not proceed past itself, even after an 8s wait, regardless of what other reference material claims: Persistent() the function is the proven-working replacement, used below).
 ; ByRef became &, dynamic label-based SetTimer/Gosub dispatch (debounce trio, tray-manifest trigger) became real function references (see each section for the redesign), VarSetCapacity became Buffer(), ComObjCreate became ComObject(),
 ; SysGet's monitor sub-commands became MonitorGetPrimary()/MonitorGetCount()/MonitorGetWorkArea()/MonitorGetName(), and the v1-only Hwnd-vs-v Gui bug workaround is dropped since v2's .Add() always returns the control object directly.
-; Since v2 addresses a Gui by object reference rather than by name string, the badge singleton below now needs an
-; explicit shared reference (g_BadgeGui/g_BadgeTextCtl) so Show/Hide/Remove can all reach the same window instance.
+; Since v2 addresses a Gui by object reference rather than by name string, the badge singleton below now needs an explicit
+; shared reference (g_BadgeGui/g_BadgeTextCtl) so Show/Hide/Remove can all reach the same window instance.
 ; =============================================================================
 #Requires AutoHotkey v2.0
+; Suppress individual child tray icon so only StartupScript.ahk's master icon is visible.
+#NoTrayIcon
 Persistent()
-; This file is a real managed entry in StartupScript.ahk's own Files[] (Script_12), launched standalone just like
-; every other managed script - it deserves the same duplicate-launch protection they all have. Confirmed
-; empirically safe to declare here even though every consumer #Includes this file and already has its own
-; #SingleInstance force: a duplicate directive with the same value across a merged script is a harmless no-op,
-; not a conflict or a load-time hang.
-#SingleInstance force
 
 ; v2 fleet control protocol: replaces v1's master PostMessage to AutoHotkey's own reserved tray-command IDs (Edit/Exit/
 ; ViewKeyHistory/Suspend), which is not guaranteed to carry over to v2 processes. Every managed script (this one included,
@@ -37,11 +33,11 @@ HandleFleetControlMessage(wParam, lParam, msg, hwnd) {
 
 
 ; -----------------------------------------------------------------------------
-; NAMED MUTEX - cross-process mutual exclusion
+; NAMED MUTEX: cross-process mutual exclusion
 ; -----------------------------------------------------------------------------
-; Kernel-object mutex, not a file-existence convention: a plain lock file can be left permanently stuck if the owning process crashes mid-critical-section, but a named mutex cannot - Windows auto-releases it as "abandoned" and the next waiter picks it up cleanly.
-; Pass a distinct mutexName per logical resource being guarded (e.g. "SkillsVaultLock_AHK_v1") - every caller sharing that exact string, across however many separate processes, contends on the same kernel object.
-; Plain names (no "Global\" prefix) are correct as long as every consumer runs in the same interactive user session, which is the case for every script in this repo - no elevated privilege needed.
+; Kernel-object mutex, not a file-existence convention: a plain lock file can be left permanently stuck if the owning process crashes mid-critical-section, but a named mutex cannot: Windows auto-releases it as "abandoned" and the next waiter picks it up cleanly.
+; Pass a distinct mutexName per logical resource being guarded (e.g. "SkillsVaultLock_AHK_v1"): every caller sharing that exact string, across however many separate processes, contends on the same kernel object.
+; Plain names (no "Global\" prefix) are correct as long as every consumer runs in the same interactive user session, which is the case for every script in this repo: no elevated privilege needed.
 ; v2: DllCall syntax is unchanged here (types were already quoted strings in the original), only the surrounding function-vs-command shell changes elsewhere in this file.
 AcquireNamedMutex(mutexName, timeoutMs) {
 	hMutex := DllCall("CreateMutex", "Ptr", 0, "Int", 0, "Str", mutexName, "Ptr")
@@ -53,7 +49,7 @@ AcquireNamedMutex(mutexName, timeoutMs) {
 		return 0
 	}
 	; 0 = WAIT_OBJECT_0 (clean acquire).
-	; 0x80 = WAIT_ABANDONED (prior owner crashed mid-op; we still now own it cleanly - Windows handled the cleanup).
+	; 0x80 = WAIT_ABANDONED (prior owner crashed mid-op; we still now own it cleanly: Windows handled the cleanup).
 	return hMutex
 }
 
@@ -66,33 +62,30 @@ ReleaseNamedMutex(hMutex) {
 
 
 ; -----------------------------------------------------------------------------
-; DEBOUNCE - "settle after N ms of quiet, then act once" pattern
+; DEBOUNCE: "settle after N ms of quiet, then act once" pattern
 ; -----------------------------------------------------------------------------
 ; Three small functions meant to be used together.
-; Each feature keeps owning its own state as plain globals (a pending-value variable, a busy flag, an interval) and passes them in by name/&reference - nothing here stores any feature-specific state itself.
+; Each feature keeps owning its own state as plain globals (a pending-value variable, a busy flag, an interval) and passes them in by name/&reference: nothing here stores any feature-specific state itself.
 ; See ARCHITECTURE.md for the full worked example of wiring these into a new debounced hotkey.
 ;
-; v2 REDESIGN (genuine redesign, not a syntax port): v1 dispatched to a dynamically-named commit LABEL via
-; SetTimer's documented "the name stored in the variable is used as the target" behavior.
-; v2 removes label-targeted SetTimer entirely (one-shot or recurring) - there is no string-dispatch alternative
-; left at all. Every commit phase is now an ordinary FUNCTION, and timerFunc below is a real function reference,
-; never a string.
-; Callers must pass the bare function name (no parens, no quotes), never a fresh closure/.Bind() result - a
-; closure is a different object every call, which would defeat SetTimer's "re-arming resets the countdown instead
-; of stacking a second firing" behavior this pattern depends on.
+; v2 REDESIGN (genuine redesign, not a syntax port): v1 dispatched to a dynamically-named commit LABEL via SetTimer's documented
+; "the name stored in the variable is used as the target" behavior. v2 removes label-targeted SetTimer entirely (one-shot or
+; recurring): there is no string-dispatch alternative left at all. Every commit phase is now an ordinary FUNCTION, and
+; timerFunc below is a real function reference, never a string. Callers must pass the bare function name (no parens, no
+; quotes), never a fresh closure/.Bind() result: a closure is a different object every call, which would defeat SetTimer's
+; "re-arming resets the countdown instead of stacking a second firing" behavior this pattern depends on.
 
 ; (Re)arms a one-shot timer at timerFunc, delayMs from now.
-; A negative SetTimer period, per AHK's documented "Reset" behavior (unchanged in v2), cancels any already-pending
-; countdown for that same target and starts a fresh one rather than stacking a second pending firing - but only
-; when timerFunc is the SAME function-object identity across calls, which is exactly why callers must pass a
-; stable, named function reference.
+; A negative SetTimer period, per AHK's documented "Reset" behavior (unchanged in v2), cancels any already-pending countdown
+; for that same target and starts a fresh one rather than stacking a second pending firing: but only when timerFunc is the
+; SAME function-object identity across calls, which is exactly why callers must pass a stable, named function reference.
 DebounceArmTimer(timerFunc, delayMs) {
 	SetTimer(timerFunc, -delayMs)
 }
 
 ; First line of a commit function.
-; AHK's own timer engine already guarantees at most one concurrently-running instance of a given timer's target,
-; so busyFlag reading true here should never actually happen in practice - defense in depth only.
+; AHK's own timer engine already guarantees at most one concurrently-running instance of a given timer's target, so busyFlag
+; reading true here should never actually happen in practice: defense in depth only.
 ; Returns true if the caller should proceed with the real work; false if the caller should return immediately (the settle timer has already been re-armed on its behalf).
 DebounceTryBeginCommit(&busyFlag, timerFunc, delayMs) {
 	if (busyFlag) {
@@ -104,7 +97,7 @@ DebounceTryBeginCommit(&busyFlag, timerFunc, delayMs) {
 }
 
 ; Last step of a commit function, called once the real work is fully done.
-; snapshotValue is whatever the caller read from pendingVar BEFORE doing that work (before any blocking call) - comparing the LIVE pendingVar against that snapshot is how a press that landed WHILE the commit was running gets detected.
+; snapshotValue is whatever the caller read from pendingVar BEFORE doing that work (before any blocking call): comparing the LIVE pendingVar against that snapshot is how a press that landed WHILE the commit was running gets detected.
 ; Clears busyFlag first so a re-armed timer firing immediately after this returns never sees a stale true.
 DebounceEndCommit(&pendingVar, snapshotValue, &busyFlag, timerFunc, delayMs) {
 	busyFlag := false
@@ -116,9 +109,9 @@ DebounceEndCommit(&pendingVar, snapshotValue, &busyFlag, timerFunc, delayMs) {
 
 
 ; -----------------------------------------------------------------------------
-; BOTTOM-RIGHT BADGE - dynamic singleton toast surface
+; BOTTOM-RIGHT BADGE: dynamic singleton toast surface
 ; -----------------------------------------------------------------------------
-; Singleton badge surface (one "BottomRightBadge" Gui) - a second call while one is showing updates its color/text in place, never stacks a second one. If a future feature needs independent simultaneous badges, this would need a name parameter added - not needed by anything today.
+; Singleton badge surface (one "BottomRightBadge" Gui): a second call while one is showing updates its color/text in place, never stacks a second one. If a future feature needs independent simultaneous badges, this would need a name parameter added: not needed by anything today.
 ;
 ; Auto-sizing dynamic toast surface anchored to the bottom-right corner of active monitor work area.
 ; 1. Operates with -DPIScale so all coordinates and dimensions map 1:1 to physical screen pixels.
@@ -126,9 +119,12 @@ DebounceEndCommit(&pendingVar, snapshotValue, &busyFlag, timerFunc, delayMs) {
 ; 3. Uses GDI DrawText (DT_CALCRECT + DT_WORDBREAK) to dynamically auto-size without clipping.
 ; 4. Applies modern 10px rounded corners via SetWindowRgn for polished toast aesthetics.
 ; 5. Reuses the persistent GUI window in-place without flicker, blank gaps, or rebuild delays.
-; 6. v2: the v1-only Hwnd-vs-v Gui-control-hang bug (AHK v1.1.37.02, Add from inside a function) does not exist in v2 - .AddText() always returns the control object directly regardless of calling context.
-;    Because v2 addresses a Gui by object reference rather than by name string, g_BadgeGui/g_BadgeTextCtl (file-level globals) replace both the old "BottomRightBadge" name string and the Hwnd-workaround statics - every function below that needs the same window instance shares these two globals explicitly.
-; 7. Explicit WinRedraw forces transparent text controls to repaint immediately on color changes - without it, the old color can linger behind the control until some unrelated repaint event happens to trigger it.
+; 6. v2: the v1-only Hwnd-vs-v Gui-control-hang bug (AHK v1.1.37.02, Add from inside a function) does not exist in v2 -
+;    .AddText() always returns the control object directly regardless of calling context. Because v2 addresses a Gui by
+;    object reference rather than by name string, g_BadgeGui/g_BadgeTextCtl (file-level globals) replace both the old
+;    "BottomRightBadge" name string and the Hwnd-workaround statics: every function below that needs the same window
+;    instance shares these two globals explicitly.
+; 7. Explicit WinRedraw forces transparent text controls to repaint immediately on color changes: without it, the old color can linger behind the control until some unrelated repaint event happens to trigger it.
 g_BadgeGui := ""
 g_BadgeTextCtl := ""
 
@@ -248,8 +244,8 @@ GetToastTargetMonitor() {
 	return primaryMon ? primaryMon : 1
 }
 
-; Hides the badge immediately, without waiting for any auto-dismiss timer - the window itself stays alive (Hide, not Destroy), so the next ShowBottomRightBadge call is an instant in-place update, not a rebuild.
-; Use this (rather than showing a replacement badge) once real work following an "applying" badge has finished and there is nothing new worth telling the user - see CommitPersonalSkillsLock in BasicTasks.ahk for the motivating case.
+; Hides the badge immediately, without waiting for any auto-dismiss timer: the window itself stays alive (Hide, not Destroy), so the next ShowBottomRightBadge call is an instant in-place update, not a rebuild.
+; Use this (rather than showing a replacement badge) once real work following an "applying" badge has finished and there is nothing new worth telling the user: see CommitPersonalSkillsLock in BasicTasks.ahk for the motivating case.
 HideBottomRightBadge() {
 	global g_BadgeGui
 	SetTimer(RemoveBottomRightBadge, 0)
@@ -257,8 +253,8 @@ HideBottomRightBadge() {
 		g_BadgeGui.Hide()
 }
 
-; A FUNCTION, not a label - deliberate, same reasoning as v1: SetTimer targeting a bare function name works.
-; Hides rather than destroys, same reasoning as HideBottomRightBadge above - this is just the timer-driven path to the same end state.
+; A FUNCTION, not a label: deliberate, same reasoning as v1: SetTimer targeting a bare function name works.
+; Hides rather than destroys, same reasoning as HideBottomRightBadge above: this is just the timer-driven path to the same end state.
 RemoveBottomRightBadge() {
 	global g_BadgeGui
 	if IsObject(g_BadgeGui)
@@ -267,10 +263,10 @@ RemoveBottomRightBadge() {
 
 
 ; -----------------------------------------------------------------------------
-; SKILLS VAULT STATUS BADGE - color-coded wrapper over ShowBottomRightBadge
+; SKILLS VAULT STATUS BADGE: color-coded wrapper over ShowBottomRightBadge
 ; -----------------------------------------------------------------------------
-; Shared by BasicTasks.ahk (manual Win+Alt+L toggle) and BackgroundAutomations.ahk (WatchSkillsLock, the focus-driven auto watcher) - both want the exact same [LOCKED]/[UNLOCKED]/[AUTO]/error color mapping, so it's defined once here rather than duplicated per script.
-; Explicit 3000ms: ShowBottomRightBadge's own default is 0 (persist until replaced/hidden, for the commit-phase hide-on-completion flow) - every caller through this wrapper wants the original auto-dismiss behavior instead.
+; Shared by BasicTasks.ahk (manual Win+Alt+L toggle) and BackgroundAutomations.ahk (WatchSkillsLock, the focus-driven auto watcher): both want the exact same [LOCKED]/[UNLOCKED]/[AUTO]/error color mapping, so it's defined once here rather than duplicated per script.
+; Explicit 3000ms: ShowBottomRightBadge's own default is 0 (persist until replaced/hidden, for the commit-phase hide-on-completion flow): every caller through this wrapper wants the original auto-dismiss behavior instead.
 ShowSkillsStatusBadge(msg) {
 	; Check [UNLOCKED] before [LOCKED] to prevent "LOCKED" substring collision
 	if InStr(msg, "[UNLOCKED]")
@@ -287,18 +283,17 @@ ShowSkillsStatusBadge(msg) {
 
 
 ; -----------------------------------------------------------------------------
-; SKILLS VAULT PHYSICAL STATE PROBE - read-test via PATH_SKILLS_TEST_FILE
+; SKILLS VAULT PHYSICAL STATE PROBE: read-test via PATH_SKILLS_TEST_FILE
 ; -----------------------------------------------------------------------------
 ; Probes whether personal skills are currently readable or blocked by NTFS Deny ACLs.
 ; Returns true if unlocked (readable), false if locked (Access Denied) or unconfigured.
 IsSkillsVaultUnlocked() {
 	global PATH_SKILLS_TEST_FILE
-	; v2 gotcha (empirically found, real production impact, not just a test artifact): a global declared here but
-	; never assigned ANYWHERE in the loaded script causes a load-time hang when read in a boolean context, not a
-	; graceful falsy/empty value like v1 gave.
-	; PATH_SKILLS_TEST_FILE normally comes from LocalPaths.ahk, included by every real consumer - but this file
-	; also runs standalone (Script_12 in StartupScript.ahk's Files[], "quick Edit access"), where LocalPaths.ahk
-	; is never included and the global genuinely has no assignment anywhere. IsSet() first avoids it.
+	; v2 gotcha (empirically found, real production impact, not just a test artifact): a global declared here but never
+	; assigned ANYWHERE in the loaded script causes a load-time hang when read in a boolean context, not a graceful
+	; falsy/empty value like v1 gave. PATH_SKILLS_TEST_FILE normally comes from LocalPaths.ahk, included by every real
+	; consumer: but this file also runs standalone (Script_12 in StartupScript.ahk's Files[], "quick Edit access"),
+	; where LocalPaths.ahk is never included and the global genuinely has no assignment anywhere. IsSet() first avoids it.
 	if (!IsSet(PATH_SKILLS_TEST_FILE) || !PATH_SKILLS_TEST_FILE)
 		return false
 	try {
@@ -313,7 +308,7 @@ IsSkillsVaultUnlocked() {
 
 
 ; -----------------------------------------------------------------------------
-; DRM STREAMING STATUS BADGE - color-coded toast over ShowBottomRightBadge
+; DRM STREAMING STATUS BADGE: color-coded toast over ShowBottomRightBadge
 ; -----------------------------------------------------------------------------
 ShowDRMStatusBadge(msg) {
 	if (InStr(msg, "[ON]") || InStr(msg, "[ACTIVE]"))
@@ -326,7 +321,7 @@ ShowDRMStatusBadge(msg) {
 
 
 ; -----------------------------------------------------------------------------
-; TIMED TOOLTIP - native ToolTip, auto-dismissed after N ms
+; TIMED TOOLTIP: native ToolTip, auto-dismissed after N ms
 ; -----------------------------------------------------------------------------
 ; Collapses the repeated inline "ToolTip -> SetTimer -Nms -> commit -> ToolTip" pattern that previously appeared independently at several call sites across BasicTasks.ahk and BackgroundAutomations.ahk (VS Code zoom HUD, SSD mount/unmount feedback).
 ; For anything wanting color/positioning control beyond native ToolTip's default near-cursor placement, use ShowBottomRightBadge above instead.
@@ -335,14 +330,14 @@ ShowTimedToolTip(msg, displayMs) {
 	SetTimer(RemoveTimedToolTip, -displayMs)
 }
 
-; A function, not a label - same reasoning as RemoveBottomRightBadge() above.
+; A function, not a label: same reasoning as RemoveBottomRightBadge() above.
 RemoveTimedToolTip() {
 	ToolTip()
 }
 
 
 ; -----------------------------------------------------------------------------
-; CONNECTED DISPLAY DETECTION - hardware-level check for external displays
+; CONNECTED DISPLAY DETECTION: hardware-level check for external displays
 ; -----------------------------------------------------------------------------
 ; Checks if a second display (physical monitor or HDMI dummy plug) is attached to any graphics adapter, even when Windows has turned off its desktop output in PC Screen Only mode (where SM_CMONITORS / MonitorGetCount reports 1).
 HasSecondDisplayConnected() {
@@ -472,7 +467,7 @@ IsSecondScreenOnly() {
 
 
 ; -----------------------------------------------------------------------------
-; TRAY MENU MANIFEST - publish/dispatch for StartupScript.ahk's master submenu
+; TRAY MENU MANIFEST: publish/dispatch for StartupScript.ahk's master submenu
 ; -----------------------------------------------------------------------------
 ; Call PublishTrayMenuManifest once from each script's auto-execute section right after its native tray setup, passing [DisplayLabel, HandlerKey] pairs as a nested array:
 ;   PublishTrayMenuManifest([ ["Display Label 1", "TrayLabel1"]
@@ -480,11 +475,10 @@ IsSecondScreenOnly() {
 ;                           , ["Display Label 2", "TrayLabel2"] ])
 ; Then call RegisterTrayMenuHandler("TrayLabel1", MyHandlerFunc) once per item, mapping each HandlerKey to a real function reference.
 ;
-; v2 REDESIGN (genuine redesign, not a syntax port): v1 dispatched a manifest-driven click via Gosub to a label
-; NAMED by the manifest's second field.
-; Gosub is removed entirely in v2, with no replacement of any kind, dynamic or otherwise - so this can no longer
-; be "a string that happens to name a label," it has to become a real lookup into a table of function references
-; built at startup by each consuming script. g_TrayMenuHandlers below is that table.
+; v2 REDESIGN (genuine redesign, not a syntax port): v1 dispatched a manifest-driven click via Gosub to a label NAMED by the
+; manifest's second field. Gosub is removed entirely in v2, with no replacement of any kind, dynamic or otherwise: so this
+; can no longer be "a string that happens to name a label," it has to become a real lookup into a table of function
+; references built at startup by each consuming script. g_TrayMenuHandlers below is that table.
 ;
 ; Architecture (unchanged from v1 otherwise):
 ; 1. Writes %A_Temp%\ahk_traymenu_<ScriptName>.txt (one file per script, keyed by that script's own filename).
@@ -521,8 +515,8 @@ PublishTrayMenuManifest(itemsArray) {
 		try FileDelete(manifestPath)
 		FileAppend(content, manifestPath, "UTF-8")
 	}
-	; v2: OnMessage's name-string registration mode ("HandleRemoteTrayMenuTrigger" as a string) is gone - only a
-	; real function-object reference survives. Passing the bare name below (no quotes) is the fix.
+	; v2: OnMessage's name-string registration mode ("HandleRemoteTrayMenuTrigger" as a string) is gone: only a real
+	; function-object reference survives. Passing the bare name below (no quotes) is the fix.
 	OnMessage(DllCall("RegisterWindowMessage", "Str", "AHK_RemoteTrayMenuTrigger_v1", "UInt"), HandleRemoteTrayMenuTrigger)
 }
 
@@ -538,9 +532,8 @@ HandleRemoteTrayMenuTrigger(wParam, lParam, msg, hwnd) {
 		return
 	parts := StrSplit(lines[wParam], "|")
 	; Map.Has guard: a manifest can outlive the handler it names (e.g. mid-migration, before a stale
-	; %A_Temp%\ahk_traymenu_<script>.txt is deleted).
-	; Without this, a lookup miss would need its own guard anyway; this keeps a leftover manifest entry a
-	; silent no-op instead of an error.
+	; %A_Temp%\ahk_traymenu_<script>.txt is deleted). Without this, a lookup miss would need its own guard anyway;
+	; this keeps a leftover manifest entry a silent no-op instead of an error.
 	if (parts.Length >= 2 && parts[2] != "" && g_TrayMenuHandlers.Has(parts[2]))
 		g_TrayMenuHandlers[parts[2]]()
 }
@@ -602,10 +595,9 @@ RunSilentProcess(targetExe, args := "") {
 ; -----------------------------------------------------------------------------
 ; Manages graceful close, atomic Local State JSON edits, and zero-GPU launch.
 ;
-; v2 gotcha (same class as IsSkillsVaultUnlocked's, same fix shape): g_LastActiveBrowser/g_LastActiveBrowserTime
-; are only ever assigned conditionally INSIDE GetActiveBrowser() below, never at script top level - empirically
-; that also causes the load-time hang, not just a genuinely-never-assigned-anywhere global.
-; A top-level initialization avoids it.
+; v2 gotcha (same class as IsSkillsVaultUnlocked's, same fix shape): g_LastActiveBrowser/g_LastActiveBrowserTime are only
+; ever assigned conditionally INSIDE GetActiveBrowser() below, never at script top level: empirically that also causes
+; the load-time hang, not just a genuinely-never-assigned-anywhere global. A top-level initialization avoids it.
 g_LastActiveBrowser := ""
 g_LastActiveBrowserTime := 0
 
@@ -618,8 +610,8 @@ GetBrowserMeta(browserName) {
 	if (browserName = "Brave") {
 		meta.exeName := "brave.exe"
 		meta.localStatePath := localAppData "\BraveSoftware\Brave-Browser\User Data\Local State"
-		; v2 gotcha: see IsSkillsVaultUnlocked's comment above - same fix, same reason
-		; (PATH_BRAVE_EXE/PATH_CHROME_EXE come from LocalPaths.ahk, not guaranteed present when this file runs standalone).
+		; v2 gotcha: see IsSkillsVaultUnlocked's comment above: same fix, same reason (PATH_BRAVE_EXE/PATH_CHROME_EXE
+		; come from LocalPaths.ahk, not guaranteed present when this file runs standalone).
 		if (IsSet(PATH_BRAVE_EXE) && PATH_BRAVE_EXE && FileExist(PATH_BRAVE_EXE)) {
 			meta.exePath := PATH_BRAVE_EXE
 		} else {
@@ -669,8 +661,9 @@ GetActiveBrowser() {
 		return "Chrome"
 	}
 
-	; If triggered from tray menu or notification area, the tray or taskbar window has focus at this instant.
-	; Check if Chrome or Brave was focused recently (within the last 20 seconds) and is still running.
+	; If triggered from tray menu or notification area, the tray or taskbar window
+	; has focus at this instant. Check if Chrome or Brave was focused recently
+	; (within the last 20 seconds) and is still running.
 	if (g_LastActiveBrowser != "" && (A_TickCount - g_LastActiveBrowserTime < 20000)) {
 		meta := GetBrowserMeta(g_LastActiveBrowser)
 		exeName := meta.exeName
@@ -727,19 +720,19 @@ GetRunningBrowsers() {
 	return running
 }
 
-; Narrow "is a Chromium browser active right now" predicate - deliberately does NOT use GetActiveBrowser()'s 20s
-; recent-focus cache or Z-order fallback, since several BasicTasks.ahk hotkeys need "literally active this
-; instant," not "was recently active" (using GetActiveBrowser() here would broaden when these hotkeys fire
-; beyond their original intent).
-; Was duplicated inline across half a dozen functions before being pulled out here.
+; Narrow "is a Chromium browser active right now" predicate: deliberately does NOT use GetActiveBrowser()'s
+; 20s recent-focus cache or Z-order fallback, since several BasicTasks.ahk hotkeys need "literally active
+; this instant," not "was recently active" (using GetActiveBrowser() here would broaden when these hotkeys
+; fire beyond their original intent). Was duplicated inline across half a dozen functions before being
+; pulled out here.
 IsChromiumBrowserActive() {
 	return WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe")
 }
 
-; Shared "run action in the active Chromium browser, or activate one and then run it" pattern - was duplicated
-; inline (with Brave preferred over Chrome) across several BasicTasks.ahk hotkeys.
-; sleepMs matches each call site's own prior behavior exactly (0 by default, since most call sites never
-; actually slept between WinActivate and the action - only pass a nonzero value where live code already did).
+; Shared "run action in the active Chromium browser, or activate one and then run it" pattern: was
+; duplicated inline (with Brave preferred over Chrome) across several BasicTasks.ahk hotkeys. sleepMs
+; matches each call site's own prior behavior exactly (0 by default, since most call sites never actually
+; slept between WinActivate and the action: only pass a nonzero value where live code already did).
 ; Returns true if a browser was found (active or activated) and action ran, false if neither is running.
 ActivateChromiumBrowserOrRun(action, sleepMs := 0) {
 	if IsChromiumBrowserActive() {
@@ -875,11 +868,11 @@ LaunchBrowserInstance(browserName, args := "") {
 ; Simple Sticky Notes (ssn.exe) Dual Deterministic Layout Engine
 ; =============================================================================
 ; Solves the multi-resolution desktop layout scrambling issue between:
-; - Host Laptop (DISPLAY1): 1920x1080 @ 125% DPI scale = 1536 x 864 logical DIP workspace
-; - Tablet (DISPLAY4):     2560x1600 @ 175% DPI scale = 1463 x 914 logical DIP workspace
+;: Host Laptop (DISPLAY1): 1920x1080 @ 125% DPI scale = 1536 x 864 logical DIP workspace
+;: Tablet (DISPLAY4):     2560x1600 @ 175% DPI scale = 1463 x 914 logical DIP workspace
 ;
-; The actual coordinate math lives in AllScripts/PowerShell/apply_ssn_layout.ps1 (untouched by this migration,
-; PowerShell isn't AHK) - these are thin wrappers only.
+; The actual coordinate math lives in AllScripts/PowerShell/apply_ssn_layout.ps1 (untouched by this
+; migration, PowerShell isn't AHK): these are thin wrappers only.
 
 ApplyLaptopStickyNotesLayout(delayMs := 0) {
 	psScript := A_ScriptDir "\PowerShell\apply_ssn_layout.ps1"
@@ -917,14 +910,14 @@ RestoreSimpleStickyNotesPositions(delayMs := 0) {
 ;
 ; v2: only the buffer-creation (VarSetCapacity -> Buffer) and COM-creation (ComObjCreate -> ComObject) calls change.
 ; The vtable-offset arithmetic itself (N*A_PtrSize) is Win32 interface layout, unrelated to the AHK language version,
-; and is deliberately left untouched below - do not "simplify" or re-derive these offsets, they are correct as-is.
+; and is deliberately left untouched below: do not "simplify" or re-derive these offsets, they are correct as-is.
 ;
 ; Why this approach:
-; - Native in-process COM call (<5ms execution time, zero process spawning overhead).
-; - Bypasses legacy winmm mixer quirks and eliminates any need for NirCmd or PowerToys.
-; - Simultaneously targets both eConsole (0) and eCommunications (2) capture endpoints
+;: Native in-process COM call (<5ms execution time, zero process spawning overhead).
+;: Bypasses legacy winmm mixer quirks and eliminates any need for NirCmd or PowerToys.
+;: Simultaneously targets both eConsole (0) and eCommunications (2) capture endpoints
 ;   to ensure meetings in Zoom, Teams, Discord, and browsers are all muted together.
-; - Reuses ShowBottomRightBadge() for DPI-scaled on-screen HUD feedback.
+;: Reuses ShowBottomRightBadge() for DPI-scaled on-screen HUD feedback.
 
 GetMicrophoneMute() {
 	static CLSID_MMDeviceEnumerator := "{BCDE0395-E52F-467C-8E3D-C4579291692E}"
@@ -937,24 +930,22 @@ GetMicrophoneMute() {
 
 	device := 0
 	; Try eConsole (0) first, fallback to eCommunications (2)
-	; v2: NumGet's Type parameter is mandatory now (no implicit "Ptr" default like v1 had) - confirmed empirically,
-	; omitting it here causes a load-time hang (not a clean error) rather than throwing.
-	; Every vtable-offset NumGet below needs an explicit "Ptr" type: it's always reading a pointer-sized vtable
-	; slot or function pointer.
-	; v2: `enumerator+0` throws "Expected a Number but got a ComValue" - ComObject() returns a real ComValue
-	; wrapper, which (unlike v1) does not auto-coerce to a number via arithmetic.
-	; Use its .Ptr property instead to get the raw interface pointer for NumGet's vtable walk. (Passing
-	; `enumerator` directly as a DllCall "Ptr" argument below is unaffected - v2 DllCall already reads
-	; .Ptr automatically for that.)
+	; v2: NumGet's Type parameter is mandatory now (no implicit "Ptr" default like v1 had): confirmed empirically,
+	; omitting it here causes a load-time hang (not a clean error) rather than throwing, so every vtable-offset NumGet
+	; below needs an explicit "Ptr" type: it's always reading a pointer-sized vtable slot or function pointer.
+	; v2: `enumerator+0` throws "Expected a Number but got a ComValue": ComObject() returns a real ComValue
+	; wrapper, which (unlike v1) does not auto-coerce to a number via arithmetic. Use its .Ptr property
+	; instead to get the raw interface pointer for NumGet's vtable walk. (Passing `enumerator` directly as
+	; a DllCall "Ptr" argument below is unaffected: v2 DllCall already reads .Ptr automatically for that.)
 	hr := DllCall(NumGet(NumGet(enumerator.Ptr, "Ptr") + 4*A_PtrSize, "Ptr"), "Ptr", enumerator, "Int", 1, "Int", 0, "Ptr*", &device)
 	if (hr != 0 || !device)
 		hr := DllCall(NumGet(NumGet(enumerator.Ptr, "Ptr") + 4*A_PtrSize, "Ptr"), "Ptr", enumerator, "Int", 1, "Int", 2, "Ptr*", &device)
-	; v2: `enumerator` is now a real ComValue wrapper (see above), not a raw pointer - ObjRelease requires a raw
-	; pointer and throws "Parameter #1 of ObjRelease is invalid" on a ComValue (confirmed live).
-	; The wrapper manages its own COM reference count and releases it automatically when garbage-collected, so
-	; the explicit release is no longer needed at all - simply drop it (unlike device/deviceConsole/deviceComm/
-	; endpointVolume/endpointConsole/endpointComm below, which stay correct: those are genuine raw pointers
-	; from "Ptr*" DllCall outputs, not wrapper objects, so their ObjRelease calls are unchanged).
+	; v2: `enumerator` is now a real ComValue wrapper (see above), not a raw pointer: ObjRelease requires
+	; a raw pointer and throws "Parameter #1 of ObjRelease is invalid" on a ComValue (confirmed live).
+	; The wrapper manages its own COM reference count and releases it automatically when garbage-collected,
+	; so the explicit release is no longer needed at all: simply drop it (unlike device/deviceConsole/
+	; deviceComm/endpointVolume/endpointConsole/endpointComm below, which stay correct: those are genuine
+	; raw pointers from "Ptr*" DllCall outputs, not wrapper objects, so their ObjRelease calls are unchanged).
 
 	if (hr != 0 || !device)
 		return -1
@@ -996,13 +987,13 @@ SetMicrophoneMute(bMute, showBadge := true, displayMs := 1200) {
 	endpointConsole := 0
 	endpointComm := 0
 
-	; v2: NumGet's Type parameter is mandatory (see GetMicrophoneMute's comment above) - "Ptr" added to every
-	; vtable-offset NumGet call below, same fix, same reason.
-	; `enumerator.Ptr` (not `enumerator+0`) - see the matching comment in GetMicrophoneMute above for why.
+	; v2: NumGet's Type parameter is mandatory (see GetMicrophoneMute's comment above): "Ptr" added to every vtable-offset
+	; NumGet call below, same fix, same reason. `enumerator.Ptr` (not `enumerator+0`): see the matching
+	; comment in GetMicrophoneMute above for why.
 	hrConsole := DllCall(NumGet(NumGet(enumerator.Ptr, "Ptr") + 4*A_PtrSize, "Ptr"), "Ptr", enumerator, "Int", 1, "Int", 0, "Ptr*", &deviceConsole)
 	hrComm := DllCall(NumGet(NumGet(enumerator.Ptr, "Ptr") + 4*A_PtrSize, "Ptr"), "Ptr", enumerator, "Int", 1, "Int", 2, "Ptr*", &deviceComm)
-	; v2: `enumerator` is a ComValue wrapper now, not a raw pointer - see the matching comment in GetMicrophoneMute above.
-	; ObjRelease on it throws; the wrapper releases itself automatically.
+	; v2: `enumerator` is a ComValue wrapper now, not a raw pointer: see the matching comment in
+	; GetMicrophoneMute above. ObjRelease on it throws; the wrapper releases itself automatically.
 
 	if (hrConsole != 0 && hrComm != 0) {
 		if (showBadge)
@@ -1063,11 +1054,11 @@ ToggleMicrophoneMute(showBadge := true, displayMs := 1200) {
 	return SetMicrophoneMute(newMute, showBadge, displayMs)
 }
 
-; v2: Menu,Tray,Icon (bare, un-hide) / Menu,Tray,NoIcon (hide) map to the writable A_IconHidden boolean - the port
-; dropped this entirely, so the icon bitmap got set but this dedicated tray icon never actually became visible.
-; Menu,Tray,Tip maps to A_IconTip (persistent hover text), not TrayTip() (a one-shot balloon notification) -
-; found live, confirmed by the working sibling pattern in SunshineDisplayWatchdog.ahk's UpdateTabletHibernateTrayIcon().
-; See Migration-Notes.md 18.32.
+; v2: Menu,Tray,Icon (bare, un-hide) / Menu,Tray,NoIcon (hide) map to the writable A_IconHidden boolean -
+; the port dropped this entirely, so the icon bitmap got set but this dedicated tray icon never actually
+; became visible. Menu,Tray,Tip maps to A_IconTip (persistent hover text), not TrayTip() (a one-shot
+; balloon notification): found live, confirmed by the working sibling pattern in
+; SunshineDisplayWatchdog.ahk's UpdateTabletHibernateTrayIcon().
 UpdateMicrophoneTrayIcon(isMuted) {
 	if (isMuted = 1) {
 		iconPath := A_ScriptDir "\..\AutoHotkey Companion Files\mic_muted.ico"

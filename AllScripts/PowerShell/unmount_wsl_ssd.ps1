@@ -1,20 +1,25 @@
-param([switch]$OnlyIfDisconnected)
+<#
+.SYNOPSIS
+    Production-grade ext4 backup SSD unmount and cleanup engine for WSL2 and Windows 11.
 
-# =============================================================================
-# unmount_wsl_ssd.ps1 - Production-Grade ext4 Backup SSD Unmount & Cleanup Engine
-# =============================================================================
-# Triggered by Win+Alt+U hotkey, Tray Menu Eject, or automatic USB unplug.
-# Features:
-#   1. Structured diagnostic logging to AllScripts\Logs\pixel_ssd_mount.log
-#   2. Dynamic JSON configuration (ssd_config.json / ssd_config.json.example)
-#   3. Ejection flag management (%TEMP%\pixel_ssd_ejected.flag)
-#   4. Graceful Explorer redirection to 'This PC' (prevents broken path modals)
-#   5. OnlyIfDisconnected guard (prevents false unmount on device reconfiguration)
-#   6. Immediate unmapping of drive letter via net use (prevents Explorer hangs)
-#   7. Graceful lazy unmount and Samba stop inside Ubuntu
-#   8. Universal WSL detach (cleans Hyper-V attachment table even if drive was pulled)
-#   9. Permanent cleanup of legacy Network Shortcut files
-# =============================================================================
+.DESCRIPTION
+    Triggered by Win+Alt+U hotkey, tray menu eject, or automatic USB unplug:
+      1. Structured diagnostic logging to AllScripts\Logs\pixel_ssd_mount.log
+      2. Dynamic JSON configuration (ssd_config.json / ssd_config.json.example)
+      3. Ejection flag management (%TEMP%\pixel_ssd_ejected.flag)
+      4. Graceful Explorer redirection to 'This PC' (prevents broken path modals)
+      5. OnlyIfDisconnected guard (prevents false unmount on device reconfiguration)
+      6. Immediate unmapping of drive letter via net use (prevents Explorer hangs)
+      7. Graceful lazy unmount and Samba stop inside Ubuntu
+      8. Universal WSL detach (cleans Hyper-V attachment table even if drive was pulled)
+      9. Permanent cleanup of legacy Network Shortcut files
+     10. Hardware safe removal via native CM_Request_Device_EjectW
+
+.PARAMETER OnlyIfDisconnected
+    Executes teardown and cleanup only if the physical drive has already been disconnected.
+#>
+
+param([switch]$OnlyIfDisconnected)
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 . "$scriptDir\ssd_common.ps1"
@@ -234,7 +239,7 @@ try {
 
     # 5. Terminate WSL keep-alive process
     $keepAlivePattern = "*$distro*sleep infinity*"
-    $keepAliveProcs = Get-WmiObject Win32_Process | Where-Object { $_.CommandLine -like $keepAlivePattern }
+    $keepAliveProcs = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like $keepAlivePattern }
     foreach ($kp in $keepAliveProcs) {
         Stop-Process -Id $kp.ProcessId -Force -ErrorAction SilentlyContinue
     }

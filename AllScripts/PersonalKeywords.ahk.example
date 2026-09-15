@@ -1,4 +1,6 @@
 #Requires AutoHotkey v2.0
+; Suppress individual child tray icon so only StartupScript.ahk's master icon is visible.
+#NoTrayIcon
 
 ; Example Personal Keywords Configuration
 ; Copy or rename this file to "PersonalKeywords.ahk" in the AllScripts directory.

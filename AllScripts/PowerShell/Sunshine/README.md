@@ -94,9 +94,9 @@ Follow these sequential steps to recreate the entire streaming environment from 
 
 1. Download and install the latest Sunshine release from GitHub (LizardByte/Sunshine).
 2. Verify SunshineService is running:
-   `powershell
+   ```powershell
    Get-Service -Name SunshineService
-   `
+   ```
 3. Open Sunshine Web UI in browser: https://localhost:47990/.
 4. Set up username and password on first login.
 5. In Configuration -> Audio/Video:
@@ -126,9 +126,9 @@ Follow these sequential steps to recreate the entire streaming environment from 
    PATH_SUNSHINE_LOG := "C:\Program Files\Sunshine\config\sunshine.log"
    ```
 4. Rebuild the master startup binary:
-   `powershell
+   ```powershell
    .\build_startup_exe.ps1 -Relaunch
-   `
+   ```
 
 ### Step 5: Provision Sunshine Application Profiles
 
@@ -139,13 +139,13 @@ Follow these sequential steps to recreate the entire streaming environment from 
 ### Step 6: Simple Sticky Notes Alignment Calibration
 
 1. Ensure Simple Sticky Notes (ssn.exe) is running.
-2. The coordinate engine in pply_ssn_layout.ps1 handles two deterministic geometries:
+2. The coordinate engine in apply_ssn_layout.ps1 handles two deterministic geometries:
    - Laptop: 1536x864 DIPs (1920x1080 @ 125%). Notes align to Column 0 (X=0), Column 1 (X=728), Column 2 (X=968), and Column 3 (X=1268, ends at 1536px edge).
    - Tablet: 1463x914 DIPs (2560x1600 @ 175%). Notes align to Column 0 (X=0), Column 1 (X=640), Column 2 (X=885), and Column 3 (X=1190, ends at 1458px edge).
 3. Test alignment anytime by running:
-   `powershell
+   ```powershell
    powershell.exe -ExecutionPolicy Bypass -File .\apply_ssn_layout.ps1 -Mode Auto
-   `
+   ```
 
 ## Troubleshooting
 

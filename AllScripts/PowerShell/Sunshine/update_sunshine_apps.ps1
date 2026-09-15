@@ -1,6 +1,16 @@
-# update_sunshine_apps.ps1: Registers Sunshine application profiles including Extended Desktop
-# Updates C:\Program Files\Sunshine\config\apps.json and restarts SunshineService.
-# Run with Administrator privileges.
+<#
+.SYNOPSIS
+    Registers Sunshine application profiles including Desktop and Extended Desktop.
+
+.DESCRIPTION
+    Updates C:\Program Files\Sunshine\config\apps.json and restarts SunshineService.
+    Configures:
+      - Desktop (mirrored/primary display streaming)
+      - Desktop (Extended Tab) (isolated \\.\DISPLAY4 streaming on tablet)
+      - Desktop (TV)
+      - Steam Big Picture
+    Requires Administrator privileges.
+#>
 
 $logDir = Join-Path $PSScriptRoot '..\..\Logs'
 if (![System.IO.Directory]::Exists($logDir)) {
@@ -13,9 +23,9 @@ try {
     Add-Content -Path $logFile -Value ('[' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '] Starting apps update...')
     $appsPath = 'C:\Program Files\Sunshine\config\apps.json'
     
-    $runSilentExe = (Join-Path $PSScriptRoot '..\run_silent.exe')
-    if (-not (Test-Path $runSilentExe)) {
-        $runSilentExe = 'D:\Software\Programming\AutoHotKey\AllScripts\PowerShell\run_silent.exe'
+    $runSilentExe = Join-Path $PSScriptRoot '..\run_silent.exe'
+    if (Test-Path $runSilentExe) {
+        $runSilentExe = (Resolve-Path $runSilentExe).Path
     }
     $runSilentCmd = ($runSilentExe.Replace('\', '\\'))
     $fastScript = (Join-Path $PSScriptRoot 'set_fast.ps1').Replace('\', '\\')
@@ -85,7 +95,7 @@ try {
     ],
     "env": {}
 }
-'@
+"@
 
     [System.IO.File]::WriteAllText($appsPath, $jsonContent)
     Write-Host 'Apps configuration written successfully.' -ForegroundColor Green

@@ -1,8 +1,18 @@
-# =============================================================================
-# ssd_common.ps1 - Shared Configuration & Disk Helper for WSL ext4 Automation
-# =============================================================================
+<#
+.SYNOPSIS
+    Shared configuration loader and disk discovery helper for WSL ext4 automation.
+
+.DESCRIPTION
+    Provides reusable utility functions across the WSL2 ext4 SSD automation suite:
+      - Get-SSDConfig: Loads and parses ssd_config.json (falling back to ssd_config.json.example)
+      - Find-TargetSSD: Discovers the target external physical disk based on model, bus, and size filters
+#>
 
 function Get-SSDConfig {
+    <#
+    .SYNOPSIS
+        Resolves and parses the active JSON configuration for WSL SSD mounting.
+    #>
     $dir = $PSScriptRoot
     if (-not $dir -and $MyInvocation.MyCommand.Path) {
         $dir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -26,6 +36,12 @@ function Get-SSDConfig {
 }
 
 function Find-TargetSSD {
+    <#
+    .SYNOPSIS
+        Discovers the target physical external disk matching configured model, bus, and size criteria.
+    .PARAMETER Config
+        Optional configuration object. If omitted, loaded dynamically via Get-SSDConfig.
+    #>
     param($Config)
     if (-not $Config) { $Config = Get-SSDConfig }
 

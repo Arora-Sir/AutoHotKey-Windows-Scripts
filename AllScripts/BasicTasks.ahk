@@ -46,7 +46,7 @@
 ; Ctr+Shift+WheelUp -> (VS Code) Increase Whole UI Zoom (+0.05)
 ; Ctr+Shift+WheelDown -> (VS Code) Decrease Whole UI Zoom (-0.05)
 
-; v2: #NoEnv is gone - v2 has no %Var%-vs-environment-variable ambiguity to guard against, nothing to port.
+; v2: #NoEnv is gone: v2 has no %Var%-vs-environment-variable ambiguity to guard against, nothing to port.
 SendMode("Input") ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir(A_ScriptDir) ; Ensures a consistent starting directory.
 #Include *i %A_ScriptDir%\LocalPaths.ahk ; Include local custom paths if present (ignored by Git)
@@ -63,15 +63,19 @@ SetNumLockState("AlwaysOn") ; Set Lock keys permanently
 g_SkillsTrayStatusLabel := "Skills Vault: [AUTO] (focus-driven)"
 
 ; --- Manual toggle debounce state (Win+Alt+L) --------------------------------
-; Single source of truth for the settle window - referenced everywhere instead of a repeated literal.
+; Single source of truth for the settle window: referenced everywhere instead
+; of a repeated literal.
 g_SkillsDebounceMs := 2000
-; In-memory "next mode if committed right now" - the ONLY thing the fast path (TogglePersonalSkillsLock) cycles.
-; Distinct from the on-disk modeFile, which remains the cross-process state of record and is touched only by the commit phase.
-; "" is a one-time sentinel meaning "not yet seeded this process" - seeded from modeFile on first use, and reset
-; back to "" once a commit settles with nothing newer pending (see CommitPersonalSkillsLock's tail).
+; In-memory "next mode if committed right now": the ONLY thing the fast path
+; (TogglePersonalSkillsLock) cycles. Distinct from the on-disk modeFile, which
+; remains the cross-process state of record and is touched only by the commit
+; phase. "" is a one-time sentinel meaning "not yet seeded this process" -
+; seeded from modeFile on first use, and reset back to "" once a commit
+; settles with nothing newer pending (see CommitPersonalSkillsLock's tail).
 g_SkillsPendingMode := ""
-; Defense-in-depth reentrancy guard for the COMMIT phase only. AHK's own timer engine already guarantees
-; at most one concurrently-running instance of a given timer target, so this should never actually read true in practice.
+; Defense-in-depth reentrancy guard for the COMMIT phase only. AHK's own timer
+; engine already guarantees at most one concurrently-running instance of a
+; given timer target, so this should never actually read true in practice.
 g_SkillsCommitBusy := false
 g_DRMTrayStatusLabel := "Graphics Accel: Brave (ON) / Chrome (OFF)"
 g_LastActiveBrowser := ""
@@ -96,7 +100,7 @@ g_LastActiveBrowserTime := 0
 ;   Group 2: Browser Graphics Acceleration Mode (Single-line live status)
 PublishBasicTasksManifest()
 
-; v2: RegisterTrayMenuHandler maps each manifest HandlerKey to a real function reference - see
+; v2: RegisterTrayMenuHandler maps each manifest HandlerKey to a real function reference: see
 ; SharedHelpers.ahk's TRAY MENU MANIFEST section. Each handler below is already a zero-arg function
 ; (the label-turned-function that dispatches the actual action), so no extra wrapper is needed.
 RegisterTrayMenuHandler("TraySkillsVaultAuto", TraySkillsVaultAuto)
@@ -105,7 +109,7 @@ RegisterTrayMenuHandler("TraySkillsVaultUnlocked", TraySkillsVaultUnlocked)
 RegisterTrayMenuHandler("TrayDRMStreamingModeToggle", ToggleDRMStreamingMode)
 
 ; Microphone Mute Tray Icon & Background Sync
-; v2: Menu,Tray,NoStandard has no separate directive - A_TrayMenu.Delete() alone (never calling
+; v2: Menu,Tray,NoStandard has no separate directive: A_TrayMenu.Delete() alone (never calling
 ; .AddStandard() after) is the v2 equivalent, same pattern as StartupScript.ahk/SharedHelpers.ahk.
 A_TrayMenu.Delete()
 A_TrayMenu.Add("Unmute Microphone", TrayUnmuteMicAction)
@@ -130,10 +134,10 @@ SetTimer(WatchMicrophoneMuteState, -100) ; Fast initial check
 Volume_Up::SoundSetVolume("+10") ;{ <- Volume Up
 Volume_Down::SoundSetVolume("-10") ;{ <- Volume Down
 
-; v2: text()/SplashTextOn dropped entirely - confirmed zero live callers anywhere in this file.
-; SplashTextOn/SplashImage/Progress have no v2 equivalent at all (v2 replaces them fleet-wide with a real Gui,
-; e.g. the badge pattern in SharedHelpers.ahk), and it's not worth building a new mini-Gui for a function nothing calls.
-; Restore from git history (backup/pre-v2-migration tag) if ever needed.
+; v2: text()/SplashTextOn dropped entirely: confirmed zero live callers anywhere in this file, and
+; SplashTextOn/SplashImage/Progress have no v2 equivalent at all (v2 replaces them fleet-wide with a
+; real Gui, e.g. the badge pattern in SharedHelpers.ahk). Not worth building a new mini-Gui for a
+; function nothing calls. Restore from git history (backup/pre-v2-migration tag) if ever needed.
 
 MouseIsOver(WinTitle) {
 	MouseGetPos(, , &Win)
@@ -167,10 +171,10 @@ ToggleFileExt() {
 	}
 }
 
-; v2: v1's Loop,%id% + id%A_Index% dynamic-variable "pseudo-array" pattern has no equivalent at all - v2 dropped
-; construct-a-variable-name-from-a-string entirely. Rewritten around WinGetList()'s real Array return, same pattern
-; already established in SharedHelpers.ahk's CloseBrowserGracefully(). SendMessage (not PostMessage) preserved
-; to match v1's blocking-send semantics exactly.
+; v2: v1's Loop,%id% + id%A_Index% dynamic-variable "pseudo-array" pattern has no equivalent at all -
+; v2 dropped construct-a-variable-name-from-a-string entirely. Rewritten around WinGetList()'s real
+; Array return, same pattern already established in SharedHelpers.ahk's CloseBrowserGracefully().
+; SendMessage (not PostMessage) preserved to match v1's blocking-send semantics exactly.
 RefreshExplorer() {
 	id := WinGetID("ahk_class Progman")
 	SendMessage(0x111, 0x1A220, , , "ahk_id " id)
@@ -183,7 +187,7 @@ RefreshExplorer() {
 
 	for winId in WinGetList("ahk_class #32770") {
 		; v2: ControlGetHwnd throws if the control isn't found (unlike v1's ControlGet, which just left
-		; the output var empty) - not every #32770 dialog has this control, so this must stay a soft miss.
+		; the output var empty): not every #32770 dialog has this control, so this must stay a soft miss.
 		ctrId := 0
 		try ctrId := ControlGetHwnd("SHELLDLL_DefView1", "ahk_id " winId)
 		if ctrId
@@ -356,9 +360,9 @@ SendFilesViaTailscaleAdb(target) {
 	ShowBottomRightBadge("Dispatching " . files.Length . " file(s) to " . targetName . "...", "2D5A88", 2000)
 	fileArgs := ""
 	for idx, path in files {
-		; v2: single-quote delimiters (containing the literal double-quotes directly) instead of v1's doubled-double-quote
-		; escaping - v1's `""""` pattern (open, escaped-quote, close) is ambiguous to v2's parser and fails to load
-		; ("Missing space or operator before this"). Confirmed empirically.
+		; v2: single-quote delimiters (containing the literal double-quotes directly) instead of v1's
+		; doubled-double-quote escaping: v1's `""""` pattern (open, escaped-quote, close) is ambiguous
+		; to v2's parser and fails to load ("Missing space or operator before this"). Confirmed empirically.
 		fileArgs .= ' "' . path . '"'
 	}
 
@@ -470,8 +474,8 @@ OpenNewTab() {
 			; MsgBox("[ Options, " A_PriorHotkey ", Timeout]")
 			Send("^t")
 		} else if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250) {
-			; Activate whichever Chromium browser exists (Brave preferred); if neither is running, launch Brave fresh -
-			; only reached on the double-tap, matching the original gated behavior exactly.
+			; Activate whichever Chromium browser exists (Brave preferred); if neither is running, launch
+			; Brave fresh: only reached on the double-tap, matching the original gated behavior exactly.
 			if !ActivateChromiumBrowserOrRun((*) => Send("^t"), 250) {
 				Run("brave.exe")
 				Sleep(250)
@@ -495,27 +499,32 @@ OpenCalculator() {
 }
 
 RunPowerShellAsAdministrator() {
-	; *RunAs on pwsh.exe or wt.exe directly, Shell.Application ShellExecute on shell:AppsFolder package identity,
-	; and a Highest-run-level Task Scheduler task were all tried and rejected: wt.exe is a packaged/MSIX app and
-	; none of those reliably elevate it, each either spawning and exiting within a second or two, or silently no-oping.
-	; This is a genuine Windows limitation (packaged apps generally can't be launched pre-elevated by external
-	; automation), not fixable by trying yet another external-elevation variant.
-	; *RunAs "...pwsh.exe" DOES elevate reliably on its own, but opens a plain console host window,
-	; not Windows Terminal's tabbed UI.
+	; *RunAs on pwsh.exe or wt.exe directly, Shell.Application ShellExecute on
+	; shell:AppsFolder package identity, and a Highest-run-level Task Scheduler
+	; task were all tried and rejected: wt.exe is a packaged/MSIX app and none
+	; of those reliably elevate it: each either spawns and exits within a
+	; second or two, or silently no-ops. This is a genuine Windows limitation
+	; (packaged apps generally can't be launched pre-elevated by external
+	; automation), not fixable by trying yet another external-elevation
+	; variant. *RunAs "...pwsh.exe" DOES elevate reliably on its own, but
+	; opens a plain console host window, not Windows Terminal's tabbed UI.
 
-	; Launch a Windows Terminal PROFILE that is itself configured to elevate ("PowerShell (Admin)" in this
-	; Terminal install's profile list, normally reached via the dropdown next to the + tab button, or
-	; Ctrl+Shift+6 on this machine's current profile order - that keybinding is NOT stable across
-	; installs/reorders, which is why this targets the profile by name instead).
-	; Terminal handles the elevation internally for a profile marked this way, the same mechanism the
-	; dropdown and Win+X use: the resulting window's title reads "Administrator: PowerShell (Admin)".
+	; Launch a Windows Terminal PROFILE that is itself configured to elevate ("PowerShell
+	; (Admin)" in this Terminal install's profile list, normally reached via the dropdown
+	; next to the + tab button, or Ctrl+Shift+6 on this machine's current profile order,
+	; as that keybinding is NOT stable across installs/reorders, which is why this targets the
+	; profile by name instead). Terminal handles the elevation internally for a
+	; profile marked this way, the same mechanism the dropdown and Win+X use: the
+	; resulting window's title reads "Administrator: PowerShell (Admin)".
 	;
-	; SETUP REQUIRED: none, on a reasonably current Windows Terminal - "<Profile> (Admin)" entries in that
-	; + dropdown are auto-generated by Terminal itself for every detected shell profile, not something
-	; manually added to settings.json. No scheduled task, no registry change, nothing to run in an
-	; elevated terminal first. If "PowerShell (Admin)" is ever missing from that dropdown on some future
-	; machine, that means Terminal itself doesn't see a "PowerShell" profile to generate the admin variant
-	; from (e.g. pwsh not installed, or Terminal is on an old version predating this feature) - fix that, not this line.
+	; SETUP REQUIRED: none, on a reasonably current Windows Terminal: "<Profile> (Admin)"
+	; entries in that + dropdown are auto-generated by Terminal itself for every detected
+	; shell profile, not something manually added to settings.json. No scheduled task, no
+	; registry change, nothing to run in an elevated terminal first. If "PowerShell (Admin)"
+	; is ever missing from that dropdown on some future machine, that means Terminal itself
+	; doesn't see a "PowerShell" profile to generate the admin variant from (e.g. pwsh not
+	; installed, or Terminal is on an old version predating this feature), fix that, not
+	; this line.
 	Run('wt.exe -p "PowerShell (Admin)"')
 }
 
@@ -562,10 +571,10 @@ MuteMic() {
 	return ToggleMicrophoneMute()
 }
 
-; v2: registered as a Menu.Add() callback below - a zero-parameter function used this way hangs at the .Add() call
-; itself (registration time, not click time), confirmed empirically down to the minimal case. `(*)` (accept-and-ignore
-; any positional args) is the fix, same convention already used throughout StartupScript.ahk for every other
-; menu-click/hotkey target.
+; v2: registered as a Menu.Add() callback below: a zero-parameter function used this way hangs at the
+; .Add() call itself (registration time, not click time), confirmed empirically down to the minimal
+; case. `(*)` (accept-and-ignore any positional args) is the fix, same convention already used
+; throughout StartupScript.ahk for every other menu-click/hotkey target.
 TrayUnmuteMicAction(*) {
 	SetMicrophoneMute(false, true)
 }
@@ -613,24 +622,24 @@ WatchMicrophoneMute() {
 ; }
 
 OpenCalendar() {
-	; Sleep, 250 (brave) / Sleep, 100 (chrome) - neither ever actually ran live, so no sleep is passed here.
+	; Sleep, 250 (brave) / Sleep, 100 (chrome): neither ever actually ran live, so no sleep is passed here.
 	ActivateChromiumBrowserOrRun(() => Send("!x"))
 }
 
 OpenChatGPT() {
 	; if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250) {
 	; WinActivate, ahk_exe brave.exe / WinActivate, ahk_exe chrome.exe
-	; Every branch here ran the identical Run() regardless of which browser was found, so the
-	; three-way active/exists-brave/exists-chrome check collapses to one predicate.
+	; Every branch here ran the identical Run() regardless of which browser was found, so the three-way
+	; active/exists-brave/exists-chrome check collapses to one predicate.
 	if (IsChromiumBrowserActive() || GetRunningBrowsers().Length)
 		Run("https://chatgpt.com")
 	; }
 }
 
 CopyToClipboard() {
-	; v1 bailed out here via `if ErrorLevel return` (ClipWait's old error-signaling convention) - v2's ClipWait()
-	; returns a boolean directly instead. Found live to have been dropped entirely during the port (the failure
-	; path silently fell through instead of returning) - restored below. See Migration-Notes.md 18.33.
+	; v1 bailed out here via `if ErrorLevel return` (ClipWait's old error-signaling convention): v2's
+	; ClipWait() returns a boolean directly instead, found live to have been dropped entirely during the
+	; port (the failure path silently fell through instead of returning), restored below.
 	Send("^c")
 	if !ClipWait(1) {
 		; MsgBox("Copying to clipboard failed.")
@@ -873,13 +882,15 @@ ReconnectCloudflare() {
 }
 
 ; Win+Alt+L -> (Script) Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)
-; Scoped MaxThreads override: the handler makes a BLOCKING shell.Run() across 14 folders (tens-hundreds of ms,
-; more under disk/AV contention). Without this, AHK's default (MaxThreadsPerHotkey=1, Buffer=Off) means a second
-; press while the first is still running is SILENTLY DISCARDED - not queued, no error.
-; Buffer On + PerHotkey 1 coalesces rapid re-presses into exactly one extra run, queued (never concurrent -
-; two icacls sweeps racing the same ACLs is unacceptable).
-; Reset back to defaults right after, or every hotkey below would inherit this (positional, forward-applying).
-; v2: #MaxThreadsBuffer takes a boolean (true/false), not v1's On/Off strings - "Parameter #1 invalid"
+; Scoped MaxThreads override: the handler makes a BLOCKING shell.Run() across 14
+; folders (tens-hundreds of ms, more under disk/AV contention). Without this,
+; AHK's default (MaxThreadsPerHotkey=1, Buffer=Off) means a second press while
+; the first is still running is SILENTLY DISCARDED: not queued, no error.
+; Buffer On + PerHotkey 1 coalesces rapid re-presses into exactly one extra
+; run, queued (never concurrent: two icacls sweeps racing the same ACLs is
+; unacceptable). Reset back to defaults right after, or every hotkey below
+; would inherit this (positional, forward-applying).
+; v2: #MaxThreadsBuffer takes a boolean (true/false), not v1's On/Off strings: "Parameter #1 invalid"
 ; otherwise, confirmed empirically.
 #MaxThreadsBuffer true
 #MaxThreadsPerHotkey 1
@@ -938,7 +949,7 @@ AdjustVsCodeZoom(delta) {
 		rep := q . "window.zoomLevel" . q . ": " . currentZoom
 		newContent := RegExReplace(sContent, pattern, rep)
 
-		; v2: "File" is a reserved built-in class name (the FileOpen() return type) - cannot be used as
+		; v2: "File" is a reserved built-in class name (the FileOpen() return type): cannot be used as
 		; a plain variable, so v1's "File" is renamed to "fileObj" here (same fix class as 18.4).
 		fileObj := FileOpen(settingsFile, "w", "UTF-8")
 		if IsObject(fileObj) {
@@ -961,8 +972,8 @@ RemoveVsCodeZoomToolTip() {
 ; AllScripts/Ext4SsdManager.ahk, along with the rest of that feature.
 
 ; [START: Personal Skills Lock/Unlock 3-Way Toggle]
-; Fast phase - the hotkey/tray target. Cycles the in-memory pending mode, shows instant feedback, and arms the settle timer.
-; Nothing here blocks: no mutex, no shell.Run, no filesystem check for the lock/unlock scripts - all of that belongs exclusively to CommitPersonalSkillsLock below.
+; Fast phase: the hotkey/tray target. Cycles the in-memory pending mode, shows instant feedback, and arms the settle timer.
+; Nothing here blocks: no mutex, no shell.Run, no filesystem check for the lock/unlock scripts: all of that belongs exclusively to CommitPersonalSkillsLock below.
 ; A blocking icacls sweep across 14 folders (3-4 icacls calls each) takes ~2.3-3.5s, so this split keeps the toast instant on every press; only the LAST press in a rapid run (g_SkillsDebounceMs of quiet, 2000ms by default) actually triggers the real work.
 TogglePersonalSkillsLock() {
 	global g_SkillsPendingMode, g_SkillsDebounceMs, g_SkillsCommitBusy
@@ -970,7 +981,7 @@ TogglePersonalSkillsLock() {
 
 	; While a commit is actively applying (the amber badge is on screen), the hotkey is a silent no-op.
 	; A fresh press here would otherwise clobber the in-flight commit's own badge and then get its OWN commit rejected by DebounceTryBeginCommit anyway, producing a scrambled badge sequence.
-	; Cancelling the in-flight commit instead was considered and rejected: it's a blocking shell.Run of icacls across all 14 real vault folders, and killing it mid-sweep could leave the vault partially locked/unlocked - an inconsistent security state this project cannot risk.
+	; Cancelling the in-flight commit instead was considered and rejected: it's a blocking shell.Run of icacls across all 14 real vault folders, and killing it mid-sweep could leave the vault partially locked/unlocked: an inconsistent security state this project cannot risk.
 	; See ARCHITECTURE.md.
 	if (g_SkillsCommitBusy)
 		return
@@ -1009,16 +1020,16 @@ TogglePersonalSkillsLock() {
 	else
 		ShowSkillsStatusBadge("[AUTO] Skills Vault (focus-driven)")
 
-	; Arm/re-arm the settle timer (shared helper - see SharedHelpers.ahk for the Reset-timer mechanics).
+	; Arm/re-arm the settle timer (shared helper: see SharedHelpers.ahk for the Reset-timer mechanics).
 	; Only the LAST press in any rapid run ever reaches CommitPersonalSkillsLock, and only once g_SkillsDebounceMs elapses with zero further presses.
-	; v2: bare function reference, never a string or .Bind() result - a fresh closure each call would break
-	; the "only the last press commits" semantics this whole feature depends on.
+	; v2: bare function reference, never a string or .Bind() result: a fresh closure each call would
+	; break the "only the last press commits" semantics this whole feature depends on.
 	DebounceArmTimer(CommitPersonalSkillsLock, g_SkillsDebounceMs)
 }
 
-; Slow "commit" phase - the ONLY place that touches the mutex, the lock/unlock scripts, or the on-disk mode file.
+; Slow "commit" phase: the ONLY place that touches the mutex, the lock/unlock scripts, or the on-disk mode file.
 ; Reached exclusively via the settle timer armed above; nothing else calls this directly.
-; v2: was a Gosub-only label, now a real function - every variable it touches needs an explicit global.
+; v2: was a Gosub-only label, now a real function: every variable it touches needs an explicit global.
 CommitPersonalSkillsLock() {
 	global g_SkillsPendingMode, g_SkillsCommitBusy, g_SkillsDebounceMs
 	global PATH_SKILLS_LOCK_SCRIPT, PATH_SKILLS_UNLOCK_SCRIPT, PATH_PWSH_EXE
@@ -1029,7 +1040,7 @@ CommitPersonalSkillsLock() {
 		return
 
 	; Snapshot now, before the mutex wait and the blocking work below.
-	; The tail compares the LIVE g_SkillsPendingMode against this snapshot to detect whether a press landed during this invocation, so that press is guaranteed a turn instead of silently lost - see the tail comment.
+	; The tail compares the LIVE g_SkillsPendingMode against this snapshot to detect whether a press landed during this invocation, so that press is guaranteed a turn instead of silently lost: see the tail comment.
 	targetMode := g_SkillsPendingMode
 
 	; Cross-process mutex: guards against WatchSkillsLock (a separate OS process in BackgroundAutomations.ahk) reading/acting on the same mode file and running the same lock/unlock scripts concurrently with this commit.
@@ -1067,8 +1078,8 @@ CommitPersonalSkillsLock() {
 				scriptOk := false
 			}
 		} else { ; targetMode = "auto"
-			; Focus check happens HERE, at commit time, not at press time - "auto" has always meant "whatever's focused NOW" elsewhere in this codebase (WatchSkillsLock's own logic), and the toast shown at press time never promised which script would run, just [AUTO].
-			; modeFile is written to "auto" regardless of which (if any) branch below actually runs - unconditional, matching the pre-debounce behavior.
+			; Focus check happens HERE, at commit time, not at press time: "auto" has always meant "whatever's focused NOW" elsewhere in this codebase (WatchSkillsLock's own logic), and the toast shown at press time never promised which script would run, just [AUTO].
+			; modeFile is written to "auto" regardless of which (if any) branch below actually runs: unconditional, matching the pre-debounce behavior.
 			isUnlocked := IsSkillsVaultUnlocked()
 			curExe := WinGetProcessName("A")
 			if (curExe = "claude.exe") {
@@ -1086,7 +1097,7 @@ CommitPersonalSkillsLock() {
 					HideBottomRightBadge()
 				}
 			}
-			; Neither app focused (or its script is missing, or already in requested state): fall through silently - no error, no script, but the mode-file write below still happens.
+			; Neither app focused (or its script is missing, or already in requested state): fall through silently: no error, no script, but the mode-file write below still happens.
 		}
 
 		if (scriptOk) {
@@ -1101,9 +1112,9 @@ CommitPersonalSkillsLock() {
 		ReleaseNamedMutex(hMutex)
 	}
 
-	; Reconciliation (shared helper - see SharedHelpers.ahk): if the live pending value still equals what we just pursued, nothing newer happened - drop back to the "" sentinel so the next press re-seeds from disk instead of trusting this value forever.
+	; Reconciliation (shared helper: see SharedHelpers.ahk): if the live pending value still equals what we just pursued, nothing newer happened: drop back to the "" sentinel so the next press re-seeds from disk instead of trusting this value forever.
 	; If it no longer matches, at least one more press landed while this invocation ran (most commonly: while the blocking shell.Run above was still mid-flight, seconds in).
-	; That intent can't safely cancel an already-dispatched icacls sweep, so it waits and gets its own turn immediately after instead of being dropped - re-armed once more so it still gets applied. Also clears g_SkillsCommitBusy.
+	; That intent can't safely cancel an already-dispatched icacls sweep, so it waits and gets its own turn immediately after instead of being dropped: re-armed once more so it still gets applied. Also clears g_SkillsCommitBusy.
 	DebounceEndCommit(&g_SkillsPendingMode, targetMode, &g_SkillsCommitBusy, CommitPersonalSkillsLock, g_SkillsDebounceMs)
 }
 
@@ -1181,10 +1192,10 @@ TraySkillsVaultStatus() {
 		ShowSkillsStatusBadge("[AUTO] Skills Vault (focus-driven)")
 }
 
-; v2: no longer referenced by PublishBasicTasksManifest()'s manifest list since the single cycling tray item was
-; replaced by the 3 dedicated Auto/Locked/Unlocked items above (commit cbaeb08). Kept as a real function for
-; parity/Win+Alt+L's own use of TogglePersonalSkillsLock() directly, but this specific wrapper is currently
-; unreferenced dead code.
+; v2: no longer referenced by PublishBasicTasksManifest()'s manifest list since the single cycling tray
+; item was replaced by the 3 dedicated Auto/Locked/Unlocked items above (commit cbaeb08): kept as a
+; real function for parity/Win+Alt+L's own use of TogglePersonalSkillsLock() directly, but this specific
+; wrapper is currently unreferenced dead code.
 TraySkillsVaultCycle() {
 	TogglePersonalSkillsLock()
 }
@@ -1195,9 +1206,9 @@ UpdateSkillsTrayStatus() {
 
 ; HandleRemoteTrayMenuTriggerBT replaced by the shared HandleRemoteTrayMenuTrigger
 ; in SharedHelpers.ahk (the BT suffix existed only to avoid a name collision
-; between two file-local copies - no longer needed with one shared function).
+; between two file-local copies: no longer needed with one shared function).
 
-; ShowSkillsStatusBadge itself now lives in SharedHelpers.ahk - both this
+; ShowSkillsStatusBadge itself now lives in SharedHelpers.ahk: both this
 ; file and BackgroundAutomations.ahk's WatchSkillsLock call it, so the
 ; [LOCKED]/[UNLOCKED]/[AUTO]/error color mapping is defined exactly once.
 ; [END: Personal Skills Lock/Unlock 3-Way Toggle]
@@ -1263,11 +1274,11 @@ UpdateDRMTrayStatus() {
 	PublishBasicTasksManifest()
 }
 
-; Deliberately does NOT call the shared GetActiveBrowser() despite the surface-level duplication below - this runs
-; on a 250ms hot-loop timer, and GetActiveBrowser()'s Z-order-scanning fallback would then run an unconditional
-; DllCall walk 4x/second the entire time neither browser has focus (e.g. while working in any other app).
-; That's both wasteful and would start writing g_LastActiveBrowser from a merely-topmost-but-unfocused window
-; instead of only a genuinely active one. Keep this narrow and cheap on purpose.
+; Deliberately does NOT call the shared GetActiveBrowser() despite the surface-level duplication below -
+; this runs on a 250ms hot-loop timer, and GetActiveBrowser()'s Z-order-scanning fallback would then run
+; an unconditional DllCall walk 4x/second the entire time neither browser has focus (e.g. while working in
+; any other app), which is both wasteful and would start writing g_LastActiveBrowser from a merely-topmost-
+; but-unfocused window instead of only a genuinely active one. Keep this narrow and cheap on purpose.
 TrackActiveBrowser() {
 	global g_LastActiveBrowser, g_LastActiveBrowserTime
 	if WinActive("ahk_exe brave.exe") {

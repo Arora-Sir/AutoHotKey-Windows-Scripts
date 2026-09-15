@@ -139,7 +139,7 @@ This document is the engineering reference for the ext4 external SSD automation 
 
 - **The Symptom**: When clicking Windows taskbar eject or the unmount hotkey, the first click would unmount the filesystem but fail to power down the hardware. The user was forced to click eject a second time for Windows to actually complete the safe removal.
 - **Diagnosis**:
-  - `schtasks /run` is non-blocking - it merely queues the task in Windows Task Scheduler and returns immediately.
+  - `schtasks /run` is non-blocking: it merely queues the task in Windows Task Scheduler and returns immediately.
   - `unmount_wsl_ssd.ps1` was proceeding to the eject step and calling `CM_Request_Device_EjectW` before `wsl.exe --unmount` had actually finished detaching the physical drive.
   - Because Hyper-V was still in the middle of closing its SCSI handle, Windows PnP vetoed the first eject call. By the time `wsl.exe --unmount` finished a moment later, the user's second click found the disk already free, so only the second attempt succeeded.
 - **The Resolution**:

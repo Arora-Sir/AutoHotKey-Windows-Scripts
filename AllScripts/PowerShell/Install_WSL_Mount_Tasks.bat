@@ -1,6 +1,6 @@
 @echo off
 :: =============================================================================
-:: Install_WSL_Mount_Tasks.bat - Self-Elevating Installer for WSL SSD Scheduled Tasks
+:: Install_WSL_Mount_Tasks.bat: Self-Elevating Installer for WSL SSD Scheduled Tasks
 :: =============================================================================
 
 :: Check for Administrator privileges

@@ -1,3 +1,33 @@
+<#
+.SYNOPSIS
+    Resilient wireless file transfer engine to Android devices (S24 Ultra, Tab S10 Ultra) via ADB.
+
+.DESCRIPTION
+    Transfers files wirelessly to target Android devices with multi-layer resilience:
+      1. Non-blocking 500ms TCP socket pre-check (eliminates native 21s adb freeze)
+      2. Dual-IP failover: Tailscale WireGuard IP -> Local Wi-Fi LAN IP
+      3. Dynamic IP lookup from Sefirah database if static LAN IP changed
+      4. Non-destructive duplicate auto-numbering (file.ext -> file (1).ext)
+      5. O(1) in-memory collision detection for multi-file batches
+      6. URI-encoded Android MediaScanner broadcast (space and symbol safe)
+      7. Sefirah GUI failover if wireless debugging is completely offline
+
+.PARAMETER Target
+    Target device identifier: "phone", "s24", "s24_ultra", "tablet", "tab", or "tab_s10".
+
+.PARAMETER TailscaleIp
+    Optional override for target device Tailscale IP:port.
+
+.PARAMETER LanIp
+    Optional override for target device Local Wi-Fi LAN IP:port.
+
+.PARAMETER AdbPath
+    Optional override path to adb.exe binary.
+
+.PARAMETER Files
+    One or more file paths to transfer. If omitted, files are resolved from active Explorer window or clipboard.
+#>
+
 param(
     [Parameter(Mandatory = $true, Position = 0)]
     [ValidateSet("phone", "s24", "s24_ultra", "tablet", "tab", "tab_s10")]
@@ -15,19 +45,6 @@ param(
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Files
 )
-
-# =============================================================================
-# SendToDevice_Adb.ps1: Resilient Wireless File Transfer Engine
-# =============================================================================
-# Features:
-# 1. Non-blocking 500ms TCP socket pre-check (eliminates native 21s adb freeze)
-# 2. Dual-IP failover: Tailscale WireGuard IP -> Local Wi-Fi LAN IP
-# 3. Dynamic IP lookup from Sefirah database if static LAN IP changed
-# 4. Non-destructive duplicate auto-numbering (file.ext -> file (1).ext)
-# 5. O(1) in-memory collision detection for multi-file batches
-# 6. URI-encoded Android MediaScanner broadcast (space and symbol safe)
-# 7. Sefirah GUI failover if wireless debugging is completely offline
-# =============================================================================
 
 # Resolve ADB executable
 $adbExe = $AdbPath
@@ -72,7 +89,7 @@ if ($Target -in @("phone", "s24", "s24_ultra")) {
 if (-not $targetTailscaleIp -and $Target -notin @("phone", "s24", "s24_ultra")) {
     $targetTailscaleIp = Get-LocalAhkVar "SUNSHINE_TABLET_TAILSCALE_IP"
     if ($targetTailscaleIp -and $targetTailscaleIp -notmatch ":\d+$") {
-        $targetTailscaleIp = "$targetTailscaleIp`:5555"
+        $targetTailscaleIp = "${targetTailscaleIp}:5555"
     }
 }
 

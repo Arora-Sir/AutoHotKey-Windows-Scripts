@@ -1,54 +1,39 @@
-# =============================================================================
-# Simple Sticky Notes (ssn.exe) Dual Deterministic Layout Engine
-# =============================================================================
-# Solves the multi-resolution desktop layout scrambling issue between:
-# - Host Laptop (DISPLAY1): 1920x1080 @ 125% DPI scale = 1536 x 864 logical DIP workspace
-# - Tablet (DISPLAY4):     2560x1600 @ 175% DPI scale = 1463 x 914 logical DIP workspace
-#
-# Mathematical Root Cause:
-# Notes arranged across 4 columns on the laptop extend to X=1536 (flush against the right edge).
-# When switching to Tablet mode, the tablet's logical screen is 73 pixels narrower (1463px vs 1536px).
-# Any note with X + Width > 1463 extends off-screen. Simple Sticky Notes detects Column 3 is off-screen
-# and forces it to slide left, colliding with Column 2, which in turn collides with Column 1.
-#
-# Dual Deterministic Layouts (Pixel-by-Pixel):
-#
-# 1. LAPTOP LAYOUT (Logical workspace: 1536 x 864):
-#    - Column 0 (Far Left):
-#      * 1 note: W=240, H=240 -> X=0, Y=576 (bottom edge = 816px)
-#    - Column 1:
-#      * Top note:    W=240, H=120 -> X=728, Y=0
-#      * Bottom note: W=240, H=240 -> X=728, Y=120 (bottom edge = 360px)
-#      * Right edge: 728 + 240 = 968px (flush against Column 2)
-#    - Column 2:
-#      * Top note:    W=300, H=240 -> X=968, Y=0
-#      * Middle note: W=300, H=183 -> X=968, Y=240
-#      * Bottom note: W=300, H=236 -> X=968, Y=423 (bottom edge = 659px)
-#      * Right edge: 968 + 300 = 1268px (flush against Column 3)
-#    - Column 3:
-#      * 'Today' note (expanded): W=268, H=548 -> X=1268, Y=0
-#      * Minimized notes: W=268, H=32 -> X=1268, stacked below Today at Y=548, 580, 612, 644, 676
-#      * Right edge: 1268 + 268 = 1536px (flush against laptop right screen boundary)
-#
-# 2. TABLET LAYOUT (Logical workspace: 1463 x 914):
-#    - Column 0 (Far Left):
-#      * 1 note: W=240, H=240 -> X=0, Y=576
-#    - Column 1:
-#      * Top note:    W=240, H=120 -> X=640, Y=0
-#      * Bottom note: W=240, H=240 -> X=640, Y=120
-#      * Right edge: 640 + 240 = 880px (5px gap before Column 2)
-#    - Column 2:
-#      * Top note:    W=300, H=240 -> X=885, Y=0
-#      * Middle note: W=300, H=183 -> X=885, Y=240
-#      * Bottom note: W=300, H=236 -> X=885, Y=423
-#      * Right edge: 885 + 300 = 1185px (5px gap before Column 3)
-#    - Column 3:
-#      * 'Today' note (expanded): W=268, H=548 -> X=1190, Y=0
-#      * Minimized notes: W=268, H=32 -> X=1190, stacked below Today at Y=548, 580, 612, 644, 676
-#      * Right edge: 1190 + 268 = 1458px (safe 5px margin before 1463px tablet edge, zero cut-off)
+<#
+.SYNOPSIS
+    Simple Sticky Notes (ssn.exe) dual deterministic layout engine.
+
+.DESCRIPTION
+    Solves multi-resolution desktop layout scrambling between:
+      - Host Laptop (DISPLAY1): 1920x1080 @ 125% DPI scale = 1536 x 864 logical DIP workspace
+      - Tablet (DISPLAY4): 2560x1600 @ 175% DPI scale = 1463 x 914 logical DIP workspace
+
+    Mathematical Root Cause:
+      Notes arranged across 4 columns on the laptop extend to X=1536 (flush against right edge).
+      When switching to Tablet mode, the tablet's logical screen is 73 pixels narrower (1463px vs 1536px).
+      Any note with X + Width > 1463 extends off-screen. Simple Sticky Notes detects Column 3 is off-screen
+      and forces it to slide left, colliding with Column 2, which in turn collides with Column 1.
+
+    Dual Deterministic Layouts (Pixel-by-Pixel):
+      1. LAPTOP LAYOUT (Logical workspace: 1536 x 864):
+         - Column 0 (Far Left): W=240, H=240 -> X=0, Y=576
+         - Column 1: Top note W=240, H=120 -> X=728, Y=0; Bottom note W=240, H=240 -> X=728, Y=120
+         - Column 2: Top W=300, H=240 -> X=968, Y=0; Middle W=300, H=183 -> X=968, Y=240; Bottom W=300, H=236 -> X=968, Y=423
+         - Column 3: 'Today' W=268, H=548 -> X=1268, Y=0; Minimized W=268, H=32 -> X=1268 stacked below Today
+      2. TABLET LAYOUT (Logical workspace: 1463 x 914):
+         - Column 0 (Far Left): W=240, H=240 -> X=0, Y=576
+         - Column 1: Top note W=240, H=120 -> X=640, Y=0; Bottom note W=240, H=240 -> X=640, Y=120
+         - Column 2: Top W=300, H=240 -> X=885, Y=0; Middle W=300, H=183 -> X=885, Y=240; Bottom W=300, H=236 -> X=885, Y=423
+         - Column 3: 'Today' W=268, H=548 -> X=1190, Y=0; Minimized W=268, H=32 -> X=1190 stacked below Today (safe 5px margin before 1463px edge)
+
+.PARAMETER Mode
+    Layout mode to apply: "Auto" (detects active primary display), "Tablet", or "Laptop".
+
+.PARAMETER DelayMs
+    Optional startup delay in milliseconds before repositioning windows.
+#>
 
 param(
-    [string]$Mode = "Auto", # "Auto", "Tablet", "Laptop"
+    [string]$Mode = "Auto",
     [int]$DelayMs = 0
 )
 

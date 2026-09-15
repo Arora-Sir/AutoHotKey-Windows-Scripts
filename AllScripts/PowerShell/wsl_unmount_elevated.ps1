@@ -1,6 +1,14 @@
-# =============================================================================
-# wsl_unmount_elevated.ps1 - Elevated Detach for WSL ext4 Automation
-# =============================================================================
+<#
+.SYNOPSIS
+    Elevated physical disk detachment and completion signaling for WSL2 ext4 storage.
+
+.DESCRIPTION
+    Invoked with Administrator privileges (via Scheduled Task WSL_Unmount_PixelSSD or RunAs) to:
+      1. Detach PHYSICALDRIVE from WSL2 host
+      2. Handle dirty detach fallback via wsl.exe --shutdown reset
+      3. Signal completion via %TEMP%\wsl_unmount_done.flag to prevent race with hardware ejection
+#>
+
 . "$PSScriptRoot\ssd_common.ps1"
 
 $logPath = Join-Path (Split-Path -Parent $PSScriptRoot) "Logs\pixel_ssd_mount.log"

@@ -1,4 +1,6 @@
 #Requires AutoHotkey v2.0
+; Suppress individual child tray icon so only StartupScript.ahk's master icon is visible.
+#NoTrayIcon
 ; v2: #Persistent removed as a directive, replaced by the Persistent() function (see LocalPaths.ahk for the empirical note on why).
 Persistent()
 SendMode("Input")
@@ -8,25 +10,25 @@ SetWorkingDir(A_ScriptDir)
 #SingleInstance force
 DetectHiddenWindows(true)
 
-; v2 fleet control protocol: the g_FleetControlMsg/OnMessage/HandleFleetControlMessage definition now lives
-; only in SharedHelpers.ahk (included above) - this file used to carry its own independent copy, which broke
-; load with "function declaration conflicts with an existing Func" the moment both this file's SharedHelpers.ahk
-; include and its own copy landed in the same merged script.
-; See LocalPaths.ahk for the full explanation of why this consolidation was needed.
+; v2 fleet control protocol: the g_FleetControlMsg/OnMessage/HandleFleetControlMessage definition now
+; lives only in SharedHelpers.ahk (included above): this file used to carry its own independent copy,
+; which broke load with "function declaration conflicts with an existing Func" the moment both this
+; file's SharedHelpers.ahk include and its own copy landed in the same merged script. See LocalPaths.ahk
+; for the full explanation of why this consolidation was needed.
 
 ; =============================================================================
-; WSL EXT4 BACKUP SSD - MOUNT, UNMOUNT, AUTO-MOUNT, SAFE EJECT
+; WSL EXT4 BACKUP SSD: MOUNT, UNMOUNT, AUTO-MOUNT, SAFE EJECT
 ;
 ; Everything related to the ext4 backup SSD lives in this one script: the manual Win+Alt+M/U hotkeys, the auto-mount-on-plug watcher, the wake-from-sleep remount check, the tray menu items, and the Windows "Problem Ejecting" dialog auto-resolver.
-; Previously split across BasicTasks.ahk (hotkeys) and BackgroundAutomations.ahk (everything else) purely because both needed the same mount/unmount logic - not because this is a cross-cutting utility like the debounce pattern or the badge system (those are genuinely shared across unrelated features).
+; Previously split across BasicTasks.ahk (hotkeys) and BackgroundAutomations.ahk (everything else) purely because both needed the same mount/unmount logic: not because this is a cross-cutting utility like the debounce pattern or the badge system (those are genuinely shared across unrelated features).
 ; Consolidated here to match the single-feature-script convention already used by Brightness.ahk/ClosePrograms.ahk.
 ;
-; MountExt4Ssd()/UnmountExt4Ssd() are defined directly below in this file - the two divergences between the old BasicTasks.ahk/BackgroundAutomations.ahk copies (debounce thresholds, the showFeedback parameter) were already reconciled when they were briefly staged in SharedHelpers.ahk; see the comment above each function for that history.
+; MountExt4Ssd()/UnmountExt4Ssd() are defined directly below in this file: the two divergences between the old BasicTasks.ahk/BackgroundAutomations.ahk copies (debounce thresholds, the showFeedback parameter) were already reconciled when they were briefly staged in SharedHelpers.ahk; see the comment above each function for that history.
 ; SharedHelpers.ahk still supplies RunSilentPowerShell()/ShowTimedToolTip() (generic infrastructure) via the #Include below.
 ; =============================================================================
 
 ; Auto-mount & Watchdog for ext4 Backup SSD
-; v2: OnMessage's name-string registration mode is gone - pass the bare function reference (no quotes) instead.
+; v2: OnMessage's name-string registration mode is gone: pass the bare function reference (no quotes) instead.
 OnMessage(0x0219, WM_DEVICECHANGE_SSD)
 ; v2: SetTimer, LabelName, Period can never target a label in v2. ReconcileExt4SsdState and AutoResolveEjectConflict
 ; (and ResumeExt4SsdOnWake, further down) are now real functions, passed below by bare reference, no quotes/parens.
@@ -34,12 +36,12 @@ SetTimer(ReconcileExt4SsdState, 5000)
 SetTimer(ReconcileExt4SsdState, -500) ; Fast initial check on boot/reload
 SetTimer(AutoResolveEjectConflict, 400) ; Auto-intercept Windows 'Problem Ejecting' dialog
 ; v2: top-level script-scope assignment is already implicitly global (matches SharedHelpers.ahk's g_BadgeGui/g_TrayMenuHandlers
-; convention, which drops the redundant `global` keyword at this scope) - and gives this internally-shared state its
+; convention, which drops the redundant `global` keyword at this scope): and gives this internally-shared state its
 ; required top-level initialization so no function below can ever see it as unset.
 g_Ext4SsdMounted := false
 
 ; Independent WM_POWERBROADCAST listener for wake-from-sleep remount checks.
-; Windows broadcasts this to every listener, not just one - BackgroundAutomations.ahk has its own separate listener for Sefirah's reconnect logic; no cross-process signaling is needed for two scripts to each react to the same system event.
+; Windows broadcasts this to every listener, not just one: BackgroundAutomations.ahk has its own separate listener for Sefirah's reconnect logic; no cross-process signaling is needed for two scripts to each react to the same system event.
 OnMessage(0x0218, SsdManager_WM_POWERBROADCAST)
 
 ; -----------------------------------------------------------------------------
@@ -62,18 +64,17 @@ PublishTrayMenuManifest([ ["Mount Pixel SSD (P:)", "TrayMountPixelSsd"]
 return ; End of auto-execute section
 
 ; -----------------------------------------------------------------------------
-; WSL EXT4 BACKUP SSD - mount / unmount
+; WSL EXT4 BACKUP SSD: mount / unmount
 ; -----------------------------------------------------------------------------
 ; Previously duplicated in BasicTasks.ahk (manual hotkey path) and BackgroundAutomations.ahk (auto-mount-on-plug watcher) with two real divergences, both reconciled here rather than just picked arbitrarily:
-;   - debounce thresholds differed per operation (looked like accidental drift, not intentional design).
+;: debounce thresholds differed per operation (looked like accidental drift, not intentional design).
 ;     The LARGER of each pair is kept, since a longer cooldown is strictly safer against a double-trigger race than a marginally snappier response is worth.
-;   - the manual path showed a tooltip on manual mount, the silent auto-mount-on-plug path never did (a real, intentional behavioral fork, documented at its own call site as "100% silently in background").
+;: the manual path showed a tooltip on manual mount, the silent auto-mount-on-plug path never did (a real, intentional behavioral fork, documented at its own call site as "100% silently in background").
 ;     showFeedback is its own independent parameter (mirroring how UnmountExt4Ssd already had one), decoupled from openExplorer, so each caller states its own intent explicitly and neither existing caller's behavior changes.
 
 ; Matches mount_wsl_ssd.ps1's/unmount_wsl_ssd.ps1's own 12s stale-lock self-recovery threshold, with a small
-; margin (15s) since this check runs before the .ps1 even starts.
-; A lock file older than that means whatever process created it died without cleaning up (crash,
-; Stop-Process, power loss) - treat it as gone.
+; margin (15s) since this check runs before the .ps1 even starts. A lock file older than that means whatever
+; process created it died without cleaning up (crash, Stop-Process, power loss): treat it as gone.
 IsSsdLockActive(lockPath) {
     if (!FileExist(lockPath))
         return false
@@ -82,11 +83,11 @@ IsSsdLockActive(lockPath) {
 
 MountExt4Ssd(openExplorer := false, showFeedback := false) {
     global g_Ext4SsdMounted, EXT4_SSD_LABEL
-    ; Guard: do not spawn if mount or unmount is actively in progress. Matches the same 12s staleness threshold
-    ; mount_wsl_ssd.ps1/unmount_wsl_ssd.ps1 use for their own lock self-recovery.
-    ; This AHK-side guard used to check existence only, so a stale lock (left behind by a crashed/killed
-    ; PowerShell process) permanently blocked every future mount/unmount attempt with zero feedback, since the
-    ; .ps1's own recovery logic never got a chance to run at all.
+    ; Guard: do not spawn if mount or unmount is actively in progress. Matches the same 12s staleness
+    ; threshold mount_wsl_ssd.ps1/unmount_wsl_ssd.ps1 use for their own lock self-recovery: this AHK-side
+    ; guard used to check existence only, so a stale lock (left behind by a crashed/killed PowerShell
+    ; process) permanently blocked every future mount/unmount attempt with zero feedback, since the .ps1's
+    ; own recovery logic never got a chance to run at all.
     if (IsSsdLockActive(A_Temp "\mount_wsl_ssd.lock") || IsSsdLockActive(A_Temp "\unmount_wsl_ssd.lock"))
         return
 
@@ -110,12 +111,12 @@ MountExt4Ssd(openExplorer := false, showFeedback := false) {
     RunSilentPowerShell(psScript, args)
 
     if (showFeedback) {
-        ; v2 gotcha: EXT4_SSD_LABEL comes from LocalPaths.ahk and was read in a truthy context - a global with no
+        ; v2 gotcha: EXT4_SSD_LABEL comes from LocalPaths.ahk and was read in a truthy context: a global with no
         ; script-reachable assignment hangs at load time instead of falling back gracefully like v1 did. IsSet() guards it.
         label := (IsSet(EXT4_SSD_LABEL) && EXT4_SSD_LABEL) ? EXT4_SSD_LABEL : "Linux Backup SSD"
-        ; Bottom-right badge (matches the mic-mute/display-switch badge style elsewhere in the fleet) - the
-        ; auto-mount-on-hotplug path previously gave no toast/badge at all, just a silently-opened Explorer window,
-        ; so hotplugging the drive looked like nothing had happened until the folder popped up.
+        ; Bottom-right badge (matches the mic-mute/display-switch badge style elsewhere in the fleet): the
+        ; auto-mount-on-hotplug path previously gave no toast/badge at all, just a silently-opened Explorer
+        ; window, so hotplugging the drive looked like nothing had happened until the folder popped up.
         ShowBottomRightBadge("Mounted " label, "1A6E3C", 2500)
     }
 }
@@ -155,15 +156,15 @@ UnmountExt4Ssd(showFeedback := false, onlyIfDisconnected := false) {
 
 ; wParam 18 (0x12) = PBT_APMRESUMEAUTOMATIC (any system wake, incl. Modern Standby)
 ; wParam  7 (0x07) = PBT_APMRESUMESUSPEND    (user-initiated resume after suspend)
-; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4 declared
-; parameters and no `*` catch-all - confirmed empirically this session (Migration-Notes.md 18.16/18.17).
-; `*` is the fix.
+; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4
+; declared parameters and no `*` catch-all: confirmed empirically this session (Migration-Notes.md
+; 18.16/18.17). `*` is the fix.
 SsdManager_WM_POWERBROADCAST(wParam, lParam, *) {
     if (wParam = 18 || wParam = 7)
         SetTimer(ResumeExt4SsdOnWake, -4500) ; check/restore ext4 SSD mount 4.5s after wake
 }
 
-; v2: was a Gosub-only label (v1 labels execute in the same implicit global scope as auto-execute) - now a real
+; v2: was a Gosub-only label (v1 labels execute in the same implicit global scope as auto-execute): now a real
 ; function, which defaults to local scope. Only calls MountExt4Ssd here, so no global declaration is actually needed.
 ResumeExt4SsdOnWake() {
     MountExt4Ssd(false) ; Silent reconnect check after laptop sleep/wake
@@ -185,11 +186,11 @@ ResumeExt4SsdOnWake() {
 ; [START: WSL ext4 Backup SSD Auto-Mount]
 ;
 ; Automates mounting and unmounting of the ext4 backup SSD
-;   - Auto-mounts on boot / AHK reload if the SSD is already connected
-;   - Auto-mounts when plugged in (DBT_DEVICEARRIVAL 0x8000 via WM_DEVICECHANGE)
-;   - Cleans up shortcut and unmounts on unplug (DBT_DEVICEREMOVECOMPLETE 0x8004)
-;   - Two-tier recovery: mounts attached VM block device as guest root, or elevates wsl --mount
-;   - Resolves PhysicalDrive number dynamically and creates Network Shortcut
+;: Auto-mounts on boot / AHK reload if the SSD is already connected
+;: Auto-mounts when plugged in (DBT_DEVICEARRIVAL 0x8000 via WM_DEVICECHANGE)
+;: Cleans up shortcut and unmounts on unplug (DBT_DEVICEREMOVECOMPLETE 0x8004)
+;: Two-tier recovery: mounts attached VM block device as guest root, or elevates wsl --mount
+;: Resolves PhysicalDrive number dynamically and creates Network Shortcut
 ; =============================================================================
 
 WM_DEVICECHANGE_SSD(wParam, lParam, msg, hwnd) {
@@ -201,7 +202,7 @@ WM_DEVICECHANGE_SSD(wParam, lParam, msg, hwnd) {
     return true
 }
 
-; v2: was a Gosub-only label (implicit global scope); now a real function - g_Ext4SsdMounted and EXT4_SSD_DRIVE_LETTER
+; v2: was a Gosub-only label (implicit global scope); now a real function: g_Ext4SsdMounted and EXT4_SSD_DRIVE_LETTER
 ; both need explicit global declarations here since a function's default scope is local, unlike a label's.
 ReconcileExt4SsdState() {
     global g_Ext4SsdMounted, EXT4_SSD_DRIVE_LETTER
@@ -209,10 +210,10 @@ ReconcileExt4SsdState() {
     ejectedFlag := A_Temp "\pixel_ssd_ejected.flag"
     isManuallyEjected := FileExist(ejectedFlag)
 
-    ; v2 gotcha: EXT4_SSD_DRIVE_LETTER comes from LocalPaths.ahk - same IsSet() guard as EXT4_SSD_LABEL above.
+    ; v2 gotcha: EXT4_SSD_DRIVE_LETTER comes from LocalPaths.ahk: same IsSet() guard as EXT4_SSD_LABEL above.
     driveLetter := (IsSet(EXT4_SSD_DRIVE_LETTER) && EXT4_SSD_DRIVE_LETTER) ? EXT4_SSD_DRIVE_LETTER : "P:"
     targetDrive := SubStr(driveLetter, 1, 1) ":"
-    ; v2: DriveGet's many subcommands were split into dedicated functions - the Type subcommand is now DriveGetType(Path),
+    ; v2: DriveGet's many subcommands were split into dedicated functions: the Type subcommand is now DriveGetType(Path),
     ; returning the type string directly instead of writing to an OutputVar.
     pType := DriveGetType(targetDrive)
     isDriveMapped := (pType = "Network")
@@ -232,8 +233,8 @@ ReconcileExt4SsdState() {
         ; Drive mapping state is queried non-blockingly via DriveGetType above.
         if (!isDriveMapped && !isManuallyEjected) {
             g_Ext4SsdMounted := true
-            ; showFeedback=true so plugging the drive in fires the bottom-right badge, not just a silently opened
-            ; Explorer window - found live, the drive used to auto-mount with zero visible confirmation.
+            ; showFeedback=true so plugging the drive in fires the bottom-right badge, not just a silently
+            ; opened Explorer window: found live, the drive used to auto-mount with zero visible confirmation.
             MountExt4Ssd(true, true)
         }
         else if (isDriveMapped) {
@@ -276,11 +277,11 @@ TrayEjectPixelSsd() {
 ; Auto-intercept Windows 'Problem Ejecting USB Attached SCSI (UAS) Mass Storage Device' dialog.
 ; When the user clicks Windows 'Safely Remove Hardware' on the taskbar while WSL has the drive open, Windows displays this #32770 dialog.
 ; This watcher catches the dialog within 400ms, closes it immediately, and runs our clean unmount + hardware safe ejection pipeline so the user is never stuck with the error!
-; v2: was a Gosub-only label; now a real function - EXT4_SSD_LABEL needs an explicit global declaration here.
+; v2: was a Gosub-only label; now a real function: EXT4_SSD_LABEL needs an explicit global declaration here.
 AutoResolveEjectConflict() {
     global EXT4_SSD_LABEL
     if WinExist("Problem Ejecting ahk_class #32770") {
-        ; v2: WinGetTitle's OutputVar param is gone - the title is the function's return value now.
+        ; v2: WinGetTitle's OutputVar param is gone: the title is the function's return value now.
         eTitle := WinGetTitle("Problem Ejecting ahk_class #32770")
         if (InStr(eTitle, "USB Attached SCSI") || InStr(eTitle, "Mass Storage")) {
             WinClose("Problem Ejecting ahk_class #32770")
@@ -295,7 +296,7 @@ AutoResolveEjectConflict() {
 TrayRegisterAdminTasks() {
     batScript := A_ScriptDir "\PowerShell\Install_WSL_Mount_Tasks.bat"
     ; v2: Run, *RunAs "%batScript%" (command syntax) -> Run() function call. The *RunAs elevation verb stays embedded
-    ; in the Target string exactly as v1 used it - AutoHotkey has no separate built-in RunAs command in either version.
+    ; in the Target string exactly as v1 used it: AutoHotkey has no separate built-in RunAs command in either version.
     Run('*RunAs "' batScript '"')
 }
 ; [END: WSL ext4 Backup SSD Auto-Mount]

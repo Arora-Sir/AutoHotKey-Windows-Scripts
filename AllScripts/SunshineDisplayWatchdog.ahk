@@ -6,7 +6,7 @@ SetWorkingDir(A_ScriptDir)
 #Include %A_ScriptDir%\SharedHelpers.ahk ; Supplies IsExternalDisplayActive(), ShowBottomRightBadge()
 #SingleInstance force
 DetectHiddenWindows(true)
-; v2: #Persistent is not a directive - it hangs the process at load time. Persistent() the function is the
+; v2: #Persistent is not a directive: it hangs the process at load time. Persistent() the function is the
 ; proven-working replacement (see Migration-Notes.md and LocalPaths.ahk for the full empirical note).
 Persistent()
 
@@ -15,22 +15,22 @@ Persistent()
 ; -----------------------------------------------------------------------------
 ; Consolidated control center for Windows display topologies and Sunshine streaming:
 ; 1. Display Topologies:
-;    - PC Screen Only: Internal 1080p @ 144Hz panel (Win+Alt+P, mouse speed 10)
-;    - Tablet Only: Second screen dummy plug 2560x1600 @ 120Hz (Win+Alt+P, mouse speed 20)
-;    - Extend Displays: Laptop Main + Tablet Extended (Win+Alt+Shift+P, mouse speed 10)
-;    - Duplicate Displays: Mirrored screens (Win+Alt+Shift+P, mouse speed 20)
+;: PC Screen Only: Internal 1080p @ 144Hz panel (Win+Alt+P, mouse speed 10)
+;: Tablet Only: Second screen dummy plug 2560x1600 @ 120Hz (Win+Alt+P, mouse speed 20)
+;: Extend Displays: Laptop Main + Tablet Extended (Win+Alt+Shift+P, mouse speed 10)
+;: Duplicate Displays: Mirrored screens (Win+Alt+Shift+P, mouse speed 20)
 ; 2. Instant Mouse Speed Synchronization:
-;    - Manual hotkeys switch mouse speed in 0 milliseconds.
-;    - Active topology guard: When on PC Screen Only, watchdog NEVER forces speed 20.
+;: Manual hotkeys switch mouse speed in 0 milliseconds.
+;: Active topology guard: When on PC Screen Only, watchdog NEVER forces speed 20.
 ;      Boosts mouse speed to 20 during active streaming across default mirror, duplicate, and tablet modes.
-;    - Session-Aware Manual Override Lock: manual toggles hold indefinitely until stream disconnect or a
-;      genuinely fresh reconnection - not a fixed grace window.
+;: Session-Aware Manual Override Lock: manual toggles hold indefinitely until stream disconnect or a
+;      genuinely fresh reconnection: not a fixed grace window.
 ; 3. Visual Feedback:
-;    - Modern rounded bottom-right toast badge via SharedHelpers.ahk (ShowBottomRightBadge).
-;    - Dedicated standalone taskbar tray icon with dynamic tooltip and full context menu.
+;: Modern rounded bottom-right toast badge via SharedHelpers.ahk (ShowBottomRightBadge).
+;: Dedicated standalone taskbar tray icon with dynamic tooltip and full context menu.
 ; 4. Hardware Reliability:
-;    - Automatic lid-open recovery, power broadcast wake-recovery, and session unlock checks.
-;    - Simple Sticky Notes auto-repositioning for laptop vs tablet geometries.
+;: Automatic lid-open recovery, power broadcast wake-recovery, and session unlock checks.
+;: Simple Sticky Notes auto-repositioning for laptop vs tablet geometries.
 ; -----------------------------------------------------------------------------
 
 SunshineScriptsDir      := PATH_SUNSHINE_SCRIPTS
@@ -74,16 +74,16 @@ g_ExtendNotesDelayMs := 1200
 ; Publish manifest for StartupScript master tray integration
 PublishSunshineTrayManifest()
 
-; v2: RegisterTrayMenuHandler maps each manifest HandlerKey to a real function reference - see
+; v2: RegisterTrayMenuHandler maps each manifest HandlerKey to a real function reference: see
 ; SharedHelpers.ahk's TRAY MENU MANIFEST section. This is the second real consumer of the mechanism
-; (after BasicTasks.ahk) - no other reference anywhere else in the fleet to copy from.
+; (after BasicTasks.ahk): no other reference anywhere else in the fleet to copy from.
 RegisterTrayMenuHandler("Menu_SwitchLaptopOnly", Menu_SwitchLaptopOnly)
 RegisterTrayMenuHandler("Menu_SwitchTabletOnly", Menu_SwitchTabletOnly)
 RegisterTrayMenuHandler("Menu_SwitchExtend", Menu_SwitchExtend)
 RegisterTrayMenuHandler("Menu_SwitchDuplicate", Menu_SwitchDuplicate)
 RegisterTrayMenuHandler("Action_ToggleMouseSpeed", Action_ToggleMouseSpeed)
 
-; v2: OnMessage's name-string registration mode is gone - only a real function-object reference survives
+; v2: OnMessage's name-string registration mode is gone: only a real function-object reference survives
 ; (bare name, no quotes).
 ; Win32 hardware event hooks
 OnMessage(0x0218, SunshineDisplay_WM_POWERBROADCAST)
@@ -114,15 +114,15 @@ SetTimer(SunshineWatchdogTick, CheckIntervalMs)
 ; Win+Alt+Shift+P: Toggle between Extend and Duplicate
 #!+p::ToggleExtendVsDuplicate() ;{ <- Toggle Dual Display (Extend <-> Duplicate)
 
-; v2: #If (hotkey-context directive) is gone, replaced by #HotIf with an expression - same syntax otherwise.
+; v2: #If (hotkey-context directive) is gone, replaced by #HotIf with an expression: same syntax otherwise.
 #HotIf (g_HibernateCountdownActive)
 Escape::CancelHibernateCountdown() ;{ <- Cancel Hibernate Countdown
 Delete::CancelHibernateCountdown() ;{ <- Cancel Hibernate Countdown
-; v2: a multi-line hotkey body needs explicit braces now - v1 let the body implicitly extend to the next
+; v2: a multi-line hotkey body needs explicit braces now: v1 let the body implicitly extend to the next
 ; `return` with no braces at all; v2 fails to load that shape ("Hotkey or hotstring is missing its opening
 ; brace"), confirmed empirically this session (Migration-Notes.md 18.15).
 ; The inline comment below (on the declaration line, not inside the braces) is required for a multi-line
-; hotkey body to show a description in Hotkey Help at all - all three of this block's hotkeys had none,
+; hotkey body to show a description in Hotkey Help at all: all three of this block's hotkeys had none,
 ; found live via a real Hotkey Help screenshot showing this whole section's descriptions blank.
 ~LButton:: { ;{ <- Cancel Hibernate Countdown (click inside the countdown popup)
 	MouseGetPos(, , &clickedHwnd)
@@ -146,7 +146,7 @@ ShowDisplayBadge(modeTag, titleText, detailText, bgColorHex := "1A3A5A", display
 }
 
 ; v2: extracted from 8 byte-identical duplicated VarSetCapacity/NumPut/DllCall sites (SPI_SETMOUSE's 3-int
-; threshold/acceleration curve, differing only in speed and the precision on/off flag) - one conversion to
+; threshold/acceleration curve, differing only in speed and the precision on/off flag): one conversion to
 ; get right instead of eight copies, no behavior change. NumPut's v2 signature is Type-first
 ; (NumPut(Type, Value, Target, Offset)), the reverse of v1's Value-first order.
 ApplyMouseSpeedAndAccel(speed, precisionOn) {
@@ -351,7 +351,7 @@ SwitchToExtendMode(delayNotesMs := 1200) {
 }
 
 ; Polling timer for closed-loop Extend handshake
-; v2: was a Gosub-only label, now a real function - every variable it touches needs an explicit global.
+; v2: was a Gosub-only label, now a real function: every variable it touches needs an explicit global.
 SunshineDisplay_WaitTabletConnectForExtend() {
 	global g_ExtendPendingConnect, g_ExtendTargetLogSize, g_ExtendConnectTimeoutTicks, g_ExtendNotesDelayMs
 	global SunshineLog, LogFile, MarkerFile
@@ -550,9 +550,9 @@ UpdateTabletHibernateTrayIcon(isTabletOnly, forceRefresh := false) {
 	}
 }
 
-; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4 declared
-; parameters and no `*` catch-all - confirmed empirically this session (Migration-Notes.md 18.16/18.17).
-; `*` is the fix.
+; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4
+; declared parameters and no `*` catch-all: confirmed empirically this session (Migration-Notes.md
+; 18.16/18.17). `*` is the fix.
 SunshineDisplay_WM_TASKBARCREATED(wParam, lParam, *) {
 	UpdateTrayStatusAndTooltip(true)
 }
@@ -660,7 +660,7 @@ TrayReload(*) {
 ; WATCHDOG TICK (Instant Mouse Speed & Active Topology Guard)
 ; =============================================================================
 
-; v2: was a Gosub-only label, now a real function - every variable it touches needs an explicit global.
+; v2: was a Gosub-only label, now a real function: every variable it touches needs an explicit global.
 SunshineWatchdogTick() {
 	global QuitFlag, LogDisconnectedStreak, OfflineStreak, g_ManualMouseOverride, g_ManualOverrideConnectId
 	global ManualFlag, MarkerFile, SunshineLog, ConnectStreak, g_LastWakeLogSize
@@ -893,7 +893,7 @@ SunshineWatchdog_LastClientEvent(&outConnectId := "", &outDisconnectId := "") {
 		SearchPos := FoundPos + 1
 	}
 
-	; v2: StartingPos=0 (v1's implicit "search from end") hangs v2 indefinitely - confirmed empirically this
+	; v2: StartingPos=0 (v1's implicit "search from end") hangs v2 indefinitely: confirmed empirically this
 	; session (Migration-Notes.md 18.9). -1 is the explicit v2 equivalent; the substring here is already
 	; bounded to end exactly at the position of interest, so "search backward from its own end" is exactly
 	; the intended semantic (find the start of the line containing that position).
@@ -928,7 +928,7 @@ SunshineWatchdog_TabletReachable() {
 		return true
 
 	TmpFile := A_Temp "\sunshine_watchdog_ts_status.tmp"
-	; v2: rebuilt as a clean expression string - v1's raw command-syntax string mixed %ComSpec% legacy
+	; v2: rebuilt as a clean expression string: v1's raw command-syntax string mixed %ComSpec% legacy
 	; deref with manual doubled-quote nesting (needed for cmd.exe's own "quoted-exe-path" > "quoted-out-file"
 	; convention). Chr(34) makes every literal quote explicit instead of ambiguous doubled-quote escaping
 	; (Migration-Notes.md 18.13); A_ComSpec replaces %ComSpec%.
@@ -983,7 +983,7 @@ SunshineWatchdog_RestoreMouseNormal(reason) {
 
 GetCurrentMouseSpeed() {
 	curSpeed := 0
-	; v2: dropped the *P-suffixed DllCall type shorthand - "UInt*", &var is the explicit pointer-output form.
+	; v2: dropped the *P-suffixed DllCall type shorthand: "UInt*", &var is the explicit pointer-output form.
 	DllCall("SystemParametersInfo", "UInt", 0x0070, "UInt", 0, "UInt*", &curSpeed, "UInt", 0)
 	return curSpeed
 }
@@ -1066,9 +1066,9 @@ SunshineDisplay_EnforceTabletMouseSpeed() {
 ; HARDWARE EVENT HANDLERS (PowerBroadcast, DisplayChange, SessionChange)
 ; =============================================================================
 
-; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4 declared
-; parameters and no `*` catch-all - confirmed empirically this session (Migration-Notes.md 18.16/18.17).
-; `*` is the fix.
+; v2: OnMessage(msg, handler) hangs at the OnMessage() call itself if the handler has fewer than 4
+; declared parameters and no `*` catch-all: confirmed empirically this session (Migration-Notes.md
+; 18.16/18.17). `*` is the fix.
 SunshineDisplay_WM_POWERBROADCAST(wParam, lParam, *) {
 	global g_LastWakeLogSize, SunshineLog, g_ManualMouseOverride, g_ManualOverrideConnectId
 	g_ManualMouseOverride := false

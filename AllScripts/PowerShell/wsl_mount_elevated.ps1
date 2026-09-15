@@ -1,6 +1,15 @@
-# =============================================================================
-# wsl_mount_elevated.ps1 - Elevated Attach & RAW Drive Suppression
-# =============================================================================
+<#
+.SYNOPSIS
+    Elevated physical disk attachment and Windows RAW drive letter suppression for WSL2.
+
+.DESCRIPTION
+    Invoked with Administrator privileges (via Scheduled Task WSL_Mount_PixelSSD or RunAs) to:
+      1. Detect target ext4 SSD via Find-TargetSSD
+      2. Strip any Windows-assigned RAW drive letter before format nag prompts appear
+      3. Attach raw physical block device to WSL2 with wsl.exe --mount --bare
+      4. Handle dirty attachment recovery via selective unmount or wsl.exe --shutdown reset
+#>
+
 . "$PSScriptRoot\ssd_common.ps1"
 
 $logPath = Join-Path (Split-Path -Parent $PSScriptRoot) "Logs\pixel_ssd_mount.log"

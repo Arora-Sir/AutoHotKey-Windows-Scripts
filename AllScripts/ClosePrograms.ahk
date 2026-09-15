@@ -1,4 +1,6 @@
 #Requires AutoHotkey v2.0
+; Suppress individual child tray icon so only StartupScript.ahk's master icon is visible.
+#NoTrayIcon
 
 ; ^ for Ctrl, ! for Alt, # for Win, + for Shift
 ; ~ prefix to prevent blocking native (original) functionality of that key
@@ -146,9 +148,9 @@ InitDone() {
 
 ; Alt+F4 -> Close currently active program
 ; $!F4:: CLoseCurrentlyActiveScreen() ;{ <- CLose Currently Active Screen
-; v2: a multi-line hotkey body needs explicit braces now - v1 let the body implicitly extend to the next
-; `return`/hotkey with no braces at all, but v2 fails to load that shape ("Hotkey or hotstring is missing its
-; opening brace"), confirmed empirically down to the minimal case.
+; v2: a multi-line hotkey body needs explicit braces now: v1 let the body implicitly extend to the next
+; `return`/hotkey with no braces at all, but v2 fails to load that shape ("Hotkey or hotstring is missing
+; its opening brace"), confirmed empirically down to the minimal case.
 $!F4:: { ;{ <- CLose Currently Active Screen
 	if (!isReady || !GetKeyState("F4", "P"))
 		return

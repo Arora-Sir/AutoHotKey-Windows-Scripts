@@ -1,5 +1,5 @@
 ' =============================================================================
-' run_hidden.vbs - 100% Invisible Background Process Launcher
+' run_hidden.vbs: 100% Invisible Background Process Launcher
 ' =============================================================================
 ' Why this file exists:
 ' When launching PowerShell from Task Scheduler or command line with -WindowStyle Hidden,

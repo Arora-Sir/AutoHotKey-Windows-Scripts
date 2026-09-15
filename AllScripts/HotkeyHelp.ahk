@@ -1,4 +1,6 @@
 #Requires AutoHotkey v2.0
+; Suppress individual child tray icon so only StartupScript.ahk's master icon is visible.
+#NoTrayIcon
 
 ; Hotkey Help
 ; Fanatic Guru
@@ -23,10 +25,10 @@
 ; May create a txt file with same name as hotkey file to be searched for help information
 ;}
 
-; INITIALIZATION - ENVIROMENT
+; INITIALIZATION: ENVIROMENT
 ;{-----------------------------------------------
 ;
-; v2: #NoEnv is gone - v2 has no %Var%-vs-environment-variable ambiguity to guard against, nothing to port.
+; v2: #NoEnv is gone: v2 has no %Var%-vs-environment-variable ambiguity to guard against, nothing to port.
 SendMode("Input") ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir(A_ScriptDir) ; Ensures a consistent starting directory.
 #SingleInstance force ; Ensures that only the last executed instance of script is running
@@ -34,7 +36,7 @@ DetectHiddenWindows(true)
 
 ;}
 
-; INITIALIZATION - VARIABLES
+; INITIALIZATION: VARIABLES
 ;{-----------------------------------------------
 ;
 
@@ -61,7 +63,7 @@ Parse_Delimiter := "`n"
 Parse_OmitChar := "`r"
 
 ; Default Settings if Not Changed by Ini File
-; v2: legacy `=` command-style assignment is gone - all become `:=`.
+; v2: legacy `=` command-style assignment is gone: all become `:=`.
 Set_ShowBlank		:= 1
 Set_ShowBlankInclude	:= 1
 Set_ShowExe		:= 1
@@ -104,9 +106,8 @@ if Set_IniSet
     Set_ShowExe := IniRead("Hotkey Help.ini", "Settings", "Set_ShowExe", Set_ShowExe)
     Set_ShowHotkey := IniRead("Hotkey Help.ini", "Settings", "Set_ShowHotkey", Set_ShowHotkey)
     ; v2: v1's original lines 95/96 each (likely by copy-paste) read back Set_ShowHotkey's OWN ini key into
-    ; Set_VarHotkey/Set_FlagHotkey instead of each variable's own key.
-    ; Preserved exactly as-is (a behavior-preserving port, not a fix), since this is existing v1 behavior,
-    ; not a v2 migration concern.
+    ; Set_VarHotkey/Set_FlagHotkey instead of each variable's own key: preserved exactly as-is (behavior-
+    ; preserving port), not "fixed", since this is existing v1 behavior, not a v2 migration concern.
     Set_VarHotkey := IniRead("Hotkey Help.ini", "Settings", "Set_ShowHotkey", Set_VarHotkey)
     Set_FlagHotkey := IniRead("Hotkey Help.ini", "Settings", "Set_ShowHotkey", Set_FlagHotkey)
     Set_ShowString := IniRead("Hotkey Help.ini", "Settings", "Set_ShowString", Set_ShowString)
@@ -124,7 +125,7 @@ if Set_IniSet
     Set_Hotkey_Mod_Delimiter := IniRead("Hotkey Help.ini", "Settings", "Set_Hotkey_Mod_Delimiter", Set_Hotkey_Mod_Delimiter)
     if Set_FindPos
     {
-        ; v2: IniRead with no default throws if the key is missing - matches v1's behavior of leaving the
+        ; v2: IniRead with no default throws if the key is missing: matches v1's behavior of leaving the
         ; output variable blank/ErrorLevel-set, but the two immediate "if !Var" guards below already
         ; handle a blank result either way, so an empty-string default reproduces v1's fallthrough exactly.
         Set_FindPos_deltaX := IniRead("Hotkey Help.ini", "Settings", "Set_FindPos_deltaX", "")
@@ -148,7 +149,7 @@ if Set_IniExcluded
 }
 ;}
 
-; INITIALIZATION - GUI
+; INITIALIZATION: GUI
 ;{-----------------------------------------------
 ;
 
@@ -172,7 +173,7 @@ GuiSettings.AddCheckBox("x60 yp+35 w380 h30 vSet_FlagHotkey", "Flag Hotkeys crea
 GuiSettings.AddCheckBox("x60 yp+35 w380 h30 vSet_SortInfo", "Sort by Hotkey Description (Otherwise by Hotkey Name)")
 GuiSettings.AddCheckBox("x60 yp+35 w180 h30 vSet_CapHotkey", "Hotkey Capitalization")
 ; v2: v1 Radio groups share one variable holding the selected index (1/2) on Submit; v2 Radio controls
-; each carry their own .Value (0/1) instead - kept as two explicit control-object references so the
+; each carry their own .Value (0/1) instead: kept as two explicit control-object references so the
 ; group can be pre-populated and read back below without relying on a shared index variable.
 CtrlCapRadioTitle := GuiSettings.AddRadio("x240 yp w80 h30", "Title")
 CtrlCapRadioUpper := GuiSettings.AddRadio("x320 yp w120 h30", "UPPER")
@@ -206,7 +207,7 @@ CtrlCapRadioUpper.Value := (Set_CapHotkey_Radio = 2) ? 1 : 0
 
 ; Get Information to Display in Excluded Gui
 Gui_Excluded := String_Wings(" EXCLUDED SCRIPTS AND FILES ",40) "`n" Files_Excluded "`n`n`n" String_Wings(" EXCLUDED HOTKEYS & HOTSTRINGS ",40) "`n" Hot_Excluded
-; v2: StringReplace -> StrReplace(Haystack, Needle, ReplaceText) - single call, no ",All" needed (v2 always
+; v2: StringReplace -> StrReplace(Haystack, Needle, ReplaceText): single call, no ",All" needed (v2 always
 ; replaces every occurrence).
 Gui_Excluded := StrReplace(Gui_Excluded, "|", "`n")
 
@@ -225,7 +226,7 @@ GuiExcluded.OnEvent("Close", ExcludedGuiEscape)
 ;}
 
 ;{-----------------------------------------------
-; v2: OnExit's callback signature is (ExitReason, ExitCode) - a bare label target becomes a real function.
+; v2: OnExit's callback signature is (ExitReason, ExitCode): a bare label target becomes a real function.
 OnExit(SaveSettings)
 
 ;
@@ -401,15 +402,14 @@ RefreshHelpDisplay(*) {
                                 Line_Hot := RegExReplace(Line_Hot,"((^[^\Q" Set_Hotkey_Mod_Delimiter "\E]*|\Q" Set_Hotkey_Mod_Delimiter "\E[^\Q" Set_Hotkey_Mod_Delimiter "\E]*))","$T1")
                             else
                                 Line_Hot := RegExReplace(Line_Hot,"((^[^\Q" Set_Hotkey_Mod_Delimiter "\E]*|\Q" Set_Hotkey_Mod_Delimiter "\E[^\Q" Set_Hotkey_Mod_Delimiter "\E]*))","$U1")
-                        ; v2 bug fix: this used to read back as `Line_Help := Trim(HotkeyName)` - discarding the regex
-                        ; match entirely and re-displaying the hotkey's own (unformatted) name as its own "description".
-                        ; v1's original almost certainly reused HotkeyName as RegExMatch's output-var prefix
-                        ; (HotkeyName1 = the captured comment text), which the port dropped when it correctly switched
-                        ; to &Match/Match[1] elsewhere in this function but never did here.
-                        ; Found live: every regular hotkey's description column showed the hotkey name a second time
-                        ; (in a different case) instead of its real ";{ <- Description" comment text - confirmed once
-                        ; Scripts_Include's Map/Array bug (elsewhere in this file) stopped aborting the scan before it
-                        ; ever reached here.
+                        ; v2 bug fix: this used to read back as `Line_Help := Trim(HotkeyName)`: discarding the
+                        ; regex match entirely and re-displaying the hotkey's own (unformatted) name as its own
+                        ; "description". v1's original almost certainly reused HotkeyName as RegExMatch's output-var
+                        ; prefix (HotkeyName1 = the captured comment text), which the port dropped when it correctly
+                        ; switched to &Match/Match[1] elsewhere in this function but never did here. Found live: every
+                        ; regular hotkey's description column showed the hotkey name a second time (in a different
+                        ; case) instead of its real ";{ <- Description" comment text: confirmed once Scripts_Include's
+                        ; Map/Array bug (elsewhere in this file) stopped aborting the scan before it ever reached here.
                         HasComment := RegExMatch(File_Line,"::.*?;(.*)",&Match)
                         Line_Help := HasComment ? Trim(Match[1]) : ""
                         if Set_HideFold
@@ -549,7 +549,7 @@ RefreshHelpDisplay(*) {
             GuiMain.OnEvent("Size", GuiMainSize)
             GuiMain.OnEvent("Escape", GuiMainEscape)
             GuiMain.OnEvent("Close", GuiMainEscape)
-            ; v2 note: a Gui control can be created with more than 32k of text directly - v1's 32k split-and-
+            ; v2 note: a Gui control can be created with more than 32k of text directly: v1's 32k split-and-
             ; ControlSetText workaround is unneeded, but kept commented for reference since it's harmless either way.
             CtrlDisplay := GuiMain.AddEdit("vGui_Display ReadOnly -E0x200 +0x100", Display)
             idDisplay := CtrlDisplay.Hwnd
@@ -559,7 +559,7 @@ RefreshHelpDisplay(*) {
         }
         else
         {
-            ; v2: Gui.Show() takes only an Options parameter - v1's second Title argument is gone, throws
+            ; v2: Gui.Show() takes only an Options parameter: v1's second Title argument is gone, throws
             ; "Too many parameters passed to function" if passed. Set .Title as a separate property instead
             ; (confirmed live; same fix applied to every other 2-arg .Show(Options, Title) call in this file).
             GuiMain.Title := "Hotkey Help"
@@ -595,7 +595,7 @@ RefreshHelpDisplay(*) {
 }
 
 ; v2: small helper factoring out the identical "store a Hot/Hot_Text line with running Count" block that
-; v1 repeated four times inline (hotstrings, plain hotkeys) - no behavior change, just de-duplication.
+; v1 repeated four times inline (hotstrings, plain hotkeys): no behavior change, just de-duplication.
 HotkeyHelp_StoreLine(Help, File_Title, Txt_Ahk_Started, Line_Hot, Line_Help) {
     bucket := Txt_Ahk_Started ? "Hot_Text" : "Hot"
     if !Help[File_Title].Has(bucket)
@@ -630,7 +630,7 @@ HotkeyHelp_BuildSection(element, Pos_Info, Set_SortInfo) {
 }
 ;}
 
-; v2: Gui.Show() takes only Options, not v1's second Title argument - set .Title separately (same fix as GuiMain above).
+; v2: Gui.Show() takes only Options, not v1's second Title argument: set .Title separately (same fix as GuiMain above).
 #!F1::ShowSettingsGui() ;{ <- Settings
 ShowSettingsGui(*) {
     GuiSettings.Title := "Hotkey Help - Settings"
@@ -697,7 +697,7 @@ ShowRawHotkeyList(*) {
             GuiRaw.OnEvent("Size", GuiRawSize)
             GuiRaw.OnEvent("Escape", GuiRawEscape)
             GuiRaw.OnEvent("Close", GuiRawEscape)
-            ; v2: Gui.Show() takes only Options, not v1's second Title argument - set .Title separately.
+            ; v2: Gui.Show() takes only Options, not v1's second Title argument: set .Title separately.
             GuiRaw.Title := "Hotkey Help"
             GuiRaw.Show("AutoSize")
             Send("^{Home}")
@@ -727,7 +727,7 @@ ShowRawHotkeyList(*) {
 }
 ;}
 
-; v2: #If (hotkey-context directive) is gone, replaced by #HotIf with an expression - same syntax otherwise.
+; v2: #If (hotkey-context directive) is gone, replaced by #HotIf with an expression: same syntax otherwise.
 ; idDisplayWin is pre-seeded to 0 above, so WinActive("ahk_id 0") safely evaluates false until the Main
 ; Gui is first created (RefreshHelpDisplay() overwrites it with the real hwnd at that point).
 #HotIf WinActive("ahk_id " idDisplayWin)
@@ -748,7 +748,7 @@ TextOut(*) {
     File_TextOut.Close()
 }
 
-; v2: OnExit callback signature is (ExitReason, ExitCode) - both accepted but unused here, hence `*`.
+; v2: OnExit callback signature is (ExitReason, ExitCode): both accepted but unused here, hence `*`.
 SaveSettings(*) {
     global Set_IniSet, Set_FindPos, Set_FindPos_deltaX, Set_FindPos_deltaY
     if Set_IniSet and Set_FindPos
@@ -765,12 +765,12 @@ SaveSettings(*) {
 
 ;}
 
-; SUBROUTINES - GUI
+; SUBROUTINES: GUI
 ;{-----------------------------------------------
 ;
 
 ; Default Help Gui
-; v2: a GuiSize event callback receives (GuiObj, MinMax, Width, Height) - Width/Height replace A_GuiWidth/Height.
+; v2: a GuiSize event callback receives (GuiObj, MinMax, Width, Height): Width/Height replace A_GuiWidth/Height.
 GuiMainSize(GuiObj, MinMax, Width, Height) {
     global CtrlDisplay
     if (MinMax = -1) ; minimized - nothing sized to resize into
@@ -784,7 +784,7 @@ GuiMainEscape(*) {
 }
 
 ; Default Help Gui Menu
-; v2: menu click callbacks receive (ItemName, ItemPos, MyMenu) - ItemName replaces v1's A_ThisMenuItem.
+; v2: menu click callbacks receive (ItemName, ItemPos, MyMenu): ItemName replaces v1's A_ThisMenuItem.
 ScriptStop(ItemName, ItemPos, MyMenu) {
     global Scripts, MenuStopObj, MenuPauseObj, MenuSuspendObj, MenuEditObj, MenuReloadObj, MenuOpenObj
     DetectHiddenWindows(true)
@@ -1083,9 +1083,9 @@ ScriptHotkeys(Script)
 }
 
 ; Expand File Path
-; v2: A_LoopFileLongPath (v1 name) was renamed to A_LoopFileFullPath - the old v1 name resolves to an ordinary
-; (never-assigned) variable in v2 instead of the loop's special property.
-; Confirmed live via a real "#Warn VarUnset" dialog the moment this code path actually ran.
+; v2: A_LoopFileLongPath (v1 name) was renamed to A_LoopFileFullPath: the old v1 name resolves to an
+; ordinary (never-assigned) variable in v2 instead of the loop's special property, confirmed live via
+; a real "#Warn VarUnset" dialog the moment this code path actually ran.
 Get_Full_Path(path)
 {
     Loop Files, path, "F"
@@ -1094,7 +1094,7 @@ Get_Full_Path(path)
 }
 
 ; Add Character Wings to Each Side of String to Create Graphical Break
-; v2: parameter renamed CaseMode (was Case) - `Case` is a reserved word (switch/case), invalid as a variable name.
+; v2: parameter renamed CaseMode (was Case): `Case` is a reserved word (switch/case), invalid as a variable name.
 String_Wings(String,Length:=76,Char:="=",CaseMode:="U")
 {
     if (CaseMode = "U")
@@ -1138,16 +1138,15 @@ ArrayCrossRef(Array, Haystack, Needle, Cross)
 ;{-----------------------------------------------
 ;
 
-; [Class] SearchEdit - Find Text within Edit Control (Edit Control Must have +0x100 Style for Unfocused Highlights)
-; v2: v1's bare `static` directive (making every local in Dialog() an implicitly-shared, persistent class field)
-; has no v2 equivalent - each piece of state that needs to persist/share across calls is now an explicit
-; `static` class property below.
-; The labels that lived inside Dialog() (WrapToTop, FindText_Sub, SearchEdit_DialogGuiEscape, StatusBar) were
-; really Gui-event handlers matched by v1's magic naming convention - they become real functions bound via
-; .OnEvent() instead.
-; Per Migration-Notes.md 18.21, none of these are registered via ObjBindMethod (which would break
-; OnMessage/click dispatch) - the two low-level hooks (WM_LBUTTONDOWN, WM_WINDOWPOSCHANGED) are bare top-level
-; functions instead, each with a 4-param signature per 18.17.
+; [Class] SearchEdit: Find Text within Edit Control (Edit Control Must have +0x100 Style for Unfocused Highlights)
+; v2: v1's bare `static` directive (making every local in Dialog() an implicitly-shared, persistent class
+; field) has no v2 equivalent: each piece of state that needs to persist/share across calls is now an
+; explicit `static` class property below. The labels that lived inside Dialog() (WrapToTop, FindText_Sub,
+; SearchEdit_DialogGuiEscape, StatusBar) were really Gui-event handlers matched by v1's magic naming
+; convention: they become real functions bound via .OnEvent() instead. Per Migration-Notes.md 18.21,
+; none of these are registered via ObjBindMethod (which would break OnMessage/click dispatch): the two
+; low-level hooks (WM_LBUTTONDOWN, WM_WINDOWPOSCHANGED) are bare top-level functions instead, each with
+; a 4-param signature per 18.17.
 class SearchEdit
 {
     static Docked := true
@@ -1179,7 +1178,7 @@ class SearchEdit
             SearchEdit.DialogGui.OnEvent("Escape", SearchEdit_DialogGuiEscape)
             SearchEdit.DialogGui.OnEvent("Close", SearchEdit_DialogGuiEscape)
             ; v2: moved here (was a stray top-level statement placed after the file's first hotkey, where
-            ; auto-execute fall-through already ends - it would never have actually registered). Fires once,
+            ; auto-execute fall-through already ends: it would never have actually registered). Fires once,
             ; lazily, alongside the other two OnMessage hooks below.
             OnMessage(0x203, SearchEdit_WM_LBUTTONDBLCLK)
             if !IsObject(SearchEdit.UnDock)
@@ -1260,7 +1259,7 @@ class SearchEdit
     }
 }
 
-; v2: bare top-level functions, not ObjBindMethod-bound instance methods - see the class comment above
+; v2: bare top-level functions, not ObjBindMethod-bound instance methods: see the class comment above
 ; (Migration-Notes.md 18.21). All operate on SearchEdit's static state directly.
 SearchEdit_WM_LBUTTONDOWN(wParam, lParam, msg, hwnd) {
     if (SearchEdit.DialogGui && hwnd = SearchEdit.DialogGui.Hwnd)
@@ -1293,8 +1292,8 @@ SearchEdit_WM_WINDOWPOSCHANGED(wParam, lParam, msg, hwnd) {
     SearchEdit.DialogGui.Show("h" Calc.h " w" Calc.w " x" Calc.x " y" Calc.y)
 }
 
-; v1's StatusBar double-click g-label has no direct v2 GuiControl event equivalent - reimplemented with the
-; same low-level WM_LBUTTONDBLCLK hook pattern already proven above for the drag-detection handler.
+; v1's StatusBar double-click g-label has no direct v2 GuiControl event equivalent: reimplemented with
+; the same low-level WM_LBUTTONDBLCLK hook pattern already proven above for the drag-detection handler.
 SearchEdit_WM_LBUTTONDBLCLK(wParam, lParam, msg, hwnd) {
     if (SearchEdit.StatusBarCtrl && hwnd = SearchEdit.StatusBarCtrl.Hwnd)
     {
@@ -1318,7 +1317,7 @@ SearchEdit_DialogGuiEscape(*) {
 }
 ;}
 
-; FUNCTIONS - LIBRARY
+; FUNCTIONS: LIBRARY
 ;{-----------------------------------------------
 ;
 
@@ -1349,9 +1348,10 @@ SearchEdit_DialogGuiEscape(*) {
 ;     {Array}[n].Title
 ;     {Array}[n].hWnd
 ;
-; v2: WinGet's List sub-command is now the real WinGetList() function returning an array of HWNDs directly - no
-; more manufacturing AHK_Windows%A_Index%-style pseudo-array variable names (that construct-a-variable-name-from-a-string
-; trick has no v2 equivalent at all, per SharedHelpers.ahk's CloseBrowserGracefully() precedent elsewhere in this fleet).
+; v2: WinGet's List sub-command is now the real WinGetList() function returning an array of HWNDs
+; directly: no more manufacturing AHK_Windows%A_Index%-style pseudo-array variable names (that
+; construct-a-variable-name-from-a-string trick has no v2 equivalent at all, per SharedHelpers.ahk's
+; CloseBrowserGracefully() precedent elsewhere in this fleet).
 ;
 ; Example Code:
 /*

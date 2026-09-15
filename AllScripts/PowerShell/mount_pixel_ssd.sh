@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# mount_pixel_ssd.sh - Production-Grade ext4 Mount & Samba Starter for WSL2
+# mount_pixel_ssd.sh: Production-Grade ext4 Mount & Samba Starter for WSL2
 # =============================================================================
 # Features:
 #   1. Performance optimization: noatime, nodiratime (eliminates access write-wear)

@@ -1,12 +1,20 @@
-# =============================================================================
-# setup_startup_task.ps1 - Automated Registration for AHK Startup Fleet
-# =============================================================================
-# Registers "AHK Startup Script" in Windows Task Scheduler:
-#   - Action: Launches AllScripts\StartupScript.exe
-#   - Trigger: At logon of current user with a 30-second delay (PT30S)
-#   - Privilege: Standard user (RunLevel Limited) - zero UAC prompt on logon
-#   - Resilience: Runs on battery, no execution timeout, demand start allowed
-# =============================================================================
+<#
+.SYNOPSIS
+    Automated registration for the AHK Startup Fleet in Windows Task Scheduler.
+
+.DESCRIPTION
+    Registers "AHK Startup Script" in Windows Task Scheduler:
+      - Action: Launches AllScripts\StartupScript.exe
+      - Trigger: At logon of current user with a configurable delay (default 30 seconds)
+      - Privilege: Standard user (RunLevel Limited): zero UAC prompt on logon
+      - Resilience: Runs on battery, no execution timeout, demand start allowed
+
+.PARAMETER Uninstall
+    Unregisters and removes the "AHK Startup Script" task from Windows Task Scheduler.
+
+.PARAMETER DelaySeconds
+    Delay in seconds after user logon before launching StartupScript.exe (default: 30).
+#>
 
 param(
     [switch]$Uninstall,

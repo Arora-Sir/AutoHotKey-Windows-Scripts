@@ -22,7 +22,7 @@
 ; Includes a "Load" menu for a list of scripts that are not currently loaded
 ;}
 
-; INITIALIZATION - ENVIROMENT
+; INITIALIZATION: ENVIROMENT
 ;{-----------------------------------------------
 ;
 #Requires AutoHotkey v2.0
@@ -30,13 +30,7 @@ SendMode("Input") ; Recommended for new scripts due to its superior speed and re
 SetWorkingDir(A_ScriptDir) ; Ensures a consistent starting directory.
 #SingleInstance force ; Ensures that only the last executed instance of script is running
 DetectHiddenWindows(true)
-
-; Set the custom master icon as early as possible, before any of the slower work below (building the Scripts
-; map, launching all 11 children one by one) - Windows creates this process's tray icon the instant it starts,
-; showing AHK's own stock icon until something calls TraySetIcon(); the later this runs, the longer that stock
-; icon stays visible. Moved up from right before the child-launch loop, where it used to run only after every
-; child had already been spawned - found live: that ordering caused a roughly one-second flash of the generic
-; AHK icon on every reload before it swapped to the real one.
+; Set master tray icon early to prevent showing the default AutoHotkey icon during child startup.
 if FileExist(A_ScriptDir "\..\StartupScript.ico")
 	TraySetIcon(A_ScriptDir "\..\StartupScript.ico")
 else if FileExist(A_ScriptDir "\..\Startup_Script.ico")
@@ -56,16 +50,15 @@ if (hUxtheme) {
 	}
 }
 
-; v2 fleet control protocol: replaces v1's PostMessage to AutoHotkey's own reserved tray-command IDs
-; (Edit/Exit/ViewKeyHistory/Suspend), which is not guaranteed to carry over to a v2 process.
-; The master only ever SENDS this message (every child script both registers and handles it - see
-; SharedHelpers.ahk/LocalPaths.ahk/Watchdog.ahk for the receiving side). Registering it here just needs to
-; resolve to the same numeric ID every process gets.
+; v2 fleet control protocol: replaces v1's PostMessage to AutoHotkey's own reserved tray-command IDs (Edit/Exit/
+; ViewKeyHistory/Suspend), which is not guaranteed to carry over to a v2 process. The master only ever SENDS this
+; message (every child script both registers and handles it: see SharedHelpers.ahk/LocalPaths.ahk/Watchdog.ahk for
+; the receiving side). Registering it here just needs to resolve to the same numeric ID every process gets.
 g_FleetControlMsg := DllCall("RegisterWindowMessage", "Str", "AHK_FleetControl_v2", "UInt")
 ; Codes match every child's own HandleFleetControlMessage: 1=Edit, 2=Exit, 3=ViewKeyHistory, 4=Suspend-toggle.
-; "Restart" has no code of its own - it's still master-side orchestration (post code 2, wait, relaunch), same as v1.
+; "Restart" has no code of its own: it's still master-side orchestration (post code 2, wait, relaunch), same as v1.
 
-; INITIALIZATION - VARIABLES
+; INITIALIZATION: VARIABLES
 ;{-----------------------------------------------
 ; Folder: all files in that folder and subfolders
 ; Relative Paths: .\ at beginning is the folder of the script, each additional . steps back one folder
@@ -103,7 +96,7 @@ Files.Push(Script_12)
 
 ; Scripts pinned to the top of the tray menu's per-script list, in display order.
 ; Everything else falls back to the normal (alphabetical-looking) order below them.
-; Add or remove a name here to change what's pinned - MenuBuild() below needs no other change.
+; Add or remove a name here to change what's pinned: MenuBuild() below needs no other change.
 PinnedScripts := ["BasicTasks", "PersonalKeywords", "SunshineDisplayWatchdog"]
 g_CurrentBasicTasksDrmItem := ""
 g_CurrentSunshineMouseSpeedItem := ""
@@ -139,9 +132,9 @@ if FileExist(RegExReplace(A_ScriptName, "(.*)\..*", "$1.txt")) ; Look for text f
 ; v2: Scripts is a Map (v1's Scripts[Name,"Key"] multi-key object indexing has no direct v2 equivalent), each value
 ; a plain object with named properties (.Path/.Status/.RunPath/.Pid), matching how the rest of this file reads them.
 Scripts := Map()
-; v2: "File" is a reserved built-in class name (the FileOpen() return type) - it cannot be used as a plain variable
-; (including a for-loop's iteration variable, which errors at load time with "This Class cannot be used as an
-; output variable"), so v1's original "File" variable name throughout this block is renamed to "fileEntry" here.
+; v2: "File" is a reserved built-in class name (the FileOpen() return type): it cannot be used as a plain variable
+; (including a for-loop's iteration variable, which errors at load time with "This Class cannot be used as an output
+; variable"), so v1's original "File" variable name throughout this block is renamed to "fileEntry" here.
 for index, fileEntry in Files {
 	if InStr(fileEntry, "/noload")
 		status := false
@@ -182,9 +175,9 @@ for scriptName, script in Scripts {
 		continue
 	; Terminate any existing instance running this script path before spawning.
 	; v2: WinClose() against a non-existent window hangs indefinitely in this environment (Migration-Notes.md
-	; section 18.6) - resolved by guarding with WinExist() first, confirmed to return instantly (falsy) against
-	; a non-existent target rather than hanging.
-	; Each child's own #SingleInstance force remains the backstop against a genuine duplicate either way.
+	; section 18.6): resolved by guarding with WinExist() first, confirmed to return instantly (falsy) against a
+	; non-existent target rather than hanging. Each child's own #SingleInstance force remains the backstop against
+	; a genuine duplicate either way.
 	DetectHiddenWindows(true)
 	SetTitleMatchMode(2)
 	if WinExist(script.Path " ahk_class AutoHotkey")
@@ -211,7 +204,8 @@ DllCall("User32\ChangeWindowMessageFilterEx", "Ptr", A_ScriptHwnd, "UInt", WM_TA
 DllCall("User32\ChangeWindowMessageFilterEx", "Ptr", A_ScriptHwnd, "UInt", 0x0404, "UInt", 1, "Ptr", 0) ; 0x0404 AHK_NOTIFYICON
 DllCall("User32\ChangeWindowMessageFilterEx", "Ptr", A_ScriptHwnd, "UInt", 0x007E, "UInt", 1, "Ptr", 0) ; 0x007E WM_DISPLAYCHANGE
 
-; Global hotkey-suspend state - see SuspendAllToggle() below.
+
+; Global hotkey-suspend state: see SuspendAllToggle() below.
 ; A plain single-process boolean is the source of truth; the PostMessage cascade to every child is a one-way toggle with no way to query a remote process's real suspend state, so this variable (not the children's own internal state) is what the tray checkmark reflects.
 GlobalHotkeysSuspended     := false
 MenuText_SuspendAll        := "Suspend Hotkeys" ; must match byte-for-byte at every Check/UnCheck
@@ -233,7 +227,7 @@ TrayIconRemove(10)
 ;{-----------------------------------------------
 ;
 ; No Suspend,Permit/exemption mechanism needed here.
-; SuspendAllToggle below only ever PostMessages to the managed child scripts (Scripts) - it never touches this master script's own native suspend flag.
+; SuspendAllToggle below only ever PostMessages to the managed child scripts (Scripts): it never touches this master script's own native suspend flag.
 ; So none of these 4 hotkeys can ever actually become suspended in the first place.
 ;Win+ScrollLock Suspend All Scripts' Hotkeys
 #ScrollLock::SuspendAllToggle() ;{ +Fn <- Suspend All Scripts' Hotkeys
@@ -244,22 +238,20 @@ TrayIconRemove(10)
 
 ; SUBROUTINES
 ;{-----------------------------------------------
-; v2: every one of these was a Gosub-targeted label in v1. Gosub is removed entirely in v2, so each becomes a
-; real function; every variable a label used to reach via v1's implicit shared script-scope now needs an
-; explicit `global` declaration.
-; `(*)` on handlers that also serve as hotkey/menu-click targets means "accept and ignore whatever positional
-; args the caller supplies" - hotkeys can pass a hotkey name, menu clicks pass (ItemName, ItemPos, MenuObj),
-; and this file doesn't need any of that for these specific handlers.
+; v2: every one of these was a Gosub-targeted label in v1. Gosub is removed entirely in v2, so each becomes a real
+; function; every variable a label used to reach via v1's implicit shared script-scope now needs an explicit
+; `global` declaration. `(*)` on handlers that also serve as hotkey/menu-click targets means "accept and ignore
+; whatever positional args the caller supplies": hotkeys can pass a hotkey name, menu clicks pass (ItemName,
+; ItemPos, MenuObj), and this file doesn't need any of that for these specific handlers.
 ;
 ReloadAll(*) {
 	global Scripts
 	DetectHiddenWindows(true)
 	SetTitleMatchMode(2)
 	for scriptName, script in Scripts {
-		; v2: WinClose() guarded by WinExist() first - see the identical fix/note in the auto-execute child-launch
-		; loop above (Migration-Notes.md section 18.6).
-		; ProcessClose(script.Pid) below remains the real termination mechanism regardless; this is just the
-		; same "let it exit gracefully first" nicety v1 had.
+		; v2: WinClose() guarded by WinExist() first: see the identical fix/note in the auto-execute child-launch
+		; loop above (Migration-Notes.md section 18.6). ProcessClose(script.Pid) below remains the real termination
+		; mechanism regardless; this is just the same "let it exit gracefully first" nicety v1 had.
 		if script.Path && WinExist(script.Path " ahk_class AutoHotkey")
 			WinClose(script.Path " ahk_class AutoHotkey")
 		if script.HasOwnProp("Pid") && script.Pid {
@@ -292,8 +284,8 @@ MenuViewKeyHistoryMaster(*) {
 	KeyHistory()
 }
 
-; Cascades a real Suspend-Hotkeys toggle to every managed CHILD script (never the master itself - this cascade never targets the master's own window, so its 4 hotkeys stay reachable regardless).
-; Targets by path+class, not ahk_pid: a script that has ever shown a SharedHelpers.ahk badge Gui (Hide, not Destroy, after use) can own a second hidden top-level window, and ahk_pid would non-deterministically match either one - only the true main window actually handles the fleet control message.
+; Cascades a real Suspend-Hotkeys toggle to every managed CHILD script (never the master itself: this cascade never targets the master's own window, so its 4 hotkeys stay reachable regardless).
+; Targets by path+class, not ahk_pid: a script that has ever shown a SharedHelpers.ahk badge Gui (Hide, not Destroy, after use) can own a second hidden top-level window, and ahk_pid would non-deterministically match either one: only the true main window actually handles the fleet control message.
 ; Entry point for both the tray item and the hotkey.
 SuspendAllToggle(*) {
 	global Scripts, GlobalHotkeysSuspended, g_FleetControlMsg
@@ -328,7 +320,7 @@ SuspendAllCheckSync() {
 		A_TrayMenu.Uncheck(MenuText_SuspendAll)
 }
 
-; Thin wrapper, deliberately not a direct call to ExitSub - going through ExitApp lets AHK's own OnExit re-entrancy guard ensure the WinClose/ProcessClose cascade in ExitSub runs exactly once.
+; Thin wrapper, deliberately not a direct call to ExitSub: going through ExitApp lets AHK's own OnExit re-entrancy guard ensure the WinClose/ProcessClose cascade in ExitSub runs exactly once.
 ; Calling ExitSub directly here would let its own trailing ExitApp re-run the whole cascade a second time against now-dead or Windows-recycled PIDs.
 ExitAll(*) {
 	ExitApp()
@@ -346,11 +338,11 @@ TrayTipBuild() {
 	for line in sortedLines
 		tipText .= line "`n"
 	tipText := TrimAtDelim(Trim(tipText, " `n"))
-	; v2: Menu,Tray,Tip maps to A_IconTip (persistent hover text), not TrayTip() (a one-shot balloon notification) -
+	; v2: Menu,Tray,Tip maps to A_IconTip (persistent hover text), not TrayTip() (a one-shot balloon notification):
 	; the port here called TrayTip() instead, which fired a spammy balloon on every reload/status change and left
 	; the actual hover tooltip stuck on the default "StartupScript.exe" text. Same bug already fixed in
 	; SharedHelpers.ahk's UpdateMicrophoneTrayIcon() (Migration-Notes.md 18.32), missed here since that earlier
-	; fix wasn't cross-checked against every other TrayTip()/A_IconTip call site in the fleet.
+	; fix was not cross-checked against every other TrayTip()/A_IconTip call site in the fleet.
 	A_IconTip := tipText ; Tooltip is limited to first 127 characters
 }
 
@@ -361,9 +353,9 @@ ExitSub(ExitReason, ExitCode) {
 	DetectHiddenWindows(true)
 	SetTitleMatchMode(2)
 	for scriptName, script in Scripts {
-		; v2: WinClose() guarded by WinExist() first - see the identical fix/note in the auto-execute child-launch
-		; loop above (Migration-Notes.md section 18.6).
-		; ProcessClose(script.Pid) below remains the real termination mechanism regardless.
+		; v2: WinClose() guarded by WinExist() first: see the identical fix/note in the auto-execute child-launch
+		; loop above (Migration-Notes.md section 18.6). ProcessClose(script.Pid) below remains the real termination
+		; mechanism regardless.
 		if script.Path && WinExist(script.Path " ahk_class AutoHotkey")
 			WinClose(script.Path " ahk_class AutoHotkey")
 		if script.HasOwnProp("Pid") && script.Pid {
@@ -374,14 +366,14 @@ ExitSub(ExitReason, ExitCode) {
 }
 ;}
 
-; SUBROUTINES - GUI
+; SUBROUTINES: GUI
 ;{-----------------------------------------------
 ;
 MenuBuild() {
 	global Scripts, PinnedScripts, MenuText_SuspendAll, MenuText_ExitAll, MenuText_AdditionalScripts
 	global g_ScriptMenus, g_CurrentBasicTasksDrmItem, g_CurrentSunshineMouseSpeedItem
 
-	; v2: fresh Menu() objects every call, replacing v1's DeleteAll-and-reuse-by-name approach - simpler, and avoids
+	; v2: fresh Menu() objects every call, replacing v1's DeleteAll-and-reuse-by-name approach: simpler, and avoids
 	; ever handing out a stale Menu object for a PID that no longer applies.
 	subMenuLoad := Menu()
 	subMenuAdditionalScripts := Menu()
@@ -390,7 +382,7 @@ MenuBuild() {
 	hasLoadSubmenu := false ; Tracks whether any script landed in subMenuLoad below.
 	pinned := Map() ; scriptName -> true for everything already placed by the pinned pass below
 
-	; Build every loaded script's own submenu (Edit/Restart/Exit/etc.) - same for pinned and unpinned scripts alike.
+	; Build every loaded script's own submenu (Edit/Restart/Exit/etc.): same for pinned and unpinned scripts alike.
 	; Top-level placement (pinned first, then the rest) happens after.
 	for scriptName, script in Scripts {
 		if script.Status {
@@ -438,7 +430,7 @@ MenuBuild() {
 	}
 
 	; Pinned scripts first, in the order listed in PinnedScripts (top of file).
-	; Add a name there and it moves to the top automatically - no other change needed.
+	; Add a name there and it moves to the top automatically: no other change needed.
 	hasPinned := false
 	for index, scriptName in PinnedScripts {
 		if (Scripts.Has(scriptName) && Scripts[scriptName].Status) {
@@ -478,7 +470,7 @@ MenuBuild() {
 	if (hasAdditionalScripts)
 		A_TrayMenu.Add(MenuText_AdditionalScripts, subMenuAdditionalScripts)
 
-	; Deliberately never calling A_TrayMenu.AddStandard() - it would re-add AHK's own native "Suspend Hotkeys"/"Pause Script"/"Exit" trio, which only ever act on this master script's own 4 hotkeys.
+	; Deliberately never calling A_TrayMenu.AddStandard(): it would re-add AHK's own native "Suspend Hotkeys"/"Pause Script"/"Exit" trio, which only ever act on this master script's own 4 hotkeys.
 	; Pure clutter alongside the real actions above, which are the ones that actually affect every managed child script. A_TrayMenu.Delete() at the top of this function already excludes them, matching v1's deliberate NoStandard choice.
 	if (hasLoadSubmenu) {
 		A_TrayMenu.Add()
@@ -593,7 +585,7 @@ UpdateSunshineDisplayMenuChecks() {
 
 ; Dynamically synchronizes BasicTasks tray menu labels with live manifest
 ; v2: the Skills Vault label-rename branch this function used to carry was removed in the same v1 commit
-; (cbaeb08) that replaced the single cycling Skills Vault item with 3 dedicated checkmarked items - see
+; (cbaeb08) that replaced the single cycling Skills Vault item with 3 dedicated checkmarked items: see
 ; UpdateBasicTasksMenuChecks() above, which now owns that state sync instead of a label rename.
 UpdateBasicTasksMenuLabels() {
 	global Scripts, g_ScriptMenus, g_CurrentBasicTasksDrmItem
@@ -620,7 +612,7 @@ UpdateBasicTasksMenuLabels() {
 	}
 }
 
-; v2: bound at Add-time in MenuBuild() via ScriptCommand.Bind(pid, action) - pid and action arrive as real parameters
+; v2: bound at Add-time in MenuBuild() via ScriptCommand.Bind(pid, action): pid and action arrive as real parameters
 ; instead of being parsed back out of a dynamic submenu name string (A_ThisMenu) and menu item text (A_ThisMenuItem).
 ; itemName/itemPos/menuObj are the normal v2 menu-click callback params, unused here since action already says what happened.
 ScriptCommand(pid, action, itemName, itemPos, menuObj) {
@@ -658,7 +650,7 @@ ScriptCommand(pid, action, itemName, itemPos, menuObj) {
 }
 
 ; Kills the script (posting the same fleet-control Exit code the Exit menu item itself uses) then relaunches it fresh, reusing ScriptCommand_Load's own launch + suspend-resync pattern below.
-; Unlike Exit, Status stays true and the script keeps its own top-level tray entry - it never moves to the Load submenu.
+; Unlike Exit, Status stays true and the script keeps its own top-level tray entry: it never moves to the Load submenu.
 ScriptCommand_Restart(pid) {
 	global Scripts, GlobalHotkeysSuspended, g_FleetControlMsg
 	targetName := ""
@@ -681,7 +673,7 @@ ScriptCommand_Restart(pid) {
 	Run('"' runPath '" "' oldPath '"', , "Hide", &newPid)
 	Scripts[targetName].Pid := newPid
 
-	; Suspend toggle is a toggle, not a set - mirrors ScriptCommand_Load's own resync below: a freshly-launched script always starts unsuspended, so bring it into sync if global suspend is currently active.
+	; Suspend toggle is a toggle, not a set: mirrors ScriptCommand_Load's own resync below: a freshly-launched script always starts unsuspended, so bring it into sync if global suspend is currently active.
 	; WinWait first since Run returns before the new window exists.
 	if GlobalHotkeysSuspended {
 		if WinWait(oldPath " ahk_class AutoHotkey", , 5)
@@ -715,7 +707,7 @@ RemoteMenuCommand(pid, scriptName, itemName, itemPos, menuObj) {
 	}
 }
 
-; v2: itemName is the clicked Load-submenu entry, replacing A_ThisMenuItem - it's already the scriptName since that's
+; v2: itemName is the clicked Load-submenu entry, replacing A_ThisMenuItem: it's already the scriptName since that's
 ; exactly what subMenuLoad.Add(scriptName, ScriptCommand_Load) used as the item's own display text.
 ScriptCommand_Load(itemName, itemPos, menuObj) {
 	global Scripts, GlobalHotkeysSuspended, g_FleetControlMsg
@@ -725,7 +717,7 @@ ScriptCommand_Load(itemName, itemPos, menuObj) {
 	Scripts[scriptName].Pid := pid
 	Scripts[scriptName].Status := true
 
-	; Suspend toggle is a toggle, not a set - a freshly-launched script always starts unsuspended, so if global suspend is currently active, bring this new process into sync with it.
+	; Suspend toggle is a toggle, not a set: a freshly-launched script always starts unsuspended, so if global suspend is currently active, bring this new process into sync with it.
 	; Run returns as soon as the process exists, before its window does, so WinWait is required or the PostMessage below would silently miss.
 	if GlobalHotkeysSuspended {
 		DetectHiddenWindows(true)
@@ -796,7 +788,7 @@ GetCurrentDisplayTopology() {
 
 ; Pre-existing bug (present identically in the original v1 source, not introduced by the v2 port): PCRE's "."
 ; does not match a newline by default, so the old "(.*)" Delim pattern could only ever match up through the
-; FIRST line, then stop - it never actually found the LAST complete line before the length limit like the
+; FIRST line, then stop: it never actually found the LAST complete line before the length limit like the
 ; function's own name/intent implies. This stayed invisible for years because the merged multi-line tipText
 ; apparently used to stay under the 124-char threshold entirely, so the truncation branch never ran; with 11
 ; scripts now merged into one tray tip, it always exceeds 124 chars, so the tooltip always collapsed down to
@@ -815,12 +807,11 @@ TrimAtDelim(String, Length := 124, Delim := "`n", Tail := "...") {
 }
 
 ; Simple ascending string sort for an array (replaces v1's Sort command over a delimited string).
-; v2: the native `<`/`>` string-relational operators hang indefinitely in this environment - confirmed down to
-; the simplest possible case ("a" < "b") in total isolation; `=`/`!=` are unaffected.
-; Traced to this machine's mismatched locale configuration (system locale en-US, user locale en-GB) deadlocking
-; v2's locale-aware string collation path; v1 does not hit this.
-; Workaround: StrGreaterThan() below compares ordinally by character code, never invoking the native operator
-; on two strings. See Migration-Notes.md 18.11.
+; v2: the native `<`/`>` string-relational operators hang indefinitely in this environment: confirmed down to the
+; simplest possible case ("a" < "b") in total isolation; `=`/`!=` are unaffected. Traced to this machine's mismatched
+; locale configuration (system locale en-US, user locale en-GB) deadlocking v2's locale-aware string collation path;
+; v1 does not hit this. Workaround: StrGreaterThan() below compares ordinally by character code, never invoking the
+; native operator on two strings. See Migration-Notes.md 18.11.
 Sort_ArrayStrings(arr) {
 	n := arr.Length
 	Loop n - 1 {
@@ -837,10 +828,9 @@ Sort_ArrayStrings(arr) {
 	return arr
 }
 
-; Ordinal (byte/codepoint) string comparison, deliberately not using the native `>` operator - see the note on
-; Sort_ArrayStrings() above.
-; Character-by-character via Ord()/SubStr(), which never touches the string-relational code path that hangs
-; in this environment.
+; Ordinal (byte/codepoint) string comparison, deliberately not using the native `>` operator: see the note on
+; Sort_ArrayStrings() above. Character-by-character via Ord()/SubStr(), which never touches the string-relational
+; code path that hangs in this environment.
 StrGreaterThan(a, b) {
 	lenA := StrLen(a), lenB := StrLen(b)
 	minLen := lenA < lenB ? lenA : lenB ; numeric `<` - unaffected, confirmed safe (only string `<`/`>` hangs)
