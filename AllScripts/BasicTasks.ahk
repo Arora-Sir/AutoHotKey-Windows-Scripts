@@ -200,10 +200,67 @@ OpenActionCenter() {
 	Send("{LWin up}{n up}")
 }
 
+; BluetoothToggle() {
+; Method 1
+; Run("ms-settings:bluetooth")
+; ; Wait for the Bluetooth settings window to open
+; WinWait("Settings")
+; WinActivate()
+; Sleep(2000)
+; Send("{Tab}{Tab}{Tab}{Space}")
+; ; Close the Bluetooth settings window
+; Send("!{F4}")
+; Send("{LWinDown}{a down}")
+; Sleep(800)
+; Send("{Down}{Right}{Enter}{Esc}")
+
+; Method 2
+; MaxTime := 5 ; Max Seconds to wait
+; StartTime := A_TickCount
+; WinID := "ahk_exe ShellExperienceHost.exe ahk_class Windows.UI.Core.CoreWindow"
+; WinActivate(WinID)
+; if !WinWaitActive(WinID, , MaxTime - ((A_TickCount - StartTime) / 1000)) {
+; 	MsgBox("WinWait timed out.")
+; } else {
+; 	Sleep(600)
+; 	Send("{Down}")
+; 	Send("{Down}")
+; 	Sleep(1000)
+; 	Send("{Right}")
+; 	Sleep(100)
+; 	Send("{Enter}{Esc}")
+; }
+; Send("{Click 1650 690}")
+; }
+
+; DoubleClick(action) {
+; 	if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 500) {
+; 		Class := WinGetClass("A")
+
+; 		; Show/Hide Taskbar on Double click on taskbar
+; 		if (Class = "Shell_TrayWnd") { ; or (Class = "Progman")
+; 			static ABM_SETSTATE := 0xA, ABS_AUTOHIDE := 0x1, ABS_ALWAYSONTOP := 0x2
+; 			APPBARDATA := Buffer(size := 2 * A_PtrSize + 2 * 4 + 16 + A_PtrSize, 0)
+; 			NumPut("UInt", size, APPBARDATA), NumPut("Ptr", WinExist("ahk_class Shell_TrayWnd"), APPBARDATA, A_PtrSize)
+; 			NumPut("UInt", action ? ABS_AUTOHIDE : ABS_ALWAYSONTOP, APPBARDATA, size - A_PtrSize)
+; 			DllCall("Shell32\SHAppBarMessage", "UInt", ABM_SETSTATE, "Ptr", APPBARDATA)
+; 			return
+; 		}
+; 	}
+; }
+
+; DoubleCapsHit := false
 DoubleTapCapsLock() {
+	; if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 200 && DoubleCapsHit = false) {
 	if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250) {
 		SetCapsLockState(GetKeyState("CapsLock", "T") ? "Off" : "On")
+		; SetCapsLockState("On")
+		; DoubleCapsHit := true
 	}
+	; else if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 200 && DoubleCapsHit = true) {
+	; 	SetCapsLockState("Off")
+	; 	DoubleCapsHit := false
+	; }
 }
 
 ; Close legacy bottom downloads shelf in Chrome (Brave uses a modern top toolbar popup, so this issue only applies to Chrome)
@@ -334,10 +391,14 @@ GetExplorerSelectedFilePaths() {
 ; [END: Direct Wireless Share to Phone / Tablet via Tailscale ADB]
 
 ClipboardSearch() {
+	; If (WinExist("ahk_exe brave.exe")) {
 	Sleep(100)
 	GoogleSearchEngine := "https://www.google.com/search?q="
 	Send("^c")
 	Sleep(100)
+
+	; WinActivate("ahk_exe brave.exe")
+	; Sleep(200)
 
 	LatestCopiedClipboard := A_Clipboard
 	securedAddress := "https://"
@@ -349,8 +410,10 @@ ClipboardSearch() {
 		Send("{Enter}") ; Hit Enter
 	} else {
 		completeURL := GoogleSearchEngine . LatestCopiedClipboard
+		; MsgBox("Testing, " completeURL, "Options", "4 T3") ; For Debugging
 		Run(completeURL)
 	}
+	; }
 }
 
 MoveBGApp() {
@@ -387,6 +450,8 @@ OpenYoutube() {
 
 openYT() {
 	timedOut := KeyWait("t", "D T0.20") ; wait a 0.20 second to see if t is pressed
+	; Input(&UserInput, "T0.7 L4", "{enter}.{esc}{tab}", "t")
+	; if (UserInput = "Timeout") ; y not pressed in time
 	if (timedOut) { ; t not pressed in time
 		return false
 		;ignore as of now as it was intrupting normal functionality
@@ -396,12 +461,17 @@ openYT() {
 		Run(YoutubeURL)
 	}
 	return true
+	; if (UserInput = "t") {
+	; 	YoutubeURL := "https://www.youtube.com/"
+	; 	Run(YoutubeURL)
+	; }
 }
 
 OpenNewTab() {
 	; If youtube is going to active then disable opening new tab and open YT instead
 	if (A_PriorHotkey != "~^Y") {
 		if (WinActive("ahk_exe chrome.exe") || WinActive("ahk_exe brave.exe")) {
+			; MsgBox("[ Options, " A_PriorHotkey ", Timeout]")
 			Send("^t")
 		} else if (WinExist("ahk_exe brave.exe") && A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250) {
 			WinActivate("ahk_exe brave.exe")
@@ -469,10 +539,12 @@ ClickCenterOfScreen() {
 }
 
 SortFolderByDate() {
+	; if WinActive("ahk_class ExploreWClass") {
 	if WinActive("ahk_exe explorer.exe") {
 		hWnd := WinGetID("A")
 		for oWin in ComObject("Shell.Application").Windows {
 			if (oWin.HWND = hWnd) {
+				; MsgBox(oWin.Document.SortColumns) ;show current sort columns
 				if (oWin.Document.SortColumns == "prop:-System.DateModified;") {
 					oWin.Document.SortColumns := "prop:+System.DateModified;" ;sort by date modified descending (newest first)
 				} else {
@@ -480,11 +552,23 @@ SortFolderByDate() {
 				}
 				;oWin.Document.SortColumns := "prop:+System.ItemNameDisplay;" ;sort by name ascending (A-Z)
 				;oWin.Document.SortColumns := "prop:-System.ItemNameDisplay;" ;sort by name descending (A-Z)
+				; break
 			}
 		}
 		oWin := ""
 	}
 }
+
+; F8::clickEnter() ;{ <- Delete Recycle Bin Data
+
+; clickEnter() {
+; 	Loop {
+; 		Sleep(100)
+; 		Send("{Click}")
+; 		Sleep(100)
+; 		Send("{Enter}")
+; 	}
+; }
 
 ; MuteMic: backward-compatible wrapper delegating to ToggleMicrophoneMute() in SharedHelpers.ahk
 MuteMic() {
@@ -514,31 +598,73 @@ WatchMicrophoneMute() {
 	}
 }
 
+; YugenAnime() {
+; 	Send("{Click 1020 451}")
+; 	Sleep(300)
+; 	Send("^l")
+; 	; Sleep(100)
+; 	Send("^c")
+; 	Sleep(600)
+; 	YugenAnimeEngine := "https://yugenanime.tv/"
+; 	LatestCopiedClipboard := A_Clipboard
+; 	yugenSubstring := SubStr(LatestCopiedClipboard, 1, 22)
+; 	if (yugenSubstring != YugenAnimeEngine) {
+; 		Send("^w")
+; 		Sleep(200)
+; 		Send("f")
+; 		Sleep(100)
+; 		Send("{Space}")
+; 	} else {
+; 		Send("{Esc down}")
+; 		Sleep(200)
+; 		Send("{Esc down}")
+; 		Sleep(200)
+; 		Send("f")
+; 		; Sleep(200)
+; 		; Send("{Space}")
+; 	}
+; }
+
 OpenCalendar() {
 	if (WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe")) {
 		Send("!x")
 	} else if WinExist("ahk_exe brave.exe") {
 		WinActivate("ahk_exe brave.exe")
+		; Sleep, 250
 		Send("!x")
 	} else if WinExist("ahk_exe chrome.exe") {
 		WinActivate("ahk_exe chrome.exe")
+		; Sleep, 100
 		Send("!x")
 	}
 }
 
 OpenChatGPT() {
+	; if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250) {
 	if (WinActive("ahk_exe brave.exe") || WinActive("ahk_exe chrome.exe")) {
 		Run("https://chatgpt.com")
 	} else if WinExist("ahk_exe brave.exe") {
+		; WinActivate, ahk_exe brave.exe
 		Run("https://chatgpt.com")
 	} else if WinExist("ahk_exe chrome.exe") {
+		; WinActivate, ahk_exe chrome.exe
 		Run("https://chatgpt.com")
 	}
+	; }
 }
 
 CopyToClipboard() {
+	; v1 bailed out here via `if ErrorLevel return` (ClipWait's old error-signaling convention) - v2's
+	; ClipWait() returns a boolean directly instead, found live to have been dropped entirely during the
+	; port (the failure path silently fell through instead of returning), restored below.
 	Send("^c")
-	ClipWait(1)
+	if !ClipWait(1) {
+		; MsgBox("Copying to clipboard failed.")
+		return
+	}
+
+	; Sleep, 500
+	; Send, ^c
 
 	current_application := WinGetProcessName("A")
 	current_window_title := WinGetTitle("A")
@@ -546,26 +672,74 @@ CopyToClipboard() {
 	if (current_application = "ApplicationFrameHost.exe" && InStr(current_window_title, "OneNote")) {
 		if DllCall("IsClipboardFormatAvailable", "UInt", 1) {
 			A_Clipboard := A_Clipboard  ; Convert to text-only, removing formatting.
-			ClipWait(1)
+			if !ClipWait(1) {
+				; MsgBox("Failed to process clipboard data.")
+			}
 		}
 	}
 }
 
 RevertVideoIntruption() {
+	; Hotkey("^+v", "Off")
+	; Send("^+v")
+	; Hotkey("^+v", "On")
 	if (WinActive("ahk_exe chrome.exe") || WinActive("ahk_exe brave.exe")) {
+		; static prevURL := ""
+		; Get the URL of the active tab
+		; ControlGetText(&url, "Edit1", "ahk_class Chrome_WidgetWin_1")
+		; if InStr(url, "file:///") {
+		; 	; Close the local file tab
+		; 	Send("^w")
+		; 	Sleep(500) ; Give some time for the tab to close
+		; }
+
 		Sleep(1000)
 		Send("{LCtrl down}{LShift down}{tab down}")
 		Send("{LCtrl up}{LShift up}{tab up}")
 		Sleep(600)
 		Send("f")
+
+		; ControlGetText(&url, "Edit1", "ahk_class Chrome_WidgetWin_1")
+		; MsgBox(url)
+
+		; if InStr(url, "youtube.com") {
+		; }
 	}
+	return
+	; Sleep(500)
+	; Send("^l")
+	; ; Sleep(10)
+	; Send("^c")
+	; ClipWait(1)
+
+	; ChromeExtension := "chrome-extension://"
+	; LatestCopiedClipboard := A_Clipboard
+	; ; MsgBox(LatestCopiedClipboard)
+
+	; chromeExtensionSubstring := SubStr(LatestCopiedClipboard, 1, 19)
+	; if (ChromeExtension == chromeExtensionSubstring) {
+	; 	Send("{LCtrl down}{LShift down}{tab down}")
+	; 	Send("{LCtrl up}{LShift up}{tab up}")
+	; 	Sleep(400)
+	; 	Send("f")
+	; }
 }
+
+; MonicaQuickAccess() { ;Grammar Correction
+; 	Send("^c")
+; 	Sleep(100)
+; 	Send("!^f") ;Shortcut to Open Monica
+; 	Sleep(500)
+; 	Send("{Tab}") ;Going to Grammar section
+; 	Send("{Enter}")
+; }
 
 MonicaGrammarCorrection() { ;Grammar Correction
 	Send("^c")
 	Sleep(100)
 	Send("!f") ;Shortcut to Open Monica
 	Sleep(500)
+	; Send, {Tab} ;Going to Grammar section
 	Send("{Enter}")
 }
 
@@ -575,6 +749,7 @@ MonicaSummary() { ;Summary
 	Send("!f") ;Shortcut to Open Monica
 	Sleep(500)
 	Send("{Tab}") ;Going to Summry section
+	; Send, {Tab} ;Going to Summry section
 	Send("{Enter}")
 }
 
@@ -582,7 +757,11 @@ MonicaSummary() { ;Summary
 ~!^Z::ImageEditor() ;{ <- ShareX Image Editor
 
 ImageEditor() {
+	; Send, ^c
+	; MouseClick, left, 902, 471
+
 	Send("^c")
+	; ClipWait(1)
 	global PATH_SHAREX_EXE
 	if (IsSet(PATH_SHAREX_EXE) && PATH_SHAREX_EXE && FileExist(PATH_SHAREX_EXE))
 		Run('"' PATH_SHAREX_EXE '" -ImageEditor')
@@ -594,6 +773,15 @@ ImageEditor() {
 ; Ctr+Shift+V in browser to go to previous tab when taking a screenshot
 ~^+v::RevertVideoIntruption() ;{ <- Brave AwesomeSreenshot Intruption Stop
 
+; #HotIf WinActive("ahk_exe EXCEL.EXE") ; This directive targets Microsoft Excel
+; !f:: { ; This is the hotkey Alt+F
+; 	Send("{LAlt down}{LAlt up}")
+; 	Send("{h down}{h up}")
+; 	Send("{f down}{f up}")
+; 	Send("{p down}{p up}")
+; }
+; #HotIf ; This closes the Excel-specific directive
+
 ; Ctr+C OneNote copy text instead of SS of some text
 $^c::CopyToClipboard() ;{ <- OneNote Copy Mechanism Handeling (instead of SS)
 
@@ -602,6 +790,12 @@ $^c::CopyToClipboard() ;{ <- OneNote Copy Mechanism Handeling (instead of SS)
 
 ; Win+M Minimize window
 #M::WinMinimize("A") ;{ <- Minimize Active Window
+
+; Win+F8 -> Bluetooth On/Off
+; #F8::BluetoothToggle() ;{ <- Bluetooth Toggle [Discard]
+
+; MouseLButton DoubleClick Show/Hide Taskbar;
+; ~LButton::DoubleClick(hide := !hide) ;{ <- Double Click Functions (WindHawk Now)
 
 ; Alt+MouseLButton Move background apps
 ^!LButton::MoveBGApp() ;{ <- Move BG Apps
@@ -623,6 +817,7 @@ $^c::CopyToClipboard() ;{ <- OneNote Copy Mechanism Handeling (instead of SS)
 
 ; Win+Alt+Ctrl+C Open Powershell
 #!^c::RunPowerShellAsAdministrator() ;{ <- Open Powershell
+;Run('"C:\Program Files\PowerShell\7\pwsh.exe" -WorkingDirectory ~')
 
 ; Win+Alt+Ctrl+K -> Click Center of Screen
 ;#!^k::ClickCenterOfScreen() ;{ <- Click Center of Screen
@@ -653,6 +848,12 @@ OpenJavaCourseFolder() {
 ; Win+Alt+N Clear Notification center
 #!N::ClearNotificaitons() ;{ <- Clear Notifications (Win 11)
 
+; Alt+Shift+T Active window Always on Top
+; !+T::WinSetAlwaysOnTop(, "A") ;{ <- This Window Always on Top
+
+; Alt+Ctr+J Testing Automation
+; $!^J::TestingAutomation() ;{ <- Testing Automation
+
 ; Alt+G Copy the content, Open Monica & Grammar Correction
 !G::MonicaGrammarCorrection() ;{ <- Monica Grammar Correction
 
@@ -677,8 +878,10 @@ $!D::OpenChatGPT() ;{ <- Open ChatGPT
 ; Double Tap caps lock to on and off
 *CapsLock::DoubleTapCapsLock() ;{ <- Double Tap To Activate/Deactivate
 
+; #HotIf WinActive("ahk_class Shell_TrayWnd")
 ; Ctr+J+J (Chrome) Close downloads bar at bottom
 $^J::CloseBrowserBottomDownloadsBar() ;{ <- (Chrome) Close browser downloads bar at bottom
+; #HotIf
 
 ; Ctr+Y+T in browser to open Youtube
 ~^Y::OpenYoutube() ;{ <- Open Youtube
@@ -717,6 +920,18 @@ ReconnectCloudflare() {
 
 ; Win+X+X -> Sleep Laptop
 $#x::SleepLaptop() ;{ <- Sleep Laptop (Win+X+X)
+
+;Turn Caps Lock into a Shift key
+; Capslock::Shift
+
+;F1:: Send("{Left}")
+; +NumpadAdd::Send("{Volume_Up}")
+; +NumpadSub::Send("{Volume_Down}")
+; break::Send("{Volume_Mute}")
+; return
+
+; #LAlt::^#Right ; switch to next desktop with Windows key + Left Alt key -> Original is Win + Ctr + Right
+; #LCtrl::^#Left ; switch to next desktop with Windows key + Left CTRL key -> Original is Win r+ Ctr + Left
 
 ; =========================================================================
 ; [START: VS Code Fine-Grained Whole UI Zoom Hook]

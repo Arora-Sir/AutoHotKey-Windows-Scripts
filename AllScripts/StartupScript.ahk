@@ -95,6 +95,17 @@ Files.Push(Script_12)
 PinnedScripts := ["BasicTasks", "PersonalKeywords", "SunshineDisplayWatchdog"]
 g_CurrentBasicTasksDrmItem := ""
 g_CurrentSunshineMouseSpeedItem := ""
+
+; Loop 1 {
+; 	FilePath := "Script_" . A_Index
+; 	MsgBox(FilePath)
+; }
+
+; Previously Used
+; Files := [
+; 	"Add Path to the AHK FILE"
+; ]
+
 ; v2: per-PID Menu objects, replacing v1's dynamically-name-string-addressed "SubMenu_%PID%" system, since v2
 ; submenus are attached by object reference, not by a constructed name string. Rebuilt fresh every MenuBuild() call.
 g_ScriptMenus := Map()

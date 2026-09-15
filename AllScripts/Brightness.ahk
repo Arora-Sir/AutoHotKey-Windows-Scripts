@@ -299,6 +299,7 @@ class BrightnessSetter {
 Brightness_WM_POWERBROADCAST(wParam, lParam, *)
 {
     global BS
+    ;OutputDebug(BS)
     if (wParam == 0x8013 && lParam && NumGet(lParam+0, 0, "UInt") == NumGet(BrightnessSetter._GUID_ACDC_POWER_SOURCE()+0, 0, "UInt")) { ; PBT_POWERSETTINGCHANGE and a lazy comparison
         BS._AC := NumGet(lParam+0, 20, "UChar") == 0
         return true

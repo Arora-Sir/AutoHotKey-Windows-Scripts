@@ -1350,6 +1350,13 @@ SearchEdit_DialogGuiEscape(*) {
 ; directly - no more manufacturing AHK_Windows%A_Index%-style pseudo-array variable names (that
 ; construct-a-variable-name-from-a-string trick has no v2 equivalent at all, per SharedHelpers.ahk's
 ; CloseBrowserGracefully() precedent elsewhere in this fleet).
+;
+; Example Code:
+/*
+	MsgBox(AHKScripts(&Script_List))
+	for index, element in Script_List
+		MsgBox("#:`t" index "`nPath:`t" element.Path "`nName:`t" element.Name "`nDir:`t" element.Dir "`nExt:`t" element.Ext "`nTitle:`t" element.Title "`nhWnd:`t" element.hWnd)
+*/
 AHKScripts(&Array)
 {
     DetectHiddenWindows(true)
