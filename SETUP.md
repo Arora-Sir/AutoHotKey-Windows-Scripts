@@ -8,7 +8,7 @@ This guide documents the complete procedure to configure, provision, and recover
 
 - **Operating system**: Windows 11 (Version 23H2 or 24H2)
 - **Runtimes**:
-  - AutoHotkey v1.1.37.02 (installed in C:\Program Files\AutoHotkey\)
+  - AutoHotkey v2.0 (installed in C:\Program Files\AutoHotkey\v2\)
   - PowerShell 7 (pwsh.exe)
 - **Host hardware**:
   - Acer Predator Helios 300 (or equivalent dual-GPU architecture)
@@ -162,7 +162,7 @@ Run these diagnostic commands to verify workstation health:
    `powershell
    Get-Process -Name 'AutoHotkey*', 'StartupScript*' | Format-Table Id, ProcessName
    `
-   Expect exactly 11 AutoHotkeyU64 child processes and 1 StartupScript master process.
+   Expect exactly 11 AutoHotkey64 child processes and 1 StartupScript master process.
 
 2. **Verify live mouse speed**:
    `powershell

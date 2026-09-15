@@ -117,7 +117,7 @@ Follow these sequential steps to recreate the entire streaming environment from 
 
 ### Step 4: AutoHotkey Fleet Setup
 
-1. Verify AutoHotkey v1.1.37+ is installed.
+1. Verify AutoHotkey v2.0+ is installed.
 2. In AllScripts/, copy LocalPaths.ahk.example to LocalPaths.ahk.
 3. Configure PATH_SUNSHINE_SCRIPTS in LocalPaths.ahk to point to this directory:
    ```ahk

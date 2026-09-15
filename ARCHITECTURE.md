@@ -19,18 +19,18 @@ Every script that needs one of these includes it with an **explicit** `%A_Script
 
 `SharedHelpers.ahk` also runs standalone as its own `StartupScript.ahk` tray entry, for quick Edit access (same reason `LocalPaths.ahk` does below).
 
-- This uses a narrow exception to its own "no top-level directives" rule: a single `#Persistent` at the top.
-- That's a pure lifecycle flag rather than executable code, so it's a no-op for every `#Include`ing script (they all already stay alive via their own hotkeys/loops).
+- This uses a narrow exception to its own "no top-level directives" rule: a single `Persistent()` call at the top.
+- `#Persistent` is a v1-only directive; in v2 it silently hangs the process at load time instead of erroring (confirmed empirically, see Migration-Notes.md SS18.1) - `Persistent()` is the runtime function call that replaces it.
+- That's a pure lifecycle call rather than meaningful executable code, so it's a no-op for every `#Include`ing script (they all already stay alive via their own hotkeys/loops).
 - It only actually matters for this standalone run.
 - The explicit `%A_ScriptDir%\` form is immune to this regardless of how the script is launched.
 
 **Important gotcha: include it *before* any hotkey definition.**
 
-- AHK's auto-execute section ends at the first hotkey/hotstring label, `Return`, or `Exit` encountered during a top-to-bottom load-time scan.
-- That scan *skips over function bodies* entirely (recognized and deferred, never executed inline), but does **not** skip over a plain (non-hotkey) label.
-- A plain label like `SomeLabel:` followed by code and `return`, if reached by that linear auto-execute scan, executes immediately at load time and ends the auto-execute section right there, before the *including* script's own remaining top-level initialization code ever runs.
-- This is why every "auto-dismiss" target in this file (`RemoveBottomRightBadge`, `RemoveTimedToolTip`) is written as a **zero-parameter function**, not a label: `SetTimer` accepts a bare function name exactly like it accepts a label name (AHK v1.1.20+), and a function is correctly skipped during auto-execute scanning.
-- If you add a new `SetTimer` target to this file, make it a function for the same reason, never a plain label.
+- AHK's auto-execute section ends at the first hotkey/hotstring definition, `Return`, or `Exit` encountered during a top-to-bottom load-time scan.
+- That scan *skips over function bodies* entirely (recognized and deferred, never executed inline).
+- v2 has no plain (non-hotkey) label at all in the v1 sense - every `SetTimer`/`OnMessage` target here (`RemoveBottomRightBadge`, `RemoveTimedToolTip`, etc.) is a real zero-parameter function, which the language requires and which auto-execute scanning correctly skips over.
+- If you add a new `SetTimer` target to this file, it must be a function reference - v2 has no label-based `SetTimer` dispatch to fall back on.
 
 ### What's in the file, and why
 
@@ -57,25 +57,25 @@ Every script that needs one of these includes it with an **explicit** `%A_Script
   - Use this for simple near-cursor feedback; use `ShowBottomRightBadge` when you want color/fixed-position control.
 
 - **`PublishTrayMenuManifest(itemsArray)` / `HandleRemoteTrayMenuTrigger`** - publishes a script's custom tray-menu items so `StartupScript.ahk`'s master submenu can mirror them generically.
-  - Call once per script, right after that script's own `Menu, Tray, Add` lines:
+  - Call once per script, near the top of its auto-execute section:
   ```ahk
   PublishTrayMenuManifest([ ["Display Label 1", "TrayLabel1"]
                           , ["-"]
                           , ["Display Label 2", "TrayLabel2"] ])
   ```
   - Each script gets its own manifest file (`%A_Temp%\ahk_traymenu_<ScriptName>.txt`, keyed by that script's own filename), so sharing this one function across multiple processes is safe - there's no cross-process state beyond the convention of one manifest file per script.
-  - **Separator Support**: An entry of `["-"]` or a string `"-"` serializes to `"-|"` in the manifest. When `StartupScript.ahk` reads the manifest, any item whose first token is `"-"` (or empty) executes a bare `Menu, SubMenu_%PID%, Add` to insert a native Win32 horizontal separator line, grouping custom items cleanly.
+  - **Separator Support**: An entry of `["-"]` or a string `"-"` serializes to `"-|"` in the manifest. When `StartupScript.ahk` reads the manifest, any item whose first token is `"-"` (or empty) calls a bare `.Add()` on that script's per-PID `Menu` object to insert a native Win32 horizontal separator line, grouping custom items cleanly.
   - If a script stops publishing items it previously did (a feature moved elsewhere, say), delete its stale manifest file once by hand.
-    `StartupScript.ahk`'s `HandleRemoteTrayMenuTrigger` guard (`IsLabel`) keeps a leftover manifest from raising an error dialog, but won't clean up the dead entry on its own.
+    `StartupScript.ahk`'s `HandleRemoteTrayMenuTrigger` guard (a `Map.Has()` check against the fleet's registered handler names, replacing v1's `IsLabel`) keeps a leftover manifest from raising an error dialog, but won't clean up the dead entry on its own.
 
-  **Tray menu shape**, built by `StartupScript.ahk`'s `MenuBuild:`:
+  **Tray menu shape**, built by `StartupScript.ahk`'s `MenuBuild()`:
   - Each managed script's own submenu is deliberately minimal: `View Key History` / `Edit` / `Restart` / `Exit`, plus that script's own published items.
     Pause and Suspend are **not** per-script.
   - `StartupScript.ahk` exposes one global "Suspend Hotkeys" tray item (and matching `Win+ScrollLock` hotkey) that cascades a real Suspend-Hotkeys toggle to every managed script at once, leaving each script's own background timers/watchers running.
     That's why Suspend was chosen over Pause, which would freeze those too.
   - This replaces AutoHotkey's own native Suspend Hotkeys/Pause Script/Exit tray items (which only ever acted on the master script's own hotkeys, not the fleet) rather than sitting alongside them.
     So there is exactly one Suspend action and one Exit action, not two of each.
-  - `StartupScript.ahk`'s own 4 hotkeys need no exemption mechanism at all (no `Suspend, Permit`, no v2-only `#SuspendExempt`, which does not exist in v1.1 anyway).
+  - `StartupScript.ahk`'s own 4 hotkeys need no exemption mechanism at all (no `Suspend, Permit`, no `#SuspendExempt`).
     `SuspendAllToggle` only ever posts to the managed child scripts, never to this master script's own window, so none of its hotkeys can ever actually become suspended.
   - "Restart" kills a script and relaunches it fresh without moving it to the Load submenu (unlike Exit).
     Useful when just one script needs a clean restart without a full fleet reload.
@@ -91,7 +91,7 @@ Every script that needs one of these includes it with an **explicit** `%A_Script
   - Replaces legacy mixer and external dependencies (`nircmd.exe`, PowerToys VCM). Executes in under 5ms without spawning external processes.
   - Automatically targets both `eConsole` (0) and `eCommunications` (2) capture endpoints so Discord, Zoom, Teams, and browser calls are all muted in sync.
   - Integrates with `ShowBottomRightBadge` for instant DPI-scaled on-screen HUD toast notifications (deep red `#8B1A1A` for Muted, deep green `#1A6E3C` for Unmuted).
-  - Drives a dynamic system tray indicator: when unmuted, the tray icon is completely hidden (`Menu, Tray, NoIcon`) for zero clutter. When muted, a dedicated high-contrast white microphone icon with a vivid neon-red diagonal slash (`AutoHotkey Companion Files\mic_muted.ico`) appears in the notification area.
+  - Drives a dynamic system tray indicator: when unmuted, the tray icon is completely hidden (`A_IconHidden := true`) for zero clutter. When muted, a dedicated high-contrast white microphone icon with a vivid neon-red diagonal slash (`AutoHotkey Companion Files\mic_muted.ico`) appears in the notification area (`A_IconHidden := false`, `A_IconTip` set to the persistent hover text).
   - Left-clicking the muted tray icon immediately unmutes the microphone and dismisses the icon.
   - A lightweight 1500ms background watcher (`WatchMicrophoneMuteState` in `BasicTasks.ahk`) quietly detects external hardware/system mute changes and keeps the tray icon synchronized without firing disruptive toasts.
   - `StartupScript.ahk`'s `TrayIconRemove` explicitly exempts `BasicTasks` so mouseover events over the notification area do not wipe out the active mute icon.
@@ -128,24 +128,24 @@ MyFeatureFastPhase() {
     ; ... cycle/update g_MyFeaturePendingValue however your feature needs ...
     ; ... show instant feedback, e.g. ShowBottomRightBadge(...) ...
 
-    DebounceArmTimer("MyFeatureCommit", g_MyFeatureDebounceMs)
+    DebounceArmTimer(MyFeatureCommit, g_MyFeatureDebounceMs)
 }
 
-; Commit phase - a LABEL (not a function - this one legitimately needs to be
-; a label, since it's the actual SetTimer target application code reaches
-; via Gosub-like dispatch, not a zero-param helper living in the shared
-; library before any hotkey exists). Reached only via the timer armed above.
-MyFeatureCommit:
+; Commit phase - an ordinary zero-parameter function, reached only via the timer armed above.
+; v1's original shape used a label here (real SetTimer/Gosub targets in v1 could be either), but v2's
+; SetTimer requires a real function reference - there is no remaining reason for a commit phase to ever
+; be a label (see Migration-Notes.md SS11 for the full history of this specific change).
+MyFeatureCommit() {
     global g_MyFeaturePendingValue, g_MyFeatureCommitBusy, g_MyFeatureDebounceMs
 
-    if !DebounceTryBeginCommit(g_MyFeatureCommitBusy, "MyFeatureCommit", g_MyFeatureDebounceMs)
+    if !DebounceTryBeginCommit(&g_MyFeatureCommitBusy, MyFeatureCommit, g_MyFeatureDebounceMs)
         return
 
     snapshotValue := g_MyFeaturePendingValue
     ; ... do the real (slow) work using snapshotValue ...
 
-    DebounceEndCommit(g_MyFeaturePendingValue, snapshotValue, g_MyFeatureCommitBusy, "MyFeatureCommit", g_MyFeatureDebounceMs)
-return
+    DebounceEndCommit(&g_MyFeaturePendingValue, snapshotValue, &g_MyFeatureCommitBusy, MyFeatureCommit, g_MyFeatureDebounceMs)
+}
 ```
 
 **Why this is correct, precisely:**
@@ -159,12 +159,11 @@ return
 - **Real commits can't be cancelled once started.** If your feature's "real work" is an external process launch (like `shell.Run(cmd, 0, true)`), killing it partway through to honor a newer press risks leaving it in a half-applied state, worse than letting it finish and following up immediately after.
   Don't try to make commits interruptible; let the reconciliation tail handle catching up instead.
 
-**Why `ByRef` + dynamic `%var%`-label dispatch, not `Func()`/`.Bind()` bound-function timers:**
+**Why plain global variables plus `&var` by-reference parameters, not a bound-function/closure approach:**
 
-- Both idioms the debounce helpers rely on are already used elsewhere in this codebase: `ByRef` in `Brightness.ahk` and `HotkeyHelp.ahk`; dynamic `%var%` label dispatch for `Gosub` in the tray manifest handlers.
-- Bound-function timers are supported since AHK v1.1.20, but require rebuilding the bound object on every re-arm (an object-target timer is deleted after firing, unlike a label/string timer which just goes `Off` and can be reused).
-  They also aren't used anywhere in this repo for a `SetTimer` target.
-- Reusing an idiom this codebase already demonstrably understands beats introducing a new one for marginal benefit.
+- v1's `ByRef` parameter becomes v2's `&var` (same by-reference semantics, new syntax) - used throughout the debounce helpers (`DebounceTryBeginCommit`, `DebounceEndCommit`) exactly as before.
+- v1's dynamic `%var%`-label `Gosub` dispatch (used for the tray manifest handlers) has no v2 equivalent at all - v2 requires a real function reference wherever v1 accepted a label or a constructed label-name string. Every timer/dispatch target in this pattern is now an ordinary function reference, not a string.
+- A `Func().Bind()` closure-per-feature approach was considered and rejected: it would need rebuilding the bound object on every re-arm (an object-target timer is deleted after firing, unlike a function-reference timer which just goes `Off` and can be reused), for no benefit over the existing plain-globals-plus-`&var` shape every feature in this codebase already uses.
 
 ## The bottom-right badge system
 
@@ -193,14 +192,12 @@ Colors follow a simple convention - pick from these when adding a new message, o
 - Dismissal (both the timer-driven path and the explicit `HideBottomRightBadge()`) uses `Gui, ...: Hide`, never `Destroy`, so the window stays alive and ready for the next instant update.
 - Keep this create-once/update-in-place shape for any similar popup; reintroducing Destroy/Sleep brings the visible gap back.
 
-**Use `Hwnd`, never `v`, for a Gui control created inside a function:**
+**The v1 `Hwnd`-vs-`v` GUI hang no longer applies in v2:**
 
-- On AHK v1.1.37.02, `Gui, Name: Add, Text, ... vSomeVar, text` hangs indefinitely (not an error, no dialog, just a dead thread) the instant that `Add` line executes *from inside a user-defined function*.
-- The exact same line at top-level auto-execute scope works instantly, independent of `BackgroundTrans` or of the function's name matching the Gui's name.
-- **The fix**: use an `Hwnd` option instead (`... BackgroundTrans HwndhTextCtl, text`), store the resulting HWND in a `static`, and address the control later via `GuiControl, Name:, %hTextCtl%, newText`.
-  AHK v1 accepts a bare HWND value as a ControlID just as readily as a `v`-variable name, and this path never hangs.
-- `ShowBottomRightBadge` in `SharedHelpers.ahk` does exactly this.
-  If you add a new Gui-based helper function to this file, use `Hwnd`, not `v`, for any control you'll need to reference again later.
+- On AHK v1.1.37.02, `Gui, Name: Add, Text, ... vSomeVar, text` hung indefinitely (not an error, no dialog, just a dead thread) the instant that `Add` line executed *from inside a user-defined function* - the exact same line at top-level auto-execute scope worked instantly.
+- The v1 workaround was an `Hwnd` option instead of `v` (`... BackgroundTrans HwndhTextCtl, text`), storing the resulting HWND in a `static` and addressing the control later via `GuiControl, Name:, %hTextCtl%, newText`.
+- **v2 has no equivalent bug and no `Hwnd`-vs-`v` distinction to worry about**: `GuiObj.AddText(...)` (and every other `.Add*()` method) always returns the real `GuiControl` object directly, from any calling context, function or auto-execute alike (confirmed empirically, see Migration-Notes.md SS8). `ShowBottomRightBadge` in `SharedHelpers.ahk` now stores that returned control object directly in a `global` and calls `.Text := newText` on it - no HWND indirection needed at all.
+- If you add a new Gui-based helper function to this file, just keep the object `.Add*()` returns; there is nothing left to work around here.
 
 ## Path-leak prevention
 
@@ -298,7 +295,7 @@ When streaming desktop video to a tablet (such as Samsung Galaxy Tab S10 Ultra) 
 
 - **Menu Hierarchy & Pinned Scripts**:
   - **Pinned Scripts**: Scripts listed in `PinnedScripts` (`BasicTasks`, `PersonalKeywords`, `SunshineDisplayWatchdog`) are rendered directly at the top level of the master tray menu for immediate 1-click submenu access.
-  - **Additional Scripts Submenu**: All remaining active background scripts (`BackgroundAutomations`, `Brightness`, `ClosePrograms`, `Ext4SsdManager`, `HotkeyHelp`, `Watchdog`) are cleanly consolidated into an expandable "Additional Scripts" submenu, preventing vertical menu overflow.
+  - **Additional Scripts Submenu**: All remaining active background scripts (`BackgroundAutomations`, `Brightness`, `ClosePrograms`, `Ext4SsdManager`, `HotkeyHelp`, `LocalPaths`, `SharedHelpers`, `Watchdog`) are cleanly consolidated into an expandable "Additional Scripts" submenu, preventing vertical menu overflow.
   - **Child Submenu Structure**: Each managed script submenu provides standard management actions (`View Key History`, `Edit`, `Restart`, `Exit`), followed by a horizontal separator line and any custom items published by that script.
   - **Global Actions**: Positioned at the bottom of the master menu: "Suspend Hotkeys" (global cascade toggle) and "Exit". Fleet maintenance actions ("Reload All", "Recompile & Relaunch") are housed inside the "Additional Scripts -> StartupScript" submenu to keep the top-level tray menu concise.
 
@@ -503,11 +500,11 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 - **Decision**: Windows Task Scheduler trigger with a 30-second logon delay (`PT30S`) and `RunLevel Limited`.
 - **Rationale**: At user logon, Windows Explorer, graphics drivers, audio services, and network adapters (Tailscale/Wi-Fi) initialize concurrently across multiple CPU threads. Launching immediately causes race conditions, missing system tray icons, and failed IPC registrations. A 30-second delay guarantees the desktop shell has completely settled. `RunLevel Limited` under the standard user account prevents boot UAC prompts while maintaining proper window message routing.
 
-### 3. AutoHotkey v1.1 Retention Over v2 Migration
-- **Context**: Upgrading the codebase to AutoHotkey v2.
-- **Alternative**: Rewriting all scripts to AHK v2 syntax.
-- **Decision**: Explicit `#Requires AutoHotkey v1.1` across the entire fleet.
-- **Rationale**: `StartupScript.exe` relies on dynamic runtime Win32 tray menu reflection (`Menu, SubMenu_%PID%, Add`), cross-process label triggers, and specific Win32 API structures that behave differently under v2. The fleet is stable, fully debugged, and heavily integrated with Win32 message routing. Rewriting to v2 would break master tray submenu mirroring without functional benefit.
+### 3. Full AutoHotkey v2 Migration (superseding an earlier decision to stay on v1.1)
+- **Context**: The fleet originally stayed on v1.1 specifically because `StartupScript.ahk`'s dynamic runtime tray-submenu reflection (`Menu, SubMenu_%PID%, Add`, addressed by a constructed name string per child process) appeared tied to v1-only mechanics, with no clear v2 equivalent and no functional benefit seen in rewriting a stable, heavily-integrated codebase.
+- **What actually happened**: the fleet was fully ported to AutoHotkey v2.0. The submenu-mirroring concern that originally blocked this was resolved by replacing name-string-addressed submenus with real per-PID `Menu` objects held in a `Map()` (`g_ScriptMenus` in `StartupScript.ahk`) - v2 attaches a submenu by object reference, not by a constructed name string, so the original blocker simply doesn't apply to the v2-native approach.
+- **Process**: every script was ported and verified live (not just "loads clean") against its real, actually-invoked feature set. Roughly 30 genuine v1->v2 language-migration bugs were found this way and are documented in full in `Official Documentation/AHK-v1-to-v2-Migration-Notes.md` - missing `global` declarations, `DllCall` output-parameter quirks, `Gui.Show()`'s argument-count change, `FileDelete` now throwing on a missing target where v1 was silent, and more. A companion parity audit confirmed every hotkey, hotstring, function, and explanatory comment in v1 has a working v2 counterpart.
+- **Result**: `#Requires AutoHotkey v2.0` across the entire fleet; `build_startup_exe.ps1` compiles against `AutoHotkey\v2\AutoHotkey64.exe`. The two backup git tags (`backup/pre-v2-migration`, `backup/original-refs-heads-master`) and normal commit history remain the rollback path if a v1-only behavior is ever found to have no working v2 equivalent after all.
 
 ### 4. Global Hotkey Suspension Over Script Pausing (`SuspendAllToggle`)
 - **Context**: Providing a single kill-switch hotkey (`Win+ScrollLock`) to disable productivity hotkeys during gaming or full-screen apps.
@@ -579,7 +576,7 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 - **Problem**: Microsoft deprecated PowerToys Video Conference Mute (VCM) in v0.88.0 due to virtual camera driver instability and testing overhead. Legacy solutions like `nircmd.exe` spawn external console processes, add 100-200ms latency, and fail to mute communications endpoints (leaving Zoom, Teams, or Discord calls unmuted). Furthermore, an always-on microphone tray icon adds unnecessary visual clutter, whereas having no indicator leaves users uncertain whether their microphone is active.
 - **Decision**:
   1. **Direct WASAPI COM calls via Win32 `DllCall`**: Implemented in `AllScripts/SharedHelpers.ahk` using `IMMDeviceEnumerator` and `IAudioEndpointVolume`. Simultaneously targets both `eConsole` (0) and `eCommunications` (2) capture endpoints in under 5ms with zero external process spawning.
-  2. **Dynamic Tray Indicator (Mute-Only Visibility)**: The tray icon (`mic_muted.ico`) appears in the notification area strictly when the microphone is muted (`Menu, Tray, Icon`), and is completely hidden when unmuted (`Menu, Tray, NoIcon`). This eliminates taskbar clutter during normal operation while providing an unmistakable indicator when the microphone is muted.
+  2. **Dynamic Tray Indicator (Mute-Only Visibility)**: The tray icon (`mic_muted.ico`) appears in the notification area strictly when the microphone is muted (`A_IconHidden := false`), and is completely hidden when unmuted (`A_IconHidden := true`). This eliminates taskbar clutter during normal operation while providing an unmistakable indicator when the microphone is muted.
   3. **Single-Click Unmuting**: Configured `Menu, Tray, Click, 1` with a default action that directly unmutes the microphone on a single left-click.
   4. **Background State Watcher (`WatchMicrophoneMuteState`)**: A lightweight 1500ms timer in `BasicTasks.ahk` synchronizes the tray icon with hardware mute buttons or third-party app toggles without firing disruptive notifications.
   5. **High-Contrast Option 1 Icon Design**: Created a custom multi-resolution `.ico` (16px to 64px) featuring a solid pure-white (`#FFFFFF`) microphone body for maximum luminance contrast on dark taskbars (`#202020`), crossed by a vivid neon-red (`#FF2D55`) diagonal slash with dark borders. Ensures instant silhouette recognition at arm length on 100% scale displays (16 physical pixels).
@@ -593,7 +590,7 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
   2. While the secure lock screen (`Winlogon`) owns the display, the DirectX graphics kernel (`dxgkrnl.sys`) actively blocks and times out user-mode display topology changes, generating LiveKernelEvent `0x1A8` (`VIDEO_DXGKRNL_LIVEDUMP`) and `0x1B8`. Consequently, user-space software cannot restore the display once the lock screen is active.
   3. When the user initiates hibernation from the native Start Menu on the tablet stream, `StartMenuExperienceHost.exe` triggers `SetSuspendState` immediately. `DisplaySwitch.exe /internal` takes ~1.12 seconds, exceeding the OS kernel pre-suspend freeze window.
 - **Decision**: Implemented pre-hibernation display restoration driven by a dynamic Tablet Only tray indicator:
-  1. **Dynamic Taskbar Tray Indicator**: The watchdog displays a custom high-contrast power icon (`tablet_hibernate.ico`) in the notification area strictly while in Tablet Only mode (`topo == 8`). In all other modes (`PC Screen Only`, `Extend`, `Duplicate`), the icon is completely hidden (`Menu, Tray, NoIcon`) to prevent taskbar clutter. `StartupScript.ahk` (`TrayIconRemove`) explicitly exempts `SunshineDisplayWatchdog` from mouseover cleanup sweeps.
+  1. **Dynamic Taskbar Tray Indicator**: The watchdog displays a custom high-contrast power icon (`tablet_hibernate.ico`) in the notification area strictly while in Tablet Only mode (`topo == 8`). In all other modes (`PC Screen Only`, `Extend`, `Duplicate`), the icon is completely hidden (`A_IconHidden := true`) to prevent taskbar clutter. `StartupScript.ahk` (`TrayIconRemove`) explicitly exempts `SunshineDisplayWatchdog` from mouseover cleanup sweeps.
   2. **Double-Click Confirmation with 5-Second Countdown HUD**: Double-clicking the tray icon initiates a live 5-second countdown HUD badge (`[HIBERNATE] Workstation Hibernating in 5s... Press Esc, Del, or click to Cancel`). Tapping `Esc`, `Delete` (essential on tablet keyboards lacking an Esc key), or clicking the badge immediately aborts the timer.
   3. **Pre-Hibernation Display Restoration**: When the 5-second countdown expires, `ExecuteSafeHibernate()` synchronously runs `SwitchToLaptopOnlyMode(0, true, true)` (`RunWait, DisplaySwitch.exe /internal`), allows a 200ms driver settle delay, and then invokes `shutdown.exe /h`.
   4. **Guaranteed Wake Experience**: Because the hardware display topology is transitioned to `SDC_TOPOLOGY_INTERNAL` before `hiberfil.sys` is written, turning on the laptop immediately illuminates the internal 144Hz panel with the Windows lock screen, requiring zero tablet interaction.

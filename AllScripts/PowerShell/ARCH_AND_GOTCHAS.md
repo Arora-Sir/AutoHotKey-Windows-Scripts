@@ -30,8 +30,8 @@ This document is the engineering reference for the ext4 external SSD automation 
 - **Root Cause**: If code executes `FileExist("P:\...")` or `Test-Path P:\` while the physical drive is disconnected, the Windows SMB redirector (`mrxsmb.sys` / `rdbss.sys`) sends SMB2 requests across TCP port 445 to Samba.
   - Because the physical hardware was yanked, the Linux kernel blocks I/O operations in uninterruptible sleep (D-state).
   - The Windows kernel blocks the calling thread waiting for the full network timeout (30-60 seconds).
-  - Because AutoHotkey v1.1 is single-threaded, the entire AHK process freezes.
-- **Resolution**: NEVER execute blocking filesystem I/O on network drive paths inside AutoHotkey. State presence must be determined via non-blocking local API checks (`DriveGet, pType, Type, P:` and in-memory WMI disk queries).
+  - Because AutoHotkey is single-threaded (true of both v1.1 and v2), the entire AHK process freezes.
+- **Resolution**: NEVER execute blocking filesystem I/O on network drive paths inside AutoHotkey. State presence must be determined via non-blocking local API checks (`DriveGetType("P:")` and in-memory WMI disk queries).
 
 ### Gotcha 4: WSL2 UTF-16LE Pipe Encoding Trap in PowerShell
 
@@ -96,7 +96,7 @@ This document is the engineering reference for the ext4 external SSD automation 
      - Because `powershell.exe` is a CUI (Console User Interface) application, Windows Task Scheduler invokes `CreateProcessAsUser` in the interactive desktop session.
      - Even with `-WindowStyle Hidden`, Windows Console Subsystem (`conhost.exe` or Windows Terminal) initializes and maps a top-level window onto the desktop before PowerShell can parse its parameters and hide itself.
      - Windows Window Manager immediately grants this new window input focus, stealing focus from the user's active application.
-  2. **AutoHotkey Process Spawning**: AutoHotkey v1's native `Run, powershell.exe ...,, Hide` sets `SW_HIDE` in `STARTUPINFO`, but does not pass `CREATE_NO_WINDOW (0x08000000)` to the kernel. In Windows 11, console hosts can still intercept the new console allocation.
+  2. **AutoHotkey Process Spawning**: AutoHotkey's native `Run("powershell.exe ...", , "Hide")` sets `SW_HIDE` in `STARTUPINFO`, but does not pass `CREATE_NO_WINDOW (0x08000000)` to the kernel. In Windows 11, console hosts can still intercept the new console allocation.
   3. **PowerShell `Start-Job` Overhead**: In `unmount_wsl_ssd.ps1`, `Start-Job` was used to run the Ubuntu unmount script with a timeout. In PowerShell 5.1, `Start-Job` spawns an entire secondary `powershell.exe` background worker process, introducing 1.5s latency and console allocation risks.
 - **Production Architecture & Solutions**:
   1. **Native GUI Subsystem Launcher (`run_silent.exe`)**:
@@ -201,7 +201,7 @@ This document is the engineering reference for the ext4 external SSD automation 
 
 ### Gotcha 16: Desktop Window Station Isolation in AutoHotkey (`WinGet` Failure)
 
-- **Symptom**: During or immediately following a display switch, AutoHotkey's built-in `WinGet, idList, List, ahk_class UINoteWindow` returns 0 windows, even while sticky notes are clearly visible on screen.
+- **Symptom**: During or immediately following a display switch, AutoHotkey's built-in `WinGetList("ahk_class UINoteWindow")` returns 0 windows, even while sticky notes are clearly visible on screen.
 - **Root Cause**:
   1. When Windows switches display topologies or changes session state, threads can be temporarily isolated from the active interactive desktop station (`WinSta0\Default`).
   2. AutoHotkey v1's `WinGet` uses standard `EnumWindows`, which is scoped to the calling thread's current desktop. If the desktop handle is not synchronized with the active DWM surface, `EnumWindows` returns an empty set.

@@ -28,7 +28,7 @@ Windows 11 cannot natively read or mount `ext4` filesystems without third-party 
 
 1. **Windows 11** with WSL2 installed (`wsl --install`).
 2. **Ubuntu** (or Debian) WSL2 guest distro.
-3. **AutoHotkey v1.1** (running via `StartupScript.exe`).
+3. **AutoHotkey v2.0** (running via `StartupScript.exe`).
 
 ---
 

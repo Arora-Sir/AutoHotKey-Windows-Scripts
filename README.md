@@ -8,9 +8,9 @@ Getting the fleet running on a new machine requires a few one-time manual config
 
 ### 1. Manual Prerequisites (One-Time)
 
-1. **Install AutoHotkey v1.1**:
-   - Download the official [v1.1 installer](https://www.autohotkey.com/) or run `winget install AutoHotkey.AutoHotkey` (select v1.1 if prompted).
-   - *Note*: Every script in this fleet stays on `#Requires AutoHotkey v1.1` (v2 breaks `StartupScript.exe`'s tray submenu architecture).
+1. **Install AutoHotkey v2**:
+   - Download the official [v2 installer](https://www.autohotkey.com/) or run `winget install AutoHotkey.AutoHotkey`.
+   - *Note*: Every script in this fleet declares `#Requires AutoHotkey v2.0`; the compiled `StartupScript.exe` runs against `AutoHotkey\v2\AutoHotkey64.exe`.
 2. **Configure Local Paths**:
    - Copy `AllScripts/LocalPaths.ahk.example` -> `AllScripts/LocalPaths.ahk`.
    - Fill in your machine-specific paths, device IPs, and optional tool locations.
@@ -210,7 +210,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
 
 - **Left-Click & Right-Click**: Both left-click and right-click on the tray icon open the master tray context menu. Nothing else.
 - **Pinned Scripts**: Pinned scripts (`SunshineDisplayWatchdog`, `BasicTasks`, `PersonalKeywords`) sit at the top level of the menu for instant access.
-- **Additional Scripts Submenu**: All remaining background scripts (`BackgroundAutomations`, `Brightness`, `ClosePrograms`, `Ext4SsdManager`, `HotkeyHelp`, `Watchdog`) are collapsed into an expandable **"Additional Scripts"** submenu to prevent vertical clutter.
+- **Additional Scripts Submenu**: All remaining background scripts (`BackgroundAutomations`, `Brightness`, `ClosePrograms`, `Ext4SsdManager`, `HotkeyHelp`, `LocalPaths`, `SharedHelpers`, `Watchdog`) are collapsed into an expandable **"Additional Scripts"** submenu to prevent vertical clutter.
 - **Submenu Separator Lines**: Child script submenus cleanly separate standard controls (`View Key History`, `Edit`, `Restart`, `Exit`) from custom published actions using native horizontal separator bars (`-|`).
 - **Global Fleet Actions**: Positioned at the bottom: **"Suspend Hotkeys"** (global cascade toggle) and **"Exit"**. Fleet maintenance controls (**"Reload All"** and **"Recompile & Relaunch"**) live inside **"Additional Scripts -> StartupScript"** to prevent top-level menu clutter.
 
@@ -337,7 +337,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
   ```
 - Run an app from AutoHotkey via its AppID:
   ```ahk
-  Run, shell:AppsFolder\SamsungNotes_8wekyb3d8bbwe!App
+  Run("shell:AppsFolder\SamsungNotes_8wekyb3d8bbwe!App")
   ```
 
 ---
