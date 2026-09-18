@@ -60,8 +60,16 @@ g_LastManualMouseSwitch   := 0
 g_ManualMouseOverride     := false
 g_ManualOverrideConnectId := ""
 PATH_HIBERNATE_ICO      := A_ScriptDir "\..\AutoHotkey Companion Files\tablet_hibernate.ico"
-g_HibernateCountdownSec := 0
-g_HibernateCountdownActive := false
+g_PowerActionType       := "" ; "Hibernate" or "Shutdown"
+g_PowerCountdownSec     := 0
+g_PowerCountdownActive  := false
+g_PowerPromptActive     := false
+g_PowerPromptRemainingSec := 0
+g_PowerPromptGui        := unset
+g_PowerPromptFooterCtl  := unset
+g_BtnHibHwnd            := 0
+g_BtnShutHwnd           := 0
+g_HibernateCountdownActive := false ; Backward-compatible alias
 g_CurrentDisplayModeLabel := "Unknown"
 g_CurrentMouseSpeedLabel  := ""
 
@@ -93,6 +101,8 @@ OnMessage(0x02B1, SunshineDisplay_WM_WTSSESSION_CHANGE)
 g_hPowerNotify := DllCall("RegisterSuspendResumeNotification", "Ptr", A_ScriptHwnd, "UInt", 0, "Ptr")
 WM_TASKBARCREATED := DllCall("RegisterWindowMessage", "Str", "TaskbarCreated", "UInt")
 OnMessage(WM_TASKBARCREATED, SunshineDisplay_WM_TASKBARCREATED)
+OnMessage(0x0011, SunshineDisplay_WM_QUERYENDSESSION)
+OnMessage(0x0016, SunshineDisplay_WM_ENDSESSION)
 OnExit(SunshineDisplay_Cleanup)
 
 ; Initial status refresh
@@ -115,21 +125,11 @@ SetTimer(SunshineWatchdogTick, CheckIntervalMs)
 #!+p::ToggleExtendVsDuplicate() ;{ <- Toggle Dual Display (Extend <-> Duplicate)
 
 ; v2: #If (hotkey-context directive) is gone, replaced by #HotIf with an expression: same syntax otherwise.
-#HotIf (g_HibernateCountdownActive)
-Escape::CancelHibernateCountdown() ;{ <- Cancel Hibernate Countdown
-Delete::CancelHibernateCountdown() ;{ <- Cancel Hibernate Countdown
-; v2: a multi-line hotkey body needs explicit braces now: v1 let the body implicitly extend to the next
-; `return` with no braces at all; v2 fails to load that shape ("Hotkey or hotstring is missing its opening
-; brace"), confirmed empirically this session (Migration-Notes.md 18.15).
-; The inline comment below (on the declaration line, not inside the braces) is required for a multi-line
-; hotkey body to show a description in Hotkey Help at all: all three of this block's hotkeys had none,
-; found live via a real Hotkey Help screenshot showing this whole section's descriptions blank.
-~LButton:: { ;{ <- Cancel Hibernate Countdown (click inside the countdown popup)
-	MouseGetPos(, , &clickedHwnd)
-	clickedClass := WinGetClass("ahk_id " clickedHwnd)
-	if (clickedClass = "AutoHotkeyGUI")
-		CancelHibernateCountdown()
-}
+#HotIf (g_PowerCountdownActive || IsDualOptionPromptActive())
+Escape::CancelPowerAction() ;{ <- Cancel Power Action (Hibernate / Shutdown / Prompt)
+Delete::CancelPowerAction() ;{ <- Cancel Power Action (Hibernate / Shutdown / Prompt)
+; Cancel on click: dismisses the prompt if clicked outside, or aborts countdown if clicked inside badge
+~LButton::HandlePowerLButtonClick() ;{ <- Click Dismiss for Power Prompt or Cancel Countdown
 #HotIf
 
 
@@ -521,10 +521,15 @@ UpdateTabletHibernateTrayIcon(isTabletOnly, forceRefresh := false) {
 				iconFile := A_ScriptDir "\..\AutoHotkey Companion Files\tablet_hibernate.ico"
 
 			A_TrayMenu.Delete()
+			A_TrayMenu.Add("Power Options (Hibernate / Shutdown)", Menu_ShowPowerOptions)
+			A_TrayMenu.Default := "Power Options (Hibernate / Shutdown)"
+			A_TrayMenu.ClickCount := 1
+			A_TrayMenu.Add()
 			A_TrayMenu.Add("Hibernate Workstation (5s Countdown)", Menu_TriggerHibernateCountdown)
-			A_TrayMenu.Default := "Hibernate Workstation (5s Countdown)"
+			A_TrayMenu.Add("Shutdown Workstation (5s Countdown)", Menu_TriggerShutdownCountdown)
 			A_TrayMenu.Add("Hibernate Immediately", Menu_HibernateImmediately)
-			A_TrayMenu.Add("Cancel Countdown", Menu_CancelHibernateCountdown)
+			A_TrayMenu.Add("Shutdown Immediately", Menu_ShutdownImmediately)
+			A_TrayMenu.Add("Cancel Power Action", Menu_CancelPowerAction)
 			A_TrayMenu.Add()
 			A_TrayMenu.Add(mouseLabel, Action_ToggleMouseSpeed)
 			A_TrayMenu.Add()
@@ -533,7 +538,7 @@ UpdateTabletHibernateTrayIcon(isTabletOnly, forceRefresh := false) {
 			if (FileExist(iconFile))
 				TraySetIcon(iconFile)
 
-			A_IconTip := "Hibernate Workstation`nDouble-click to start 5s countdown"
+			A_IconTip := "Workstation Power`nClick for Hibernate or Shutdown"
 			A_IconHidden := false
 			s_iconVisible := true
 			s_lastMouseLabel := mouseLabel
@@ -543,6 +548,7 @@ UpdateTabletHibernateTrayIcon(isTabletOnly, forceRefresh := false) {
 		}
 	} else {
 		if (s_iconVisible) {
+			DismissPowerPrompt()
 			A_IconHidden := true
 			s_iconVisible := false
 			s_lastMouseLabel := ""
@@ -557,63 +563,181 @@ SunshineDisplay_WM_TASKBARCREATED(wParam, lParam, *) {
 	UpdateTrayStatusAndTooltip(true)
 }
 
+Menu_ShowPowerOptions(*) {
+	ShowPowerOptionsPrompt()
+}
+
 Menu_TriggerHibernateCountdown(*) {
-	TriggerHibernateCountdown()
+	DismissPowerPrompt()
+	StartPowerCountdown("Hibernate")
+}
+
+Menu_TriggerShutdownCountdown(*) {
+	DismissPowerPrompt()
+	StartPowerCountdown("Shutdown")
+}
+
+Menu_CancelPowerAction(*) {
+	CancelPowerAction()
 }
 
 Menu_CancelHibernateCountdown(*) {
-	CancelHibernateCountdown()
+	CancelPowerAction()
 }
 
 Menu_HibernateImmediately(*) {
-	global g_HibernateCountdownActive
-	SetTimer(HibernateCountdownTick, 0)
+	global g_PowerCountdownActive, g_HibernateCountdownActive
+	DismissPowerPrompt()
+	SetTimer(PowerCountdownTick, 0)
+	g_PowerCountdownActive := false
 	g_HibernateCountdownActive := false
 	ExecuteSafeHibernate()
 }
 
-TriggerHibernateCountdown() {
-	global g_HibernateCountdownSec, g_HibernateCountdownActive
-
-	; If countdown is already active, double-clicking again cancels it
-	if (g_HibernateCountdownActive) {
-		CancelHibernateCountdown()
-		return
-	}
-
-	g_HibernateCountdownSec := 5
-	g_HibernateCountdownActive := true
-	ShowHibernateCountdownBadge(g_HibernateCountdownSec)
-	SetTimer(HibernateCountdownTick, 1000)
+Menu_ShutdownImmediately(*) {
+	global g_PowerCountdownActive, g_HibernateCountdownActive
+	DismissPowerPrompt()
+	SetTimer(PowerCountdownTick, 0)
+	g_PowerCountdownActive := false
+	g_HibernateCountdownActive := false
+	ExecuteSafeShutdown()
 }
 
-; v2: was a Gosub-only label, now a real function.
-HibernateCountdownTick() {
-	global g_HibernateCountdownSec, g_HibernateCountdownActive
+HandlePowerLButtonClick() {
+	global g_PowerCountdownActive
+	if (IsDualOptionPromptActive()) {
+		HandleDualOptionLButtonClick()
+	} else if (g_PowerCountdownActive) {
+		MouseGetPos(, , &clickedHwnd)
+		clickedClass := WinGetClass("ahk_id " clickedHwnd)
+		if (clickedClass = "AutoHotkeyGUI")
+			CancelPowerAction()
+	}
+}
 
-	if (!g_HibernateCountdownActive) {
-		SetTimer(HibernateCountdownTick, 0)
+ShowPowerOptionsPrompt() {
+	global g_PowerCountdownActive
+
+	; If a countdown is actively running, invoking cancels it
+	if (g_PowerCountdownActive) {
+		CancelPowerAction()
 		return
 	}
 
-	g_HibernateCountdownSec--
-	if (g_HibernateCountdownSec > 0) {
-		ShowHibernateCountdownBadge(g_HibernateCountdownSec)
+	; If prompt is already visible, toggle it off
+	if (IsDualOptionPromptActive()) {
+		DismissDualOptionPrompt()
+		return
+	}
+
+	; Ensure any leftover countdown timer is stopped
+	SetTimer(PowerCountdownTick, 0)
+	g_PowerCountdownActive := false
+
+	ShowDualOptionPrompt(
+		"Workstation Power Options",
+		"Hibernate",
+		(*) => OnPowerOptionChosen("Hibernate"),
+		"Shutdown",
+		(*) => OnPowerOptionChosen("Shutdown"),
+		10,
+		"Press Esc or Del to cancel  •  Auto-closes in {sec}s",
+		0, 0,
+		"1F2E45", "E6EDF3",
+		"3D1D24", "FFEBE9"
+	)
+}
+
+DismissPowerPrompt() {
+	DismissDualOptionPrompt()
+}
+
+OnPowerOptionChosen(actionType) {
+	DismissDualOptionPrompt()
+	StartPowerCountdown(actionType)
+}
+
+StartPowerCountdown(actionType) {
+	global g_PowerActionType, g_PowerCountdownSec, g_PowerCountdownActive, g_HibernateCountdownActive
+
+	if (g_PowerCountdownActive) {
+		CancelPowerAction()
+		return
+	}
+
+	g_PowerActionType := actionType
+	g_PowerCountdownSec := 5
+	g_PowerCountdownActive := true
+	g_HibernateCountdownActive := (actionType = "Hibernate")
+
+	ShowPowerCountdownBadge(actionType, g_PowerCountdownSec)
+	SetTimer(PowerCountdownTick, 1000)
+}
+
+TriggerHibernateCountdown() {
+	StartPowerCountdown("Hibernate")
+}
+
+PowerCountdownTick() {
+	global g_PowerActionType, g_PowerCountdownSec, g_PowerCountdownActive, g_HibernateCountdownActive
+
+	if (!g_PowerCountdownActive) {
+		SetTimer(PowerCountdownTick, 0)
+		return
+	}
+
+	g_PowerCountdownSec--
+	if (g_PowerCountdownSec > 0) {
+		ShowPowerCountdownBadge(g_PowerActionType, g_PowerCountdownSec)
 	} else {
-		SetTimer(HibernateCountdownTick, 0)
+		SetTimer(PowerCountdownTick, 0)
+		g_PowerCountdownActive := false
 		g_HibernateCountdownActive := false
-		ExecuteSafeHibernate()
+		if (g_PowerActionType = "Hibernate")
+			ExecuteSafeHibernate()
+		else if (g_PowerActionType = "Shutdown")
+			ExecuteSafeShutdown()
+	}
+}
+
+HibernateCountdownTick() {
+	PowerCountdownTick()
+}
+
+CancelPowerAction() {
+	global g_PowerActionType, g_PowerCountdownActive, g_HibernateCountdownActive
+
+	if (IsDualOptionPromptActive())
+		DismissDualOptionPrompt()
+
+	if (g_PowerCountdownActive) {
+		SetTimer(PowerCountdownTick, 0)
+		g_PowerCountdownActive := false
+		g_HibernateCountdownActive := false
+		HideBottomRightBadge()
+		actionLabel := (g_PowerActionType = "Shutdown") ? "Shutdown" : "Hibernation"
+		ShowBottomRightBadge("[CANCELED] " actionLabel " Aborted`nWorkstation remains active.", "3A3D40", 2500)
 	}
 }
 
 CancelHibernateCountdown() {
-	global g_HibernateCountdownActive
-	if (g_HibernateCountdownActive) {
-		SetTimer(HibernateCountdownTick, 0)
-		g_HibernateCountdownActive := false
-		HideBottomRightBadge()
-		ShowBottomRightBadge("[CANCELED] Hibernation Aborted`nWorkstation remains active.", "3A3D40", 2500)
+	CancelPowerAction()
+}
+
+ShowPowerCountdownBadge(actionType, sec) {
+	if (actionType = "Shutdown") {
+		title := "[SHUTDOWN] Workstation Shutting Down in " sec "s..."
+		detail := "Restoring laptop display panel. Press Esc, Del, or click to Cancel."
+		ShowBottomRightBadge(title "`n" detail, "8B1A1A", 1500)
+	} else {
+		title := "[HIBERNATE] Workstation Hibernating in " sec "s..."
+		detail := "Restoring laptop display panel. Press Esc, Del, or click to Cancel."
+		ShowBottomRightBadge(title "`n" detail, "B33A00", 1500)
 	}
+}
+
+ShowHibernateCountdownBadge(sec) {
+	ShowPowerCountdownBadge("Hibernate", sec)
 }
 
 ExecuteSafeHibernate() {
@@ -623,10 +747,83 @@ ExecuteSafeHibernate() {
 	Run(A_WinDir "\System32\shutdown.exe /h", , "Hide")
 }
 
-ShowHibernateCountdownBadge(sec) {
-	title := "[HIBERNATE] Workstation Hibernating in " sec "s..."
-	detail := "Restoring laptop display panel. Press Esc, Del, or click to Cancel."
-	ShowBottomRightBadge(title "`n" detail, "B33A00", 1500)
+ExecuteSafeShutdown() {
+	ShowBottomRightBadge("[SHUTTING DOWN] Restoring Laptop Panel...`nSaving browser sessions and powering down.", "8B1A1A", 4000)
+	SwitchToLaptopOnlyMode(0, true, true)
+	Sleep(200)
+	GracefulCloseChromiumBrowsers()
+	CleanShutdownBackgroundProcesses()
+	Run(A_WinDir "\System32\shutdown.exe /s /t 0", , "Hide")
+}
+
+; Safely closes open Chromium and Firefox browser windows via WM_CLOSE,
+; giving browsers up to 4.5 seconds to serialize open tabs and session state to disk cleanly.
+; This prevents 'Restore pages? Brave/Chrome didn't shut down correctly' crash prompts on next boot.
+GracefulCloseChromiumBrowsers() {
+	browserExes := ["brave.exe", "chrome.exe", "msedge.exe", "opera.exe", "vivaldi.exe", "firefox.exe"]
+	closedAny := false
+
+	; Ensure we only enumerate real visible top-level browser windows.
+	; Chromium and Brave create numerous internal background helper windows (message, render, GPU, crashpad)
+	; that ignore WM_CLOSE or cause desync if signaled directly.
+	prevDetect := A_DetectHiddenWindows
+	DetectHiddenWindows(false)
+
+	for exe in browserExes {
+		hwnds := WinGetList("ahk_exe " exe)
+		for hwnd in hwnds {
+			try {
+				wClass := WinGetClass("ahk_id " hwnd)
+				if (wClass = "Chrome_WidgetWin_1" || wClass = "MozillaWindowClass" || InStr(wClass, "Chrome")) {
+					closedAny := true
+					PostMessage(0x0010, 0, 0, , "ahk_id " hwnd) ; 0x0010 = WM_CLOSE
+				}
+			}
+		}
+	}
+
+	if (!closedAny) {
+		DetectHiddenWindows(prevDetect)
+		return
+	}
+
+	; Adaptive polling: wait up to 4.5 seconds for visible browser UI windows to serialize and close
+	startTime := A_TickCount
+	while (A_TickCount - startTime < 4500) {
+		anyWindowRunning := false
+		for exe in browserExes {
+			if WinExist("ahk_class Chrome_WidgetWin_1 ahk_exe " exe) || WinExist("ahk_class MozillaWindowClass ahk_exe " exe) {
+				anyWindowRunning := true
+				break
+			}
+		}
+		if (!anyWindowRunning)
+			break
+		Sleep(100)
+	}
+
+	DetectHiddenWindows(prevDetect)
+
+	; Brief 400ms buffer for background disk serialization to settle
+	Sleep(400)
+}
+
+CleanShutdownBackgroundProcesses() {
+	global g_FleetControlMsg, PATH_ADB_EXE
+	; Stop watchdog tick timer
+	SetTimer(SunshineWatchdogTick, 0)
+
+	; Broadcast fleet ExitApp signal to all managed AHK scripts so background timers stop
+	if IsSet(g_FleetControlMsg) && g_FleetControlMsg {
+		try PostMessage(g_FleetControlMsg, 2, 0, , "ahk_class AutoHotkey")
+	}
+
+	; Stop ADB server cleanly if available, then force kill any lingering processes
+	if (IsSet(PATH_ADB_EXE) && PATH_ADB_EXE && FileExist(PATH_ADB_EXE)) {
+		try RunWait('"' PATH_ADB_EXE '" kill-server', , "Hide")
+	}
+	try RunWait("taskkill.exe /F /T /IM adb.exe", , "Hide")
+	Sleep(150)
 }
 
 TrayShowStatusToast(*) {
@@ -1147,8 +1344,25 @@ SunshineDisplay_WM_WTSSESSION_CHANGE(wParam, lParam, msg, hwnd) {
 
 SunshineDisplay_Cleanup(ExitReason, ExitCode) {
 	global g_hPowerNotify
+	SetTimer(SunshineWatchdogTick, 0)
 	if (g_hPowerNotify) {
 		DllCall("UnregisterSuspendResumeNotification", "Ptr", g_hPowerNotify)
 		g_hPowerNotify := 0
+	}
+}
+
+SunshineDisplay_WM_QUERYENDSESSION(wParam, lParam, *) {
+	SetTimer(SunshineWatchdogTick, 0)
+	if (GetCurrentDisplayTopology() == 8 || IsSecondScreenOnly()) {
+		try SwitchToLaptopOnlyMode(0, true, true)
+	}
+	try RunWait("taskkill.exe /F /T /IM adb.exe", , "Hide")
+	return true
+}
+
+SunshineDisplay_WM_ENDSESSION(wParam, lParam, *) {
+	if (wParam) {
+		SetTimer(SunshineWatchdogTick, 0)
+		try RunWait("taskkill.exe /F /T /IM adb.exe", , "Hide")
 	}
 }

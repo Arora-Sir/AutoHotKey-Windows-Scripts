@@ -217,6 +217,9 @@ TrayTipBuild()
 MenuBuild()
 OnMessage(0x404, AHK_NOTIFYICON) ; Hook Events for Tray Icon (used for Tray Icon cleanup on mouseover)
 OnMessage(0x7E, AHK_DISPLAYCHANGE) ; Hook Events for Display Change (used for Tray Icon cleanup on resolution change)
+OnMessage(0x0011, Master_WM_QUERYENDSESSION)
+OnMessage(0x0016, Master_WM_ENDSESSION)
+OnExit(ExitSub)
 TrayIconRemove(10)
 
 ;
@@ -362,6 +365,19 @@ ExitSub(ExitReason, ExitCode) {
 			try ProcessClose(script.Pid)
 			try ProcessWaitClose(script.Pid, 1)
 		}
+	}
+}
+
+Master_WM_QUERYENDSESSION(wParam, lParam, *) {
+	ExitSub("Shutdown", 0)
+	try RunWait("taskkill.exe /F /T /IM adb.exe", , "Hide")
+	return true
+}
+
+Master_WM_ENDSESSION(wParam, lParam, *) {
+	if (wParam) {
+		ExitSub("Shutdown", 0)
+		try RunWait("taskkill.exe /F /T /IM adb.exe", , "Hide")
 	}
 }
 ;}

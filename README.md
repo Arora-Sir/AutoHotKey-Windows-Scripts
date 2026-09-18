@@ -100,6 +100,12 @@ Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or 
   - Catches Win32 `WM_POWERBROADCAST` (0x0218) system resume events.
   - Triple-wave recovery (500ms, 2000ms, and 4000ms) restores display topology to PC Screen Only (`DISPLAY1`), restores mouse speed to 10, cycles low-level keyboard hooks to prevent dead keys after Modern Standby, and suppresses stale pre-wake Sunshine log events.
   - Catches Win32 `WM_WTSSESSION_CHANGE` (0x02B1) `WTS_SESSION_UNLOCK` events: refreshes low-level keyboard hooks after unlock while preserving Tablet Only mode during remote PIN entry.
+- **Dynamic Tablet Power Indicator & Single-Click Power HUD**:
+  - Displays a high-contrast power glyph icon (`tablet_hibernate.ico`) in the taskbar notification area strictly while in Tablet Only mode.
+  - **Single-Click Power HUD**: Left-clicking the icon opens an interactive dark-themed card offering **Hibernate** and **Shutdown** with a live 10-second auto-dismiss timer.
+  - **5-Second Countdown Badge**: Selecting an action triggers a 5-second countdown HUD badge with Esc, Delete, or click-to-cancel protection.
+  - **Pre-Power-Off Display Restoration**: Synchronously switches display topology back to Laptop Only (`DisplaySwitch.exe /internal`) before invoking hibernation or shutdown, guaranteeing the internal laptop display illuminates on subsequent power-on without requiring remote tablet interaction.
+  - **Graceful Browser Session Flush & ADB Teardown**: Sends Win32 `WM_CLOSE` to visible Chromium/Firefox windows to save open tabs to disk without crash dialogs, halts background AHK timers, and cleanly terminates lingering ADB daemons before system power-off.
 - **Simple Sticky Notes Multi-Resolution Auto-Arrangement (`apply_ssn_layout.ps1`)**:
   - Automatically re-arranges Simple Sticky Notes (`ssn.exe`) windows to match the active screen resolution and DPI scaling:
     - **Laptop (1536x864 DIP)**: 4 columns flush against the right bezel ($X = 1268$, $W = 268 \to 1536\text{px}$).
@@ -124,20 +130,19 @@ When streaming your desktop to a tablet or remote client via Moonlight/Sunshine,
 
 ---
 
-## Dynamic Bottom-Right Corner Badge Engine
+## Dynamic Bottom-Right Corner Badge Engine & Dual Option Prompt
 
-Shared toast notification surface (`AllScripts/SharedHelpers.ahk`) providing clean visual feedback for debounced toggles and background events.
+Shared visual feedback and interactive modal surface (`AllScripts/SharedHelpers.ahk`).
 
-- **Singleton Surface**: A second badge update modifies text and color in place without window destruction, eliminating visual flicker and transition gaps.
-- **DPI Scaling Immune**: Operates with `-DPIScale` for 1:1 physical screen pixel accuracy across high-DPI displays.
-- **Auto-Sizing & Aesthetics**: Uses Win32 GDI `DrawTextW` to dynamically size the badge according to text extent, with modern 10px rounded corners applied via `SetWindowRgn`.
-- **Color Palette**:
-  - Deep Green (`#1A6E3C`): Unlocked / active state.
-  - Deep Red (`#8B1A1A`): Locked / restricted state.
-  - Deep Blue (`#0D4F8B`): Automatic / focus-driven state.
-  - Dark Slate Grey (`#3A3D40`): Off / inactive state.
-  - Amber (`#6E5A00`): In-progress / applying changes.
-  - Dark Orange (`#7A3B00`): Error.
+- **Toast Badge Singleton (`ShowBottomRightBadge`)**:
+  - Singleton surface: a second badge update modifies text and color in place without window destruction, eliminating visual flicker and transition gaps.
+  - DPI scaling immune: operates with `-DPIScale` for 1:1 physical screen pixel accuracy across high-DPI displays.
+  - Auto-sizing & aesthetics: uses Win32 GDI `DrawTextW` to dynamically size the badge according to text extent, with modern 10px rounded corners applied via `SetWindowRgn`.
+  - Color palette: Deep Green (`#1A6E3C`), Deep Red (`#8B1A1A`), Deep Blue (`#0D4F8B`), Dark Slate Grey (`#3A3D40`), Amber (`#6E5A00`), and Dark Orange (`#7A3B00`).
+- **Generic Dual Option Prompt (`ShowDualOptionPrompt`)**:
+  - Decoupled, modular interactive popup modal anchored at the bottom-right corner of the active monitor.
+  - Accepts positional arguments or a configuration `Map` / `Object` with aliases (`title`, `btn1`, `btn2`, `timer`, `footer`, `width`, `height`, `cardBg`).
+  - Features high-contrast rounded action pills, hover hand cursor (`IDC_HAND`), 1-second dynamic countdown ticker with `{sec}` substitution, and escape / outside-click dismissal hooks.
 
 ---
 

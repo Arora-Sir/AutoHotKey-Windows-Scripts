@@ -22,6 +22,7 @@ Persistent()
 ; custom message and handles it locally.
 g_FleetControlMsg := DllCall("RegisterWindowMessage", "Str", "AHK_FleetControl_v2", "UInt")
 OnMessage(g_FleetControlMsg, HandleFleetControlMessage)
+OnMessage(0x0020, DualOption_WM_SETCURSOR)
 HandleFleetControlMessage(wParam, lParam, msg, hwnd) {
 	switch wParam {
 		case 1: Edit()
@@ -259,6 +260,259 @@ RemoveBottomRightBadge() {
 	global g_BadgeGui
 	if IsObject(g_BadgeGui)
 		g_BadgeGui.Hide()
+}
+
+
+; -----------------------------------------------------------------------------
+; GENERIC DUAL OPTION POPUP PROMPT (Configurable Bottom-Right Interactive Modal)
+; -----------------------------------------------------------------------------
+; Generic, modern rounded dual-action popup anchored to bottom-right of active monitor.
+; Supports configurable heading, button texts, callbacks, live countdown timer,
+; footer text, custom colors, responsive DPI scaling, and outside-click/escape dismissal.
+
+global g_DualOptionGui := unset
+global g_DualOptionActive := false
+global g_DualOptionBtn1Hwnd := 0
+global g_DualOptionBtn2Hwnd := 0
+global g_DualOptionFooterCtl := unset
+global g_DualOptionRemainingSec := 0
+global g_DualOptionFooterTemplate := ""
+global g_DualOptionOnTimeout := ""
+global g_DualOptionOnCancel := ""
+
+GetDualOptionProp(opts, key, fallbackVal := "") {
+	if (opts is Map) {
+		if opts.Has(key)
+			return opts[key]
+	} else if (IsObject(opts)) {
+		if opts.HasOwnProp(key)
+			return opts.%key%
+	}
+	return fallbackVal
+}
+
+ShowDualOptionPrompt(
+	headingText := "Choose an Option",
+	btn1Text := "Option 1",
+	onBtn1 := "",
+	btn2Text := "Option 2",
+	onBtn2 := "",
+	timeoutSec := 10,
+	footerText := "Press Esc or Del to cancel  •  Auto-closes in {sec}s",
+	customWidth := 0,
+	customHeight := 0,
+	btn1Bg := "1F2E45",
+	btn1Fg := "E6EDF3",
+	btn2Bg := "3D1D24",
+	btn2Fg := "FFEBE9",
+	onCancel := "",
+	onTimeout := "",
+	cardBg := "161B22"
+) {
+	global g_DualOptionGui, g_DualOptionActive, g_DualOptionBtn1Hwnd, g_DualOptionBtn2Hwnd
+	global g_DualOptionFooterCtl, g_DualOptionRemainingSec, g_DualOptionFooterTemplate
+	global g_DualOptionOnTimeout, g_DualOptionOnCancel
+
+	; Support calling with a single options Object or Map
+	if (IsObject(headingText) && !(headingText is String)) {
+		opts := headingText
+		btn1Text     := GetDualOptionProp(opts, "btn1Text", GetDualOptionProp(opts, "btn1", "Option 1"))
+		onBtn1       := GetDualOptionProp(opts, "onBtn1", "")
+		btn2Text     := GetDualOptionProp(opts, "btn2Text", GetDualOptionProp(opts, "btn2", "Option 2"))
+		onBtn2       := GetDualOptionProp(opts, "onBtn2", "")
+		timeoutSec   := GetDualOptionProp(opts, "timeoutSec", GetDualOptionProp(opts, "timer", 10))
+		footerText   := GetDualOptionProp(opts, "footerText", GetDualOptionProp(opts, "footer", "Press Esc or Del to cancel  •  Auto-closes in {sec}s"))
+		customWidth  := GetDualOptionProp(opts, "width", GetDualOptionProp(opts, "customWidth", 0))
+		customHeight := GetDualOptionProp(opts, "height", GetDualOptionProp(opts, "customHeight", 0))
+		btn1Bg       := GetDualOptionProp(opts, "btn1Bg", "1F2E45")
+		btn1Fg       := GetDualOptionProp(opts, "btn1Fg", "E6EDF3")
+		btn2Bg       := GetDualOptionProp(opts, "btn2Bg", "3D1D24")
+		btn2Fg       := GetDualOptionProp(opts, "btn2Fg", "FFEBE9")
+		onCancel     := GetDualOptionProp(opts, "onCancel", "")
+		onTimeout    := GetDualOptionProp(opts, "onTimeout", "")
+		cardBg       := GetDualOptionProp(opts, "cardBg", "161B22")
+		headingText  := GetDualOptionProp(opts, "heading", GetDualOptionProp(opts, "title", "Choose an Option"))
+	}
+
+	; Stop any active ticker
+	SetTimer(DualOptionPromptTick, 0)
+	g_DualOptionOnTimeout := onTimeout
+	g_DualOptionOnCancel := onCancel
+
+	; Cleanly destroy previous GUI instance so no orphaned controls or ghost regions persist
+	if (IsSet(g_DualOptionGui) && IsObject(g_DualOptionGui)) {
+		try g_DualOptionGui.Destroy()
+		g_DualOptionGui := unset
+	}
+
+	scale := Max(1.0, A_ScreenDPI / 96.0)
+
+	hasFooter := (footerText != "" && footerText != false)
+
+	defaultW := 440
+	defaultH := hasFooter ? 152 : 118
+
+	promptW := (customWidth > 0) ? Floor(customWidth * scale) : Floor(defaultW * scale)
+	promptH := (customHeight > 0) ? Floor(customHeight * scale) : Floor(defaultH * scale)
+	cornerR := Floor(16 * scale)
+
+	; Calculate proportional button widths based on available card width
+	btnGap := Floor(28 * scale)
+	btnSidePad := Floor(26 * scale)
+	btnW := Floor((promptW - (btnSidePad * 2) - btnGap) / 2)
+	btnH := Floor(46 * scale)
+	btnR := Floor(10 * scale)
+
+	titleY := Floor(18 * scale)
+	btnY := Floor(52 * scale)
+	footerY := Floor(110 * scale)
+
+	btn1X := btnSidePad
+	btn2X := btnSidePad + btnW + btnGap
+
+	g_DualOptionGui := Gui("-DPIScale +AlwaysOnTop +ToolWindow -Caption")
+	g_DualOptionGui.MarginX := 0
+	g_DualOptionGui.MarginY := 0
+	g_DualOptionGui.BackColor := cardBg
+
+	; Header
+	g_DualOptionGui.SetFont("s11 Bold cF0F6FC", "Segoe UI")
+	g_DualOptionGui.AddText("x0 y" titleY " w" promptW " Center BackgroundTrans", headingText)
+
+	; Buttons: Modern Rounded Action Pills
+	g_DualOptionGui.SetFont("s10 Bold", "Segoe UI")
+	ctlBtn1 := g_DualOptionGui.AddText("x" btn1X " y" btnY " w" btnW " h" btnH " Center 0x200 Background" btn1Bg " c" btn1Fg, btn1Text)
+	ctlBtn2 := g_DualOptionGui.AddText("x" btn2X " y" btnY " w" btnW " h" btnH " Center 0x200 Background" btn2Bg " c" btn2Fg, btn2Text)
+
+	g_DualOptionBtn1Hwnd := ctlBtn1.Hwnd
+	g_DualOptionBtn2Hwnd := ctlBtn2.Hwnd
+
+	; Apply rounded button clipping regions
+	hRgn1 := DllCall("CreateRoundRectRgn", "Int", 0, "Int", 0, "Int", btnW, "Int", btnH, "Int", btnR, "Int", btnR, "Ptr")
+	DllCall("SetWindowRgn", "Ptr", ctlBtn1.Hwnd, "Ptr", hRgn1, "Int", true)
+
+	hRgn2 := DllCall("CreateRoundRectRgn", "Int", 0, "Int", 0, "Int", btnW, "Int", btnH, "Int", btnR, "Int", btnR, "Ptr")
+	DllCall("SetWindowRgn", "Ptr", ctlBtn2.Hwnd, "Ptr", hRgn2, "Int", true)
+
+	; Button Click Handlers
+	ctlBtn1.OnEvent("Click", (*) => OnDualOptionClicked(onBtn1))
+	ctlBtn2.OnEvent("Click", (*) => OnDualOptionClicked(onBtn2))
+
+	; Footer / Live Countdown Display
+	g_DualOptionRemainingSec := timeoutSec
+	g_DualOptionFooterTemplate := footerText
+
+	if (hasFooter) {
+		currentFooter := InStr(footerText, "{sec}") ? RegExReplace(footerText, "\{sec\}", g_DualOptionRemainingSec) : footerText
+		g_DualOptionGui.SetFont("s9 c8B949E", "Segoe UI")
+		g_DualOptionFooterCtl := g_DualOptionGui.AddText("x0 y" footerY " w" promptW " Center BackgroundTrans", currentFooter)
+	} else {
+		g_DualOptionFooterCtl := unset
+	}
+
+	; Position at bottom-right corner of active monitor work area
+	monIndex := GetToastTargetMonitor()
+	MonitorGetWorkArea(monIndex, &waLeft, &waTop, &waRight, &waBottom)
+	monW := waRight - waLeft
+	monH := waBottom - waTop
+	if (monW <= 0 || monH <= 0) {
+		waLeft := 0, waTop := 0, waRight := A_ScreenWidth, waBottom := A_ScreenHeight
+		monW := A_ScreenWidth, monH := A_ScreenHeight
+	}
+
+	marginX := Max(24, Floor(monW * 0.015))
+	marginY := Max(24, Floor(monH * 0.02))
+	finalX := waRight - promptW - marginX
+	finalY := waBottom - promptH - marginY
+
+	if (finalX < waLeft + marginX)
+		finalX := waLeft + marginX
+	if (finalY < waTop + marginY)
+		finalY := waTop + marginY
+
+	g_DualOptionGui.Show("x" finalX " y" finalY " w" promptW " h" promptH " NoActivate")
+
+	; Smooth rounded corners for the card
+	hRgnCard := DllCall("CreateRoundRectRgn", "Int", 0, "Int", 0, "Int", promptW, "Int", promptH, "Int", cornerR, "Int", cornerR, "Ptr")
+	DllCall("SetWindowRgn", "Ptr", g_DualOptionGui.Hwnd, "Ptr", hRgnCard, "Int", true)
+	WinRedraw(g_DualOptionGui)
+
+	g_DualOptionActive := true
+
+	; Start live countdown if timeoutSec is positive
+	if (timeoutSec > 0)
+		SetTimer(DualOptionPromptTick, 1000)
+}
+
+OnDualOptionClicked(callback) {
+	DismissDualOptionPrompt()
+	if (HasMethod(callback))
+		callback()
+}
+
+DualOptionPromptTick() {
+	global g_DualOptionActive, g_DualOptionGui, g_DualOptionFooterCtl
+	global g_DualOptionRemainingSec, g_DualOptionFooterTemplate, g_DualOptionOnTimeout
+
+	if (!g_DualOptionActive) {
+		SetTimer(DualOptionPromptTick, 0)
+		return
+	}
+
+	g_DualOptionRemainingSec--
+	if (g_DualOptionRemainingSec > 0) {
+		if (IsSet(g_DualOptionFooterCtl) && IsObject(g_DualOptionFooterCtl)) {
+			if InStr(g_DualOptionFooterTemplate, "{sec}")
+				g_DualOptionFooterCtl.Text := RegExReplace(g_DualOptionFooterTemplate, "\{sec\}", g_DualOptionRemainingSec)
+		}
+	} else {
+		SetTimer(DualOptionPromptTick, 0)
+		timeoutCb := g_DualOptionOnTimeout
+		DismissDualOptionPrompt()
+		if (HasMethod(timeoutCb))
+			timeoutCb()
+	}
+}
+
+DismissDualOptionPrompt(triggerCancelCallback := false) {
+	global g_DualOptionActive, g_DualOptionGui, g_DualOptionOnCancel
+	SetTimer(DualOptionPromptTick, 0)
+	g_DualOptionActive := false
+	if (IsSet(g_DualOptionGui) && IsObject(g_DualOptionGui)) {
+		try g_DualOptionGui.Hide()
+	}
+	if (triggerCancelCallback && HasMethod(g_DualOptionOnCancel)) {
+		cancelCb := g_DualOptionOnCancel
+		cancelCb()
+	}
+}
+
+IsDualOptionPromptActive() {
+	global g_DualOptionActive
+	return g_DualOptionActive
+}
+
+DualOption_WM_SETCURSOR(wParam, lParam, msg, hwnd, *) {
+	global g_DualOptionActive, g_DualOptionBtn1Hwnd, g_DualOptionBtn2Hwnd
+	if (g_DualOptionActive && (wParam = g_DualOptionBtn1Hwnd || wParam = g_DualOptionBtn2Hwnd)) {
+		hCursor := DllCall("LoadCursor", "Ptr", 0, "Int", 32649, "Ptr") ; IDC_HAND
+		DllCall("SetCursor", "Ptr", hCursor)
+		return true
+	}
+}
+
+HandleDualOptionLButtonClick() {
+	global g_DualOptionActive, g_DualOptionGui
+	if (g_DualOptionActive && IsSet(g_DualOptionGui) && IsObject(g_DualOptionGui)) {
+		MouseGetPos(, , &clickedHwnd)
+		try {
+			rootHwnd := DllCall("GetAncestor", "Ptr", clickedHwnd, "UInt", 2, "Ptr") ; GA_ROOT
+			if (clickedHwnd != g_DualOptionGui.Hwnd && rootHwnd != g_DualOptionGui.Hwnd)
+				DismissDualOptionPrompt(true)
+		} catch {
+			DismissDualOptionPrompt(true)
+		}
+	}
 }
 
 

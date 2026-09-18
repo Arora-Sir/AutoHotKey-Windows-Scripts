@@ -66,7 +66,39 @@ RestartNamedPythonServer("CopyClip", PATH_COPYCLIP "\windows_app\tray.py",,, tru
 ;   SEFIRAH_PRIORITY_TARGET: the one "ip:port" that should win ActiveDevice whenever reachable
 ; =============================================================================
 
+global g_IsSessionEnding := false
+
 OnMessage(0x0218, Sefirah_WM_POWERBROADCAST)
+OnMessage(0x0011, Background_WM_QUERYENDSESSION)
+OnMessage(0x0016, Background_WM_ENDSESSION)
+OnExit(Background_OnExit)
+
+Background_WM_QUERYENDSESSION(wParam, lParam, *) {
+    Background_HaltTimers()
+    try RunWait("taskkill.exe /F /T /IM adb.exe", , "Hide")
+    ExitApp()
+    return true
+}
+
+Background_WM_ENDSESSION(wParam, lParam, *) {
+    if (wParam) {
+        Background_HaltTimers()
+        try RunWait("taskkill.exe /F /T /IM adb.exe", , "Hide")
+        ExitApp()
+    }
+}
+
+Background_OnExit(ExitReason, ExitCode) {
+    Background_HaltTimers()
+}
+
+Background_HaltTimers() {
+    global g_IsSessionEnding
+    g_IsSessionEnding := true
+    SetTimer(Sefirah_PollPriorityTarget, 0)
+    SetTimer(WatchSkillsLock, 0)
+    SetTimer(Sefirah_DoReconnect, 0)
+}
 
 ; Independent of laptop sleep/wake: catches the priority device (phone) reconnecting for any other reason (e.g. it left/rejoined Wi-Fi on its own, with the laptop never sleeping at all).
 ; Edge-triggered on the unreachable -> reachable transition only, so steady state costs two quick local `adb` calls per tick (one RunWait, see Sefirah_IsReachable) and nothing more: no busy loop (SetTimer is the same native, ~0%-idle-CPU mechanism Watchdog.ahk already uses at a 10s interval), no repeated re-authentication churn while nothing has changed.
@@ -94,6 +126,9 @@ return ; End of auto-execute section
 ; handler has fewer than 4 declared parameters and no `*` catch-all: confirmed empirically this session,
 ; same class of bug as Menu.Add()'s zero-param hang (Migration-Notes.md 18.16). `*` is the fix.
 Sefirah_WM_POWERBROADCAST(wParam, lParam, *) {
+    global g_IsSessionEnding
+    if (g_IsSessionEnding)
+        return
     if (wParam = 18 || wParam = 7)
         SetTimer(Sefirah_DoReconnect, -4000)      ; one-shot, 4s after wake
 }
@@ -102,15 +137,17 @@ Sefirah_WM_POWERBROADCAST(wParam, lParam, *) {
 ; Reconnects every non-priority target first (order doesn't matter, fire-and-forget), then the priority target last and BLOCKING so it is guaranteed to be the last one to finish authenticating: that's what wins it ActiveDevice.
 ; Do not "simplify" this back into one parallel loop; the ordering is the entire point (see the block comment above).
 Sefirah_DoReconnect() {
-    global PATH_ADB_EXE, SEFIRAH_ADB_TARGETS, SEFIRAH_PRIORITY_TARGET
+    global PATH_ADB_EXE, SEFIRAH_ADB_TARGETS, SEFIRAH_PRIORITY_TARGET, g_IsSessionEnding
 
-    ; Guard: bail silently when LocalPaths.ahk is absent or variables not set
-    if (!PATH_ADB_EXE || !SEFIRAH_ADB_TARGETS)
+    ; Guard: bail silently when shutting down, LocalPaths.ahk is absent, or variables not set
+    if (g_IsSessionEnding || !PATH_ADB_EXE || !SEFIRAH_ADB_TARGETS)
         return
 
     ; A_Space is the delimiter token for Loop Parse (bare reference in v2, no percent signs needed)
     Loop Parse, SEFIRAH_ADB_TARGETS, A_Space
     {
+        if (g_IsSessionEnding)
+            return
         target := Trim(A_LoopField)
         if (target = "" || target = SEFIRAH_PRIORITY_TARGET)
             continue
@@ -118,7 +155,7 @@ Sefirah_DoReconnect() {
             Sefirah_ClaimActive(target, false)
     }
 
-    if (SEFIRAH_PRIORITY_TARGET != "" && Sefirah_IsReachable(SEFIRAH_PRIORITY_TARGET))
+    if (!g_IsSessionEnding && SEFIRAH_PRIORITY_TARGET != "" && Sefirah_IsReachable(SEFIRAH_PRIORITY_TARGET))
         Sefirah_ClaimActive(SEFIRAH_PRIORITY_TARGET, true)
 }
 
@@ -126,8 +163,8 @@ Sefirah_DoReconnect() {
 ; Reuses the same "connect, then run a second adb command" skeleton as the CONNECT intent below, but chained with `get-state` instead.
 ; Its exit code (the RunWait return value, propagated through cmd's && chain) is 0 iff the target is actually connected, which is a more reliable signal across adb versions than matching on adb connect's own printed text.
 Sefirah_IsReachable(target) {
-    global PATH_ADB_EXE
-    if (!PATH_ADB_EXE || !target)
+    global PATH_ADB_EXE, g_IsSessionEnding
+    if (g_IsSessionEnding || !PATH_ADB_EXE || !target)
         return false
     ; v2: A_ComSpec replaces v1's bare ComSpec: the legacy env-var-as-global no longer exists in v2,
     ; and referencing the bare name hangs the interpreter at PARSE time (confirmed empirically this
@@ -143,7 +180,9 @@ Sefirah_IsReachable(target) {
 ; Fires the foreground-service CONNECT intent alone: this is what Sefirah's NetworkService treats as a fresh authentication, and therefore an ActiveDevice claim.
 ; wait=true blocks until it completes (used when this must finish last); wait=false is fire-and-forget (used for targets where order doesn't matter).
 Sefirah_ClaimActive(target, wait) {
-    global PATH_ADB_EXE
+    global PATH_ADB_EXE, g_IsSessionEnding
+    if (g_IsSessionEnding || !PATH_ADB_EXE || !target)
+        return
     if (wait)
         RunWait(A_ComSpec ' /c ""' PATH_ADB_EXE '" -s ' target ' shell am start-foreground-service -a CONNECT -n com.castle.sefirah/sefirah.network.NetworkService"', , "Hide")
     else
@@ -154,10 +193,12 @@ Sefirah_ClaimActive(target, wait) {
 ; Edge-triggered on the unreachable -> reachable transition only, so steady state costs two quick local `adb` calls per tick (one RunWait, see Sefirah_IsReachable) and nothing more: no busy loop (SetTimer is the same native, ~0%-idle-CPU mechanism Watchdog.ahk already uses at a 10s interval), no repeated re-authentication churn while nothing has changed.
 ; Also handles the reverse edge: the moment the priority target drops, hand ActiveDevice to whatever else is still reachable in SEFIRAH_ADB_TARGETS, so it doesn't sit "Selected" but unreachable.
 Sefirah_PollPriorityTarget() {
-    global SEFIRAH_PRIORITY_TARGET, SefirahPriorityWasReachable
-    if (!SEFIRAH_PRIORITY_TARGET)
+    global SEFIRAH_PRIORITY_TARGET, SefirahPriorityWasReachable, g_IsSessionEnding
+    if (g_IsSessionEnding || !SEFIRAH_PRIORITY_TARGET)
         return
     isReachable := Sefirah_IsReachable(SEFIRAH_PRIORITY_TARGET)
+    if (g_IsSessionEnding)
+        return
     if (isReachable && !SefirahPriorityWasReachable)
         Sefirah_ClaimActive(SEFIRAH_PRIORITY_TARGET, true)   ; phone back -> reclaim
     else if (!isReachable && SefirahPriorityWasReachable)
@@ -168,9 +209,13 @@ Sefirah_PollPriorityTarget() {
 ; Hands ActiveDevice to whichever other configured target is currently reachable, used when the priority target just dropped.
 ; Sequential/blocking like the priority claim above: for the common two-device case there's only one candidate, but this stays correct if a third device is ever added to SEFIRAH_ADB_TARGETS.
 Sefirah_ClaimFallback() {
-    global SEFIRAH_ADB_TARGETS, SEFIRAH_PRIORITY_TARGET
+    global SEFIRAH_ADB_TARGETS, SEFIRAH_PRIORITY_TARGET, g_IsSessionEnding
+    if (g_IsSessionEnding)
+        return
     Loop Parse, SEFIRAH_ADB_TARGETS, A_Space
     {
+        if (g_IsSessionEnding)
+            return
         target := Trim(A_LoopField)
         if (target = "" || target = SEFIRAH_PRIORITY_TARGET)
             continue
@@ -265,15 +310,9 @@ RestartNamedPythonServer(ProjectName, ScriptPath, WorkingDir:="", PythonExe:="",
 ; On a confirmed app transition, the lock/unlock PS1 is launched BLOCKING (shell.Run flag 0=hidden, true=wait) so the cross-process mutex's held duration spans the real icacls work, not just the dispatch: this subroutine can therefore take as long as one icacls sweep (roughly hundreds of ms) on that rare tick.
 ; =============================================================================
 WatchSkillsLock() {
-    ; v2 bug: g_SkillsCandidate/g_SkillsLastTriggered were missing from this list: both are top-level
-    ; script-scope globals (see the two `global g_Skills... :=` lines near this function's top), but
-    ; without declaring them here a function's default scope is local, so every read/write below silently
-    ; shadowed them instead. g_SkillsCandidate is read before any local write in this function, so it threw
-    ; "not assigned" live; g_SkillsLastTriggered was write-only here, so it never errored: it just silently
-    ; never persisted, breaking the dedup/debounce state across ticks without any visible symptom.
     global PATH_SKILLS_LOCK_SCRIPT, PATH_SKILLS_UNLOCK_SCRIPT, PATH_PWSH_EXE, g_SkillsAutoWatcherShowBadge
-    global g_SkillsCandidate, g_SkillsLastTriggered
-    if (!PATH_SKILLS_LOCK_SCRIPT || !PATH_SKILLS_UNLOCK_SCRIPT)
+    global g_SkillsCandidate, g_SkillsLastTriggered, g_IsSessionEnding
+    if (g_IsSessionEnding || !PATH_SKILLS_LOCK_SCRIPT || !PATH_SKILLS_UNLOCK_SCRIPT)
         return
 
     ; Cross-process mutex: guards against TogglePersonalSkillsLock() (a separate OS process in BasicTasks.ahk) reading/acting on the same mode file and running the same lock/unlock scripts concurrently with this watcher: without it, both processes can launch overlapping icacls sweeps against the same folder.

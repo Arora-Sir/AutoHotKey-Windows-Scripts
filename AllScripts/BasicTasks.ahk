@@ -116,6 +116,31 @@ A_TrayMenu.Add("Unmute Microphone", TrayUnmuteMicAction)
 A_TrayMenu.Default := "Unmute Microphone"
 A_TrayMenu.ClickCount := 1
 
+OnMessage(0x0011, BasicTasks_WM_QUERYENDSESSION)
+OnMessage(0x0016, BasicTasks_WM_ENDSESSION)
+OnExit(BasicTasks_OnExit)
+
+BasicTasks_WM_QUERYENDSESSION(wParam, lParam, *) {
+	BasicTasks_HaltTimers()
+	return true
+}
+
+BasicTasks_WM_ENDSESSION(wParam, lParam, *) {
+	if (wParam)
+		BasicTasks_HaltTimers()
+}
+
+BasicTasks_OnExit(ExitReason, ExitCode) {
+	BasicTasks_HaltTimers()
+}
+
+BasicTasks_HaltTimers() {
+	SetTimer(UpdateSkillsTrayStatus, 0)
+	SetTimer(UpdateDRMTrayStatus, 0)
+	SetTimer(TrackActiveBrowser, 0)
+	SetTimer(WatchMicrophoneMuteState, 0)
+}
+
 SetTimer(UpdateSkillsTrayStatus, 2000)
 SetTimer(UpdateSkillsTrayStatus, -100) ; Fast initial update
 SetTimer(UpdateDRMTrayStatus, 3000)

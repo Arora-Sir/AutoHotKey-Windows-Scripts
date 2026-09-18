@@ -26,13 +26,42 @@ DetectHiddenWindows(true)
 ; This whole polling approach replaced an earlier attempt using Task Scheduler's own RestartOnFailure action: it correctly detected a crash's failure exit code but never actually queued the restart: unreliable in practice, not just here.
 CheckIntervalMs := 10000
 
+global g_IsWatchdogSessionEnding := false
+
+OnMessage(0x0011, Watchdog_WM_QUERYENDSESSION)
+OnMessage(0x0016, Watchdog_WM_ENDSESSION)
+OnExit(Watchdog_OnExit)
+
+Watchdog_WM_QUERYENDSESSION(wParam, lParam, *) {
+    global g_IsWatchdogSessionEnding
+    g_IsWatchdogSessionEnding := true
+    ExitApp()
+    return true
+}
+
+Watchdog_WM_ENDSESSION(wParam, lParam, *) {
+    global g_IsWatchdogSessionEnding
+    g_IsWatchdogSessionEnding := true
+    ExitApp()
+}
+
+Watchdog_OnExit(ExitReason, ExitCode) {
+    global g_IsWatchdogSessionEnding
+    g_IsWatchdogSessionEnding := true
+}
+
 if !IsObject(WATCHDOG_APPS)
     WATCHDOG_APPS := [] ; no LocalPaths.ahk / nothing configured -> idle, watches nothing
 
 Loop
 {
+    if (g_IsWatchdogSessionEnding)
+        break
+
     for index, app in WATCHDOG_APPS
     {
+        if (g_IsWatchdogSessionEnding)
+            break
         if !(app.name && app.path) ; skip malformed entries instead of erroring on blank Run
             continue
         appName := app.name

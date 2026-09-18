@@ -28,11 +28,33 @@ DetectHiddenWindows(true)
 
 ; Auto-mount & Watchdog for ext4 Backup SSD
 OnMessage(0x0219, WM_DEVICECHANGE_SSD)
+OnMessage(0x0011, SsdManager_WM_QUERYENDSESSION)
+OnMessage(0x0016, SsdManager_WM_ENDSESSION)
+OnExit(SsdManager_OnExit)
 SetTimer(ReconcileExt4SsdState, 5000)
 SetTimer(ReconcileExt4SsdState, -500) ; Fast initial check on boot/reload
 SetTimer(AutoResolveEjectConflict, 400) ; Auto-intercept Windows 'Problem Ejecting' dialog
 
 g_Ext4SsdMounted := false
+
+SsdManager_WM_QUERYENDSESSION(wParam, lParam, *) {
+    SsdManager_HaltTimers()
+    return true
+}
+
+SsdManager_WM_ENDSESSION(wParam, lParam, *) {
+    if (wParam)
+        SsdManager_HaltTimers()
+}
+
+SsdManager_OnExit(ExitReason, ExitCode) {
+    SsdManager_HaltTimers()
+}
+
+SsdManager_HaltTimers() {
+    SetTimer(ReconcileExt4SsdState, 0)
+    SetTimer(AutoResolveEjectConflict, 0)
+}
 
 ; Independent WM_POWERBROADCAST listener for wake-from-sleep remount checks.
 OnMessage(0x0218, SsdManager_WM_POWERBROADCAST)
