@@ -9,7 +9,7 @@
 ; Alt+Shift+F4 -> Close specific active program
 ; Alt+Ctrl+F4 -> Close All Programs
 
-; Anydesk CiscoWebx Cortana Discord Filmora HotspotSheild IDM Opera MicrosoftTeams Skype Stremio Telegram UnityHub uTorrent wps Zoom
+; Anydesk CiscoWebx Claude Cortana Discord Filmora HotspotSheild IDM Opera MicrosoftTeams ResilioSync Skype Stremio Telegram UnityHub uTorrent wps Zoom
 
 SendMode("Input") ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir(A_ScriptDir) ; Ensures a consistent starting directory.
@@ -27,11 +27,13 @@ CLoseCurrentlyActiveScreen()
         Case "AnyDesk.exe": Run("cmd.exe /c taskkill /F /IM AnyDesk.exe", , "Hide")
         Case "CiscoCollabHost.exe": Run("cmd.exe /c taskkill /F /IM Ciscowebexstart.exe & taskkill /F /IM CiscoCollabHost.exe & taskkill /F /IM webexmta.exe & taskkill /F /IM washost.exe & taskkill /F /IM atmgr.exe & taskkill /F /IM webex.exe", , "Hide")
         Case "ApplicationFrameHost.exe": Run("cmd.exe /c taskkill /F /IM Cortana.exe", , "Hide") ;Cortana
+        Case "Claude.exe", "claude.exe": Run("cmd.exe /c taskkill /F /IM claude.exe", , "Hide")
         Case "Discord.exe": Run("cmd.exe /c taskkill /F /IM Discord.exe", , "Hide")
         Case "IDMan.exe": Run("cmd.exe /c taskkill /F /IM IDMan.exe", , "Hide")
         Case "Opera.exe": Run("cmd.exe /c taskkill /F /IM Opera.exe & taskkill /F /IM browser_assistant.exe", , "Hide")
         Case "Teams.exe": Run("cmd.exe /c taskkill /F /IM Teams.exe", , "Hide")
         Case "msteams.exe": Run("cmd.exe /c taskkill /F /IM msteams.exe", , "Hide")
+        Case "Resilio Sync.exe", "ResilioSync.exe": Run('cmd.exe /c taskkill /F /IM "Resilio Sync.exe"', , "Hide")
         Case "stremio.exe": Run("cmd.exe /c taskkill /F /IM stremio.exe", , "Hide")
         Case "Skype.exe": Run("cmd.exe /c taskkill /F /IM Skype.exe", , "Hide")
         Case "Telegram.exe": Run("cmd.exe /c taskkill /F /IM Telegram.exe", , "Hide")
