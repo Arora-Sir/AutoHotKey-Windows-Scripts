@@ -675,6 +675,19 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
   3. **Silent Background Daemon Discipline**: Background watchdog passes explicitly set `showFeedback = false`. User-facing HUD badges are strictly reserved for direct keypresses (`Win+Alt+M`, `Win+Alt+U`), tray clicks, and physical hardware arrivals.
   4. **Mutual Exclusion Lockfile Discipline**: Both `mount_wsl_ssd.ps1` and `unmount_wsl_ssd.ps1` enforce `$env:TEMP\*.lock` files with 30-second staleness auto-recovery, preventing conflicting background or manual operations.
 
+### 17. Sefirah Sleep/Wake Auto-Reconnect & Priority Target Watchdog Architecture (`BackgroundAutomations.ahk`)
+- **Context**: Sefirah (desktop Phone Link alternative) provides encrypted cross-device clipboard, file transfer, and notification synchronization between Windows 11 and Android devices (Samsung Galaxy S24 Ultra priority, Galaxy Tab S10 Ultra fallback) over TCP port 5150.
+- **Problem**:
+  1. **Sleep/Wake Socket Death**: When Windows wakes from modern standby or sleep, the OS terminates Sefirah's TCP socket on port 5150. Sefirah's Android companion does not autonomously detect Windows wakeups to reconnect.
+  2. **Upstream Preferred Device Absence**: In upstream Sefirah Desktop C# (`NetworkService.cs`), `ActiveDevice` is assigned unconditionally to whichever device finished authenticating most recently. If the tablet reconnects after the phone, the tablet silently overwrites the phone as the active device.
+  3. **The Already-Connected Disconnect Trap**: In `NetworkService.cs`, if a duplicate `CONNECT` intent is received for a device that is already connected, Sefirah Desktop force-disconnects the active client. This triggers `ClearHistoryAsync`, wiping all unpinned notifications. Periodic polling or unconditional Screen-On intent spam on the phone destroys active connections and wipes history.
+- **Architectural Solution**:
+  1. **Native `WM_POWERBROADCAST` (0x0218) Sleep/Wake Hook**: `BackgroundAutomations.ahk` registers `OnMessage(0x0218, Sefirah_WM_POWERBROADCAST)` to detect `PBT_APMRESUMEAUTOMATIC` (0x0012). It schedules a 4-second settled one-shot reconnect (`Sefirah_DoReconnect`), allowing Wi-Fi and Tailscale adapters to re-initialize before dispatching ADB intents.
+  2. **Edge-Triggered Priority Target Polling (`Sefirah_PollPriorityTarget`)**: Runs every 30 seconds via native `SetTimer` (~0% CPU). Crucially, it triggers intent dispatches *strictly on state transitions* (`if (isReachable && !SefirahPriorityWasReachable)`). Once steady-state reachability is confirmed, it never sends redundant connection intents, completely eliminating the already-connected disconnect trap.
+  3. **Automatic Fallback Handoff**: When the priority target (phone) becomes unreachable (`if (!isReachable && SefirahPriorityWasReachable)`), `Sefirah_ClaimFallback()` hands the active slot to the tablet (`Tab S10 Ultra`). When the phone returns to the network, `Sefirah_PollPriorityTarget` immediately reclaims active priority.
+  4. **Android Netpolicy Metered Whitelist Prerequisite**: For background persistence across screen locks and power saving, both devices require `cmd netpolicy add restrict-background-whitelist <UID>` (UID 10476 on S24 Ultra, UID 10051 on Tab S10 Ultra), written directly to `/data/system/netpolicy.xml`.
+  5. **Notification Pinning Protocol**: Notifications must be pinned (`Pinned == true`) in Sefirah Desktop to be exempt from `ClearHistoryAsync` purges on reconnects.
+
 ---
 
 ## Fleet Script Inventory & Global Hotkeys Cheatsheet
@@ -691,7 +704,54 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 | `PersonalKeywords.ahk` | Personal hotstrings, snippet expansions, prompt templates | Dynamic string expansions (`:X*:...`), LLM prompt blueprints |
 | `SunshineDisplayWatchdog.ahk` | Remote streaming display topology & mouse acceleration guard | `Win+Alt+P` (Toggle PC / Tablet Only), `Win+Alt+Shift+P` (Extend / Duplicate), auto mouse speed 20 on Moonlight connect |
 | `Watchdog.ahk` | Generic process health monitor | Background polling loop auto-relaunching crashed background utilities |
+| `WirelessShare.ahk` | Wireless direct file & folder transfers to S24 Ultra & Tab S10 Ultra | `Win+Alt+T` (Push to S24 / cancel active), `Win+Alt+T+T` (Push to Tab S10), left-click tray picker, direct DocumentsUI folder open |
 | `SharedHelpers.ahk` | Central function library | Named mutexes, debounce engine, bottom-right badges, WASAPI COM mute controls, tray manifests |
+
+---
+
+## Wireless Share & Android ADB Fleet Architecture
+
+`AllScripts/WirelessShare.ahk` (compiled to `AllScripts/WirelessShare.exe`) provides direct wireless file and folder sharing to Samsung Galaxy S24 Ultra and Galaxy Tab S10 Ultra without third-party cloud intermediaries.
+
+### Key Design Decisions
+
+1. **Windows 11 Process Decoupling (`WirelessShare.exe`)**:
+   - Windows 11 manages notification area visibility (pinned taskbar icon vs overflow menu) strictly by executable file path.
+   - Running multiple background scripts directly under `AutoHotkey64.exe` causes Windows 11 to group them into a single taskbar toggle.
+   - `build_startup_exe.ps1` compiles `WirelessShare.ahk` into `WirelessShare.exe` via `Ahk2Exe.exe`.
+   - `StartupScript.ahk` detects the `.exe` extension and launches it directly, granting `WirelessShare.exe` an independent executable identity so it can reside in the taskbar overflow menu while `StartupScript.exe` stays pinned to the visible taskbar.
+
+2. **Windows Shell Tooltip Constraint (127-Character Hard Limit)**:
+   - Win32 `NOTIFYICONDATAW.szTip` uses a fixed 128-character buffer (`WCHAR szTip[128]`), leaving at most 127 characters plus a null terminator.
+   - Strings exceeding 127 characters are truncated mid-sentence by the Windows Shell.
+   - `g_DefaultTrayTip` is strictly constrained to 114 characters across 3 lines:
+     `Wireless Share (S24 & Tab S10 Ultra)`nClick: Choose target for selected files`nWin+Alt+T: S24 | Win+Alt+T+T: Tab S10`.
+   - While a transfer runs, the tooltip updates dynamically to show in-flight progress (`Sending [Item] to [Target]...`nClick or Win+Alt+T to CANCEL`).
+
+3. **In-Flight Transfer Cancellation & Process Tree Termination**:
+   - Accidental transfers of large files or sensitive directories can be cancelled immediately without waiting for completion.
+   - Pressing `Win+Alt+T` (or double-tapping) or clicking the tray icon while `g_ActiveTransferPid` is active calls `CancelActiveTransfer()`.
+   - Simply killing the parent PowerShell process leaves the spawned child `adb.exe push` process running in the background.
+   - Cancellation executes `taskkill /PID <PID> /T /F`, forcefully killing both the PowerShell background worker and any child `adb.exe` processes instantly.
+   - Resets state variables, cleans up temporary status files, restores the idle tooltip, and displays an amber cancellation HUD badge (`ShowBottomRightBadge`).
+
+4. **Focus-Independent Explorer Selection Resolution**:
+   - Clicking a taskbar notification area icon moves window focus to `Shell_TrayWnd` (the Windows taskbar), causing `WinActive("ahk_class CabinetWClass")` to return false.
+   - `GetSelectedFilesOrFolders()` queries all top-level Explorer windows in z-order (`WinGetList("ahk_class CabinetWClass")`) via COM `Shell.Application` for `window.Document.SelectedItems`.
+   - If no items are selected in open Explorer windows, it falls back to parsing file paths from the clipboard.
+
+5. **Recursive Folder Transfers & Volume Indexing**:
+   - Handled asynchronously via `AllScripts/PowerShell/SendToDevice_Adb.ps1`.
+   - Distinguishes folders using `Test-Path $file -PathType Container`.
+   - Folders are pushed recursively to `/sdcard/Download/_LaptopTransfers/`.
+   - For folders, Android MediaStore is updated via `scan_volume` (`content call --method scan_volume --uri content://media --arg external_primary`) so all nested files are indexed instantly.
+   - Shell notifications on device status bars (`cmd notification post`) are suppressed to avoid notification clutter.
+
+6. **Direct DocumentsUI Folder Deep-Linking**:
+   - `SendToDevice_Adb.ps1 -OpenOnly` wakes the target device screen (`input keyevent KEYCODE_WAKEUP`) and launches Android's native system file browser:
+     `am start -n com.google.android.documentsui/com.android.documentsui.files.FilesActivity -d "content://com.android.externalstorage.documents/document/primary%3ADownload%2F_LaptopTransfers"`.
+   - Directly specifying `FilesActivity` bypasses the generic Android `*/*` intent resolver, preventing the system "Open with" chooser popup from interrupting the user.
+   - If `FilesActivity` is unavailable, falls back to `am start -a android.intent.action.VIEW -d "content://com.android.externalstorage.documents/document/primary%3ADownload%2F_LaptopTransfers" -t "vnd.android.document/directory"`.
 
 ---
 

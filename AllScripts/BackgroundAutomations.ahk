@@ -6,7 +6,6 @@ Persistent()
 SendMode("Input")
 SetWorkingDir(A_ScriptDir)
 #Include *i %A_ScriptDir%\LocalPaths.ahk ; Include local custom paths if present (ignored by Git)
-UserProfile := EnvGet("USERPROFILE") ; Get Windows UserProfile directory
 #Include %A_ScriptDir%\SharedHelpers.ahk ; Functions shared across scripts - see ARCHITECTURE.md
 #SingleInstance force
 DetectHiddenWindows(true)
@@ -98,6 +97,7 @@ Background_HaltTimers() {
     SetTimer(Sefirah_PollPriorityTarget, 0)
     SetTimer(WatchSkillsLock, 0)
     SetTimer(Sefirah_DoReconnect, 0)
+    SetTimer(ChromeGhostReaperTick, 0)
 }
 
 ; Independent of laptop sleep/wake: catches the priority device (phone) reconnecting for any other reason (e.g. it left/rejoined Wi-Fi on its own, with the laptop never sleeping at all).
@@ -117,6 +117,13 @@ global g_SkillsCandidate     := ""   ; debounce accumulator
 global g_SkillsAutoWatcherShowBadge := true
 if (PATH_SKILLS_LOCK_SCRIPT && PATH_SKILLS_UNLOCK_SCRIPT)
     SetTimer(WatchSkillsLock, 1500)
+
+; Ghost Browser Reaper
+; Polls every 60s. Detects headless Chrome instances held open by MCP DevTools.
+; Uses a 2-tick debounce (~120s sustained headless state) to prevent premature reaping.
+global g_GhostCandidateCount := 0
+global g_GhostReaperShowBadge := true
+SetTimer(ChromeGhostReaperTick, 60000)
 return ; End of auto-execute section
 
 ; WM_POWERBROADCAST handler: must stay lightweight; called on the AHK message pump.
@@ -411,3 +418,81 @@ WatchSkillsLock() {
 
 ; AcquireSkillsVaultLock/ReleaseSkillsVaultLock now live in SharedHelpers.ahk as the generalized AcquireNamedMutex/ReleaseNamedMutex.
 ; [END: Skills Vault Auto-Focus Watcher]
+
+; =============================================================================
+; [START: Chrome Ghost Browser Reaper]
+; Detects headless Chrome processes kept alive by the chrome-devtools-mcp node bridge.
+; Poll interval: 60s. Two-tick debounce ensures ~120s of sustained headless state.
+; Checks:
+;   1. ProcessExist("chrome.exe")
+;   2. !WinExist("ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe") (no visible window)
+;   3. ProcessExist("node.exe") (MCP backend)
+;   4. chrome_debug_helper.py ghost returns 0 (TCP connection from node to DevToolsActivePort)
+; =============================================================================
+ChromeGhostReaperTick() {
+    global g_IsSessionEnding, PATH_PYTHON_EXE, PATH_CHROME_DEBUG_HELPER
+    global g_GhostCandidateCount, g_GhostReaperShowBadge
+    if (g_IsSessionEnding)
+        return
+
+    if (!ProcessExist("chrome.exe")) {
+        g_GhostCandidateCount := 0
+        return
+    }
+
+    ; In AHK v2, DetectHiddenWindows(false) ensures we only find visible top-level windows
+    DetectHiddenWindows(false)
+    hasVisibleChrome := WinExist("ahk_class Chrome_WidgetWin_1 ahk_exe chrome.exe")
+    DetectHiddenWindows(true)
+
+    if (hasVisibleChrome) {
+        g_GhostCandidateCount := 0
+        return
+    }
+
+    if (!ProcessExist("node.exe")) {
+        g_GhostCandidateCount := 0
+        return
+    }
+
+    if (!IsSet(PATH_CHROME_DEBUG_HELPER) || !PATH_CHROME_DEBUG_HELPER || !FileExist(PATH_CHROME_DEBUG_HELPER))
+        return
+    helperPath := PATH_CHROME_DEBUG_HELPER
+
+    pyExe := "python.exe"
+    if (IsSet(PATH_PYTHON_EXE) && PATH_PYTHON_EXE) {
+        pyExe := RegExReplace(PATH_PYTHON_EXE, "i)pythonw\.exe$", "python.exe")
+        if (!FileExist(pyExe))
+            pyExe := PATH_PYTHON_EXE
+    }
+
+    exitCode := 1
+    try {
+        exitCode := RunWait('"' pyExe '" "' helperPath '" ghost', , "Hide")
+    } catch {
+        return
+    }
+
+    if (exitCode != 0) {
+        g_GhostCandidateCount := 0
+        return
+    }
+
+    ; Two-tick debounce: must be confirmed across two 60s ticks (~120s total duration)
+    g_GhostCandidateCount := (IsSet(g_GhostCandidateCount) ? g_GhostCandidateCount : 0) + 1
+    if (g_GhostCandidateCount < 2)
+        return
+
+    g_GhostCandidateCount := 0
+    if (g_GhostReaperShowBadge)
+        ShowBottomRightBadge("[GHOST REAPER] Cleaning headless Chrome and MCP bridge...", "8B0000", 3000)
+
+    try {
+        RunWait('"' pyExe '" "' helperPath '" reap', , "Hide")
+    }
+
+    if (g_GhostReaperShowBadge)
+        ShowBottomRightBadge("[GHOST REAPER] Chrome cleaned. Ready for new launch.", "1A6E3C", 3000)
+}
+; [END: Chrome Ghost Browser Reaper]
+

@@ -37,15 +37,27 @@ This guide documents the complete procedure to configure, provision, and recover
    SEFIRAH_ADB_TARGETS := "100.x.y.w:5555 100.x.y.z:5555"
    SEFIRAH_PRIORITY_TARGET := "100.x.y.w:5555"
    ```
+
+   > [!IMPORTANT]
+   > **Sefirah Android Netpolicy Background Whitelist**:
+   > Sefirah requires an Android background data exemption. Without this, Android Data Saver or metered Wi-Fi/hotspot tethering cuts Sefirah's TCP socket on port 5150 whenever the mobile display turns off (`blocked=APP_BACKGROUND`).
+   > To whitelist your devices permanently across reboots and OTAs, run via ADB:
+   > ```powershell
+   > # Query UID and add to metered background whitelist
+   > adb -s <device-ip>:5555 shell cmd netpolicy add restrict-background-whitelist <device-uid>
+   > ```
+   > Full operational guide: `D:\Software\0_Settings\Guides\Sefirah_Master_Setup_and_Sync_Guide.md`.
+
 4. Register the automatic boot task in Windows Task Scheduler:
    ```powershell
    powershell.exe -ExecutionPolicy Bypass -File .\setup_startup_task.ps1
    ```
    This registers the scheduled task AHK Startup Script to execute AllScripts\StartupScript.exe with highest privileges on user logon.
-5. Compile and launch the master executable:
+5. Compile and launch the fleet executables:
    ```powershell
    powershell.exe -ExecutionPolicy Bypass -File .\build_startup_exe.ps1 -Relaunch
    ```
+   This compiles both `StartupScript.exe` and `WirelessShare.exe` via `Ahk2Exe.exe` so each possesses an independent Windows 11 taskbar process identity, and launches the fleet via Task Scheduler.
 
 ---
 

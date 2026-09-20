@@ -42,6 +42,9 @@ param(
     [Parameter(Mandatory = $false)]
     [string]$AdbPath = "",
 
+    [Parameter(Mandatory = $false)]
+    [switch]$OpenOnly,
+
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Files
 )
@@ -251,9 +254,9 @@ if ($transferFiles.Count -eq 0) {
     } catch {}
 }
 
-if ($transferFiles.Count -eq 0) {
+if (-not $OpenOnly -and $transferFiles.Count -eq 0) {
     Show-ToastNotification "No Files Selected" "Please select a file in Explorer or copy a file to send to $targetName."
-    exit 0
+    exit 1
 }
 
 # 2. Dual-IP Reachability Probe (Fast 500ms Socket Checks)
@@ -306,6 +309,19 @@ if ($state -notmatch "device") {
 
 & $adbExe -s $activeIp shell mkdir -p $destFolder 2>&1 | Out-Null
 
+if ($OpenOnly) {
+    # Wake up device screen if idle
+    & $adbExe -s $activeIp shell input keyevent KEYCODE_WAKEUP 2>&1 | Out-Null
+    # Open _LaptopTransfers folder directly on device screen via system file browser
+    $intentCmd = "am start -n com.google.android.documentsui/com.android.documentsui.files.FilesActivity -d 'content://com.android.externalstorage.documents/document/primary%3ADownload%2F_LaptopTransfers'"
+    $out = & $adbExe -s $activeIp shell $intentCmd 2>&1
+    if ($LASTEXITCODE -ne 0 -or $out -match "Error") {
+        # Fallback to directory VIEW intent
+        & $adbExe -s $activeIp shell "am start -a android.intent.action.VIEW -d 'content://com.android.externalstorage.documents/document/primary%3ADownload%2F_LaptopTransfers' -t 'vnd.android.document/directory'" 2>&1 | Out-Null
+    }
+    exit 0
+}
+
 # 4. Populate In-Memory HashSet for O(1) Non-Destructive Duplicate Detection
 $existingSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 $rawFileList = & $adbExe -s $activeIp shell "ls -1 '$destFolder'" 2>$null
@@ -333,17 +349,29 @@ foreach ($file in $transferFiles) {
     if ($LASTEXITCODE -eq 0) {
         $successCount++
 
-        # URI-encode path for spaces and symbols before MediaScanner broadcast
-        $escapedUri = [System.Uri]::EscapeUriString("file://$destFilePath")
-        & $adbExe -s $activeIp shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "$escapedUri" 2>&1 | Out-Null
+        if (Test-Path $file -PathType Container) {
+            # Directory transfer: scan volume so all media files inside the folder are indexed
+            & $adbExe -s $activeIp shell "content call --method scan_volume --uri content://media --arg external_primary" 2>&1 | Out-Null
+        } else {
+            # 1. Modern Android MediaStore scan via content provider (Android 10+ / One UI 6+)
+            $safePath = $destFilePath.Replace("'", "\'")
+            & $adbExe -s $activeIp shell "content call --method scan_file --uri content://media --arg '$safePath'" 2>&1 | Out-Null
+
+            # 2. Legacy MediaScanner broadcast fallback (pre-Android 10)
+            $escapedUri = [System.Uri]::EscapeUriString("file://$destFilePath")
+            & $adbExe -s $activeIp shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "$escapedUri" 2>&1 | Out-Null
+        }
     }
 }
 
 # 6. User Feedback via Native Windows Toast
 if ($successCount -eq 1) {
     Show-ToastNotification "Sent to $targetName ($routeType)" "$($transferredNames[0]) -> Download/_LaptopTransfers"
+    exit 0
 } elseif ($successCount -gt 1) {
     Show-ToastNotification "Sent to $targetName ($routeType)" "$successCount files transferred -> Download/_LaptopTransfers"
+    exit 0
 } else {
     Show-ToastNotification "Transfer Failed" "Failed pushing payload to $targetName."
+    exit 1
 }

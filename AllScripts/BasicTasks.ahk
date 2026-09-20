@@ -23,7 +23,7 @@
 ; Win+Alt+X -> (Script) Reconnect Cloudflare Network
 ; Win+Alt+N -> Clear Notification center
 ; Win+Alt+L -> (Script) Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)
-; Win+Alt+T -> Send selected files to S24 Ultra (Double-tap within 500ms: Tab S10 Ultra) -> Download/_LaptopTransfers
+; Win+Alt+T -> (Script) Wireless Share to S24 Ultra / Tab S10 Ultra (managed by WirelessShare.ahk)
 ; Alt+X -> Open Today Calendar
 ; Alt+D -> Open ChatGPT
 ; Alt+Shift+T -> Active window Always on Top (Disabled -> Using PowerToys)
@@ -49,6 +49,8 @@
 ; v2: #NoEnv is gone: v2 has no %Var%-vs-environment-variable ambiguity to guard against, nothing to port.
 SendMode("Input") ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir(A_ScriptDir) ; Ensures a consistent starting directory.
+; v2: #MaxHotkeysPerInterval is an assignable built-in: prevents runaway dialog during rapid mouse wheel volume/zoom scrolling.
+A_MaxHotkeysPerInterval := 200
 #Include *i %A_ScriptDir%\LocalPaths.ahk ; Include local custom paths if present (ignored by Git)
 UserProfile := EnvGet("USERPROFILE") ; Get Windows UserProfile directory
 #Include %A_ScriptDir%\SharedHelpers.ahk ; Functions shared across scripts - see ARCHITECTURE.md
@@ -311,11 +313,8 @@ ClearNotificaitons() {
 
 SleepLaptop() {
 	KeyWait("x")
-	timedOut := KeyWait("x", "D T0.30")
-	if (timedOut) {
-		; Single tap Win+X: Open standard Windows Quick Link menu
-		SendInput("{LWin down}x{LWin up}")
-	} else {
+	isDoubleTap := KeyWait("x", "D T0.30")
+	if (isDoubleTap) {
 		; Double tap Win+X+X: Open menu and invoke Sleep (Win+X -> u -> s)
 		SendInput("{LWin down}x{LWin up}")
 		Sleep(150)
@@ -323,97 +322,13 @@ SleepLaptop() {
 		SendInput("u")
 		Sleep(100)
 		SendInput("s")
-	}
-}
-
-; =============================================================================
-; [START: Direct Wireless Share to Phone / Tablet via Dual-IP ADB & Sefirah]
-; Single tap Win+Alt+T: Send selected file(s) to S24 Ultra
-; Double tap Win+Alt+T+T (within 500ms): Send selected file(s) to Tab S10 Ultra
-; Target folder: /sdcard/Download/_LaptopTransfers/
-; =============================================================================
-SendToPhoneOrTablet() {
-	KeyWait("t")
-	timedOut := KeyWait("t", "D T0.50")
-	if (timedOut) {
-		; Single tap Win+Alt+T: Send to Phone (S24 Ultra)
-		SendFilesViaTailscaleAdb("phone")
 	} else {
-		; Double tap Win+Alt+T+T: Send to Tablet (Tab S10 Ultra)
-		SendFilesViaTailscaleAdb("tab")
+		; Single tap Win+X: Open standard Windows Quick Link menu
+		SendInput("{LWin down}x{LWin up}")
 	}
 }
 
-SendFilesViaTailscaleAdb(target) {
-	global PATH_ADB_EXE, ADB_PHONE_TAILSCALE_IP, ADB_PHONE_LAN_IP, ADB_TABLET_TAILSCALE_IP, ADB_TABLET_LAN_IP
 
-	if (target = "tab" || target = "tablet") {
-		targetName := "Tab S10 Ultra"
-		tsIp  := IsSet(ADB_TABLET_TAILSCALE_IP) ? ADB_TABLET_TAILSCALE_IP : ""
-		lanIp := IsSet(ADB_TABLET_LAN_IP) ? ADB_TABLET_LAN_IP : ""
-	} else {
-		targetName := "S24 Ultra"
-		tsIp  := IsSet(ADB_PHONE_TAILSCALE_IP) ? ADB_PHONE_TAILSCALE_IP : ""
-		lanIp := IsSet(ADB_PHONE_LAN_IP) ? ADB_PHONE_LAN_IP : ""
-	}
-
-	; 1. Resolve selected files: if active window is Explorer, require an explicit selection
-	isExplorer := WinActive("ahk_class CabinetWClass") || WinActive("ahk_class ExploreWClass")
-	files := []
-
-	if (isExplorer) {
-		files := GetExplorerSelectedFilePaths()
-		if (files.Length = 0) {
-			ShowBottomRightBadge("No file selected in Explorer to send to " . targetName . "!", "B86200", 2500)
-			return
-		}
-	} else {
-		; Outside Explorer: check if clipboard contains valid file paths
-		Loop Parse, A_Clipboard, "`n", "`r" {
-			candidate := Trim(A_LoopField, '"')
-			if (candidate != "" && FileExist(candidate))
-				files.Push(candidate)
-		}
-
-		if (files.Length = 0) {
-			ShowBottomRightBadge("No file selected or copied to send to " . targetName . "!", "B86200", 2500)
-			return
-		}
-	}
-
-	; 2. Launch background transfer engine with instant visual feedback
-	ShowBottomRightBadge("Dispatching " . files.Length . " file(s) to " . targetName . "...", "2D5A88", 2000)
-	fileArgs := ""
-	for idx, path in files {
-		; v2: single-quote delimiters (containing the literal double-quotes directly) instead of v1's
-		; doubled-double-quote escaping: v1's `""""` pattern (open, escaped-quote, close) is ambiguous
-		; to v2's parser and fails to load ("Missing space or operator before this"). Confirmed empirically.
-		fileArgs .= ' "' . path . '"'
-	}
-
-	psScript := A_ScriptDir "\PowerShell\SendToDevice_Adb.ps1"
-	adbArg := (IsSet(PATH_ADB_EXE) && PATH_ADB_EXE) ? ' -AdbPath "' . PATH_ADB_EXE . '"' : ""
-	tsArg  := tsIp ? ' -TailscaleIp "' . tsIp . '"' : ""
-	lanArg := lanIp ? ' -LanIp "' . lanIp . '"' : ""
-	Run('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "' psScript '" -Target ' target tsArg lanArg adbArg ' ' fileArgs, , "Hide")
-}
-
-GetExplorerSelectedFilePaths() {
-	selected := []
-	hwnd := WinExist("A")
-	for window in ComObject("Shell.Application").Windows {
-		try {
-			if (window.hwnd = hwnd) {
-				for item in window.Document.SelectedItems {
-					selected.Push(item.Path)
-				}
-				break
-			}
-		}
-	}
-	return selected
-}
-; [END: Direct Wireless Share to Phone / Tablet via Tailscale ADB]
 
 ClipboardSearch() {
 	; If (WinExist("ahk_exe brave.exe")) {
@@ -474,10 +389,10 @@ OpenYoutube() {
 }
 
 openYT() {
-	timedOut := KeyWait("t", "D T0.20") ; wait a 0.20 second to see if t is pressed
+	isTPressed := KeyWait("t", "D T0.20") ; wait 0.20 seconds to see if t is pressed
 	; Input(&UserInput, "T0.7 L4", "{enter}.{esc}{tab}", "t")
 	; if (UserInput = "Timeout") ; y not pressed in time
-	if (timedOut) { ; t not pressed in time
+	if (!isTPressed) { ; t not pressed in time
 		return false
 		;ignore as of now as it was intrupting normal functionality
 		;Send("^y") ; send ^y by itself so it's still usable
@@ -922,9 +837,6 @@ ReconnectCloudflare() {
 #!l::TogglePersonalSkillsLock() ;{ <- Cycle Skills Vault Mode
 #MaxThreadsBuffer false
 #MaxThreadsPerHotkey 1
-
-; Win+Alt+T -> Send selected files to S24 Ultra (Single tap) / Tab S10 Ultra (Double tap within 500ms)
-#!t::SendToPhoneOrTablet() ;{ <- Send files to S24 Ultra / Tab S10 Ultra
 
 ; Win+X+X -> Sleep Laptop
 $#x::SleepLaptop() ;{ <- Sleep Laptop (Win+X+X)

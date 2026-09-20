@@ -48,13 +48,39 @@ Once your local paths are configured, compile and register the fleet:
 
 ---
 
-## Compiling & Relaunching StartupScript.exe
+## Compiling & Relaunching Fleet Executables (StartupScript.exe & WirelessShare.exe)
 
-Windows Task Scheduler launches the compiled binary `StartupScript.exe`, not the `.ahk` source file. A source edit to `StartupScript.ahk` takes effect only after recompiling:
+Windows Task Scheduler launches compiled binaries (`StartupScript.exe` and `WirelessShare.exe`), not bare `.ahk` files. Both are compiled via `build_startup_exe.ps1`:
 
-- **Recompile Command**: Run `.\build_startup_exe.ps1` (or click **"Recompile & Relaunch"** under Additional Scripts -> StartupScript in the tray menu).
-- **Safe Recompilation**: Automatically terminates the running `StartupScript.exe` to release file locks, compiles a fresh binary via `Ahk2Exe`, and restarts the fleet seamlessly via Task Scheduler.
-- **Child Script Edits**: All managed child scripts (`BasicTasks.ahk`, `Brightness.ahk`, etc.) require only an instant fleet reload (`Win+Ctrl+Alt+R` or click **"Reload All"** under Additional Scripts -> StartupScript), no recompilation needed.
+- **Recompile Command**: Run `.\build_startup_exe.ps1 -Relaunch` (or click **"Recompile & Relaunch"** under Additional Scripts -> StartupScript in the tray menu).
+- **Safe Recompilation**: Automatically terminates running `StartupScript.exe` and `WirelessShare.exe` processes to release file locks, compiles fresh binaries via `Ahk2Exe`, and restarts the fleet seamlessly via Task Scheduler.
+- **Process Decoupling**: Windows 11 manages notification area icons strictly by executable file path. Compiling `WirelessShare.exe` grants it an independent executable identity, allowing it to sit in the taskbar overflow menu (`^`) while the master `StartupScript.exe` shutdown/hibernate indicator stays pinned to the main taskbar.
+- **Child Script Edits**: Managed child scripts running under AutoHotkey64 require only an instant fleet reload (`Win+Ctrl+Alt+R` or click **"Reload All"** under Additional Scripts -> StartupScript).
+
+---
+
+## Wireless Share to Phone & Tablet (S24 Ultra & Tab S10 Ultra)
+
+Direct wireless file and folder transfers to Samsung Galaxy S24 Ultra and Tab S10 Ultra without third-party cloud apps, managed by `WirelessShare.exe` with a dedicated, persistent system tray icon.
+
+- **Keyboard Hotkeys (`Win+Alt+T`)**:
+  - **Single tap `Win+Alt+T`**: Pushes selected files or folders directly to S24 Ultra (`/sdcard/Download/_LaptopTransfers/`).
+  - **Double tap `Win+Alt+T+T`**: Pushes selected files or folders directly to Tab S10 Ultra.
+  - **In-Flight Cancellation**: Pressing `Win+Alt+T` while files are actively transferring instantly aborts the transfer via process tree termination (`taskkill /T /F`). Zero hanging ADB processes.
+- **Interactive Single-Click Popup (`ShowDualOptionPrompt`)**:
+  - Left-clicking the tray icon inspects open Windows Explorer windows in z-order for selected items (or clipboard if outside Explorer).
+  - Pops up an interactive card with `S24 Ultra (Phone)` and `Tab S10 Ultra (Tablet)` buttons, live 10-second countdown, and Esc or click-outside cancellation.
+  - Clicking the tray icon while a transfer is active cancels the transfer immediately.
+- **Dynamic Tray Tooltip**:
+  - **Idle**: 3-line concise tooltip (`114` characters, well within the Windows 127-character limit) showing hotkeys.
+  - **Transferring**: Dynamically updates to show active item name and target with a reminder: `Sending [Item] to [Target]...` and `Click or Win+Alt+T to CANCEL`.
+- **First-Class Folder Transfers & Indexing**:
+  - Pushes entire directory structures recursively.
+  - Triggers Android MediaStore `scan_volume` (`content call --method scan_volume --uri content://media --arg external_primary`) so all nested media is indexed immediately without device reboot.
+  - Shell notifications on device status bars are suppressed to prevent clutter.
+- **Direct Device Folder View**:
+  - Tray menu includes **Open Phone Transfers** and **Open Tablet Transfers**.
+  - Wakes the device display (`KEYCODE_WAKEUP`) and launches Android's native `FilesActivity` (`com.google.android.documentsui`), opening `_LaptopTransfers` directly with zero "Open with" chooser prompts.
 
 ---
 

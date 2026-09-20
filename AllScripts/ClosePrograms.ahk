@@ -9,7 +9,7 @@
 ; Alt+Shift+F4 -> Close specific active program
 ; Alt+Ctrl+F4 -> Close All Programs
 
-; Anydesk CiscoWebx Claude Cortana Discord Filmora HotspotSheild IDM Opera MicrosoftTeams ResilioSync Skype Stremio Telegram UnityHub uTorrent wps Zoom
+; Anydesk CiscoWebx Claude Cortana Discord Filmora HotspotSheild IDM Opera MicrosoftTeams ResilioSync Skype SpeakType Stremio Telegram UnityHub uTorrent wps Zoom
 
 SendMode("Input") ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir(A_ScriptDir) ; Ensures a consistent starting directory.
@@ -34,6 +34,7 @@ CLoseCurrentlyActiveScreen()
         Case "Teams.exe": Run("cmd.exe /c taskkill /F /IM Teams.exe", , "Hide")
         Case "msteams.exe": Run("cmd.exe /c taskkill /F /IM msteams.exe", , "Hide")
         Case "Resilio Sync.exe", "ResilioSync.exe": Run('cmd.exe /c taskkill /F /IM "Resilio Sync.exe"', , "Hide")
+        Case "SpeakType.exe", "speaktype.exe": Run("cmd.exe /c taskkill /F /IM SpeakType.exe", , "Hide")
         Case "stremio.exe": Run("cmd.exe /c taskkill /F /IM stremio.exe", , "Hide")
         Case "Skype.exe": Run("cmd.exe /c taskkill /F /IM Skype.exe", , "Hide")
         Case "Telegram.exe": Run("cmd.exe /c taskkill /F /IM Telegram.exe", , "Hide")
@@ -104,6 +105,11 @@ CLoseSpecificPrograms()
     if WinExist("ahk_exe stremio.exe")
     {
         Run("cmd.exe /c taskkill /F /IM stremio.exe", , "Hide")
+    }
+
+    if WinExist("ahk_exe SpeakType.exe") or WinExist("ahk_exe speaktype.exe")
+    {
+        Run("cmd.exe /c taskkill /F /IM SpeakType.exe", , "Hide")
     }
 
     if WinExist("ahk_exe uTorrent.exe") or WinExist("ahk_exe utorrentie.exe") or WinExist("ahk_exe utorrent.exe")

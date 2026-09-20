@@ -32,8 +32,9 @@ if (-not (Test-Path $src))      { throw "Source script not found: $src" }
 if (-not (Test-Path $icon))     { throw "Icon not found: $icon" }
 if (-not (Test-Path $base))     { throw "Base AutoHotkey binary not found: $base" }
 
-# Stop running instance to release file lock on StartupScript.exe before compilation.
+# Stop running instance to release file lock on executables before compilation.
 Get-Process -Name "StartupScript" -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process -Name "WirelessShare" -ErrorAction SilentlyContinue | Stop-Process -Force
 
 $compileArgs = @(
     "/in", "`"$src`"",
@@ -62,6 +63,27 @@ if ($proc.ExitCode -ne 0) {
 
 $size = [math]::Round((Get-Item $out).Length / 1KB, 1)
 Write-Host "OK -> $out ($size KB)" -ForegroundColor Green
+
+# Compile WirelessShare.exe to give it a distinct Windows 11 taskbar process identity
+$wsSrc = Join-Path $root "AllScripts\WirelessShare.ahk"
+$wsOut = Join-Path $root "AllScripts\WirelessShare.exe"
+if (Test-Path $wsSrc) {
+    Get-Process -Name "WirelessShare" -ErrorAction SilentlyContinue | Stop-Process -Force
+    $wsCompileArgs = @(
+        "/in", "`"$wsSrc`"",
+        "/out", "`"$wsOut`"",
+        "/base", "`"$base`"",
+        "/silent", "verbose"
+    )
+    $procWs = Start-Process -FilePath $compiler -ArgumentList $wsCompileArgs -Wait -PassThru -NoNewWindow `
+        -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
+    if ($procWs.ExitCode -eq 0) {
+        $wsSize = [math]::Round((Get-Item $wsOut).Length / 1KB, 1)
+        Write-Host "OK -> $wsOut ($wsSize KB)" -ForegroundColor Green
+    } else {
+        Write-Host "WirelessShare compilation warning (exit $($procWs.ExitCode))" -ForegroundColor Yellow
+    }
+}
 
 # If -InstallTask requested explicitly, register the Task Scheduler task now
 if ($InstallTask) {

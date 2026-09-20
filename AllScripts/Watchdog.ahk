@@ -53,6 +53,8 @@ Watchdog_OnExit(ExitReason, ExitCode) {
 if !IsObject(WATCHDOG_APPS)
     WATCHDOG_APPS := [] ; no LocalPaths.ahk / nothing configured -> idle, watches nothing
 
+TrafficMonitorHungCount := 0
+
 Loop
 {
     if (g_IsWatchdogSessionEnding)
@@ -65,7 +67,8 @@ Loop
         if !(app.name && app.path) ; skip malformed entries instead of erroring on blank Run
             continue
         appName := app.name
-        if !ProcessExist(appName)
+        pid := ProcessExist(appName)
+        if !pid
         {
             cmd := app.path
             exeOnly := cmd
@@ -78,6 +81,30 @@ Loop
             if (SubStr(cmd, 1, 1) != '"' && InStr(cmd, " "))
                 cmd := '"' cmd '"'
             try Run(cmd, appDir, "Hide")
+        }
+        else if (appName = "TrafficMonitor.exe")
+        {
+            ; Hang guard: if TrafficMonitor UI freezes, its taskbar window deadlocks explorer.exe
+            ; If hung on 3 consecutive 10s ticks (~30s), terminate it so explorer unfreezes and watchdog relaunches it cleanly.
+            isHung := false
+            try {
+                winList := WinGetList("ahk_pid " pid)
+                for hwnd in winList {
+                    if DllCall("IsHungAppWindow", "Ptr", hwnd, "Int") {
+                        isHung := true
+                        break
+                    }
+                }
+            }
+            if (isHung) {
+                TrafficMonitorHungCount++
+                if (TrafficMonitorHungCount >= 3) {
+                    TrafficMonitorHungCount := 0
+                    try ProcessClose(pid)
+                }
+            } else {
+                TrafficMonitorHungCount := 0
+            }
         }
     }
     Sleep(CheckIntervalMs)

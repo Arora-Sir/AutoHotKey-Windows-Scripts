@@ -80,6 +80,7 @@ Script_9 := A_ScriptDir "\LocalPaths.ahk /v2"
 Script_10 := A_ScriptDir "\SunshineDisplayWatchdog.ahk /v2"
 Script_11 := A_ScriptDir "\Ext4SsdManager.ahk /v2"
 Script_12 := A_ScriptDir "\SharedHelpers.ahk /v2"
+Script_13 := FileExist(A_ScriptDir "\WirelessShare.exe") ? (A_ScriptDir "\WirelessShare.exe") : (A_ScriptDir "\WirelessShare.ahk /v2")
 
 Files := []
 Files.Push(Script_1)
@@ -93,11 +94,12 @@ Files.Push(Script_9)
 Files.Push(Script_10)
 Files.Push(Script_11)
 Files.Push(Script_12)
+Files.Push(Script_13)
 
 ; Scripts pinned to the top of the tray menu's per-script list, in display order.
 ; Everything else falls back to the normal (alphabetical-looking) order below them.
 ; Add or remove a name here to change what's pinned: MenuBuild() below needs no other change.
-PinnedScripts := ["BasicTasks", "PersonalKeywords", "SunshineDisplayWatchdog"]
+PinnedScripts := ["BasicTasks", "PersonalKeywords", "SunshineDisplayWatchdog", "WirelessShare"]
 g_CurrentBasicTasksDrmItem := ""
 g_CurrentSunshineMouseSpeedItem := ""
 
@@ -186,7 +188,10 @@ for scriptName, script in Scripts {
 	; Use same AutoHotkey version to run scripts as this current script is using
 	; Required to deal with 'launcher' that was introduced when Autohotkey v2 is installed
 	; Requires literal quotes around variables to handle spaces in file paths/names
-	Run('"' script.RunPath '" "' script.Path '"', , "Hide", &pid) ; specify Autohotkey version
+	if (SubStr(script.Path, -4) = ".exe")
+		Run('"' script.Path '"', , "Hide", &pid)
+	else
+		Run('"' script.RunPath '" "' script.Path '"', , "Hide", &pid) ; specify Autohotkey version
 	script.Pid := pid
 }
 
@@ -686,7 +691,10 @@ ScriptCommand_Restart(pid) {
 	PostMessage(g_FleetControlMsg, 2, 0, , oldPath " ahk_class AutoHotkey") ; code 2 = Exit, same as the Exit item
 	WinWaitClose(oldPath " ahk_class AutoHotkey", , 2)
 
-	Run('"' runPath '" "' oldPath '"', , "Hide", &newPid)
+	if (SubStr(oldPath, -4) = ".exe")
+		Run('"' oldPath '"', , "Hide", &newPid)
+	else
+		Run('"' runPath '" "' oldPath '"', , "Hide", &newPid)
 	Scripts[targetName].Pid := newPid
 
 	; Suspend toggle is a toggle, not a set: mirrors ScriptCommand_Load's own resync below: a freshly-launched script always starts unsuspended, so bring it into sync if global suspend is currently active.
@@ -729,7 +737,10 @@ ScriptCommand_Load(itemName, itemPos, menuObj) {
 	global Scripts, GlobalHotkeysSuspended, g_FleetControlMsg
 	scriptName := itemName
 	; Run Script and Keep Info
-	Run('"' Scripts[scriptName].RunPath '" "' Scripts[scriptName].Path '"', , "Hide", &pid) ; specify Autohotkey version
+	if (SubStr(Scripts[scriptName].Path, -4) = ".exe")
+		Run('"' Scripts[scriptName].Path '"', , "Hide", &pid)
+	else
+		Run('"' Scripts[scriptName].RunPath '" "' Scripts[scriptName].Path '"', , "Hide", &pid) ; specify Autohotkey version
 	Scripts[scriptName].Pid := pid
 	Scripts[scriptName].Status := true
 
@@ -757,8 +768,8 @@ TrayIconRemove(Attempts) {
 	global Scripts
 	Loop Attempts { ; Try To Remove Over Time Because Icons May Lag Especially During Bootup
 		for scriptName, script in Scripts
-			; BasicTasks and SunshineDisplayWatchdog manage their own dynamic taskbar tray indicators
-			if (script.Status && scriptName != "BasicTasks" && scriptName != "SunshineDisplayWatchdog") {
+			; BasicTasks, SunshineDisplayWatchdog, and WirelessShare manage their own taskbar tray indicators
+			if (script.Status && scriptName != "BasicTasks" && scriptName != "SunshineDisplayWatchdog" && scriptName != "WirelessShare") {
 				try {
 					hWnds := WinGetList("ahk_pid " script.Pid)
 					for hWnd in hWnds
