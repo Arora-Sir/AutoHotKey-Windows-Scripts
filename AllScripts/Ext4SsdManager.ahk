@@ -203,8 +203,8 @@ ResumeExt4SsdOnWake() {
 ;   Win+Alt+M -> Mount ext4 SSD & Open in Explorer (with status badges)
 ;   Win+Alt+U -> Unmount ext4 SSD safely (with status badges)
 
-#!m::MountExt4Ssd(true, true)
-#!u::UnmountExt4Ssd(true)
+#!m::MountExt4Ssd(true, true) ;{ <- Mount ext4 SSD & Open in Explorer
+#!u::UnmountExt4Ssd(true) ;{ <- Safely Unmount ext4 SSD
 ; [END: WSL ext4 Backup SSD Management Hotkeys]
 
 ; =============================================================================
