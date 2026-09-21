@@ -753,6 +753,11 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
    - Directly specifying `FilesActivity` bypasses the generic Android `*/*` intent resolver, preventing the system "Open with" chooser popup from interrupting the user.
    - If `FilesActivity` is unavailable, falls back to `am start -a android.intent.action.VIEW -d "content://com.android.externalstorage.documents/document/primary%3ADownload%2F_LaptopTransfers" -t "vnd.android.document/directory"`.
 
+7. **Dedicated Multi-Resolution Tray Asset (`wireless_share.ico`)**:
+   - `WirelessShare.ahk` loads `AutoHotkey Companion Files\wireless_share.ico` to present a distinctive share mark in the notification area instead of falling back to generic Windows shell icons.
+   - Built as a multi-resolution `.ico` containing 6 frames (16, 20, 24, 32, 48, 64 px) with 90.0% canvas fill ratio (3-node Android share glyph scaled 1.25x outward from center), adhering to the small system icon sizing standard in `design-system-principles`.
+   - Fleet recompilation and relaunch are automated via `build_startup_exe.ps1 -Relaunch`.
+
 ---
 
 ## Developer Tooling & Quality Standards
