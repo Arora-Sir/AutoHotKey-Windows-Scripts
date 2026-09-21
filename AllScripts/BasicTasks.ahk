@@ -45,6 +45,7 @@
 ; MouseLButton -> Double Click Functions (Taskbar Show/Hide; ) ->> Doing this with WindHawk Now
 ; Ctr+Shift+WheelUp -> (VS Code) Increase Whole UI Zoom (+0.05)
 ; Ctr+Shift+WheelDown -> (VS Code) Decrease Whole UI Zoom (-0.05)
+; F9 -> Screen Capture via PrintScreen (ShareX)
 
 ; v2: #NoEnv is gone: v2 has no %Var%-vs-environment-variable ambiguity to guard against, nothing to port.
 SendMode("Input") ; Recommended for new scripts due to its superior speed and reliability.
@@ -1227,3 +1228,5 @@ TrackActiveBrowser() {
 	}
 }
 ; [END: DRM Video Streaming & Hardware Acceleration Toggle]
+
+$F9::Send("{PrintScreen}") ;{ <- Screen Capture via PrintScreen (ShareX)
