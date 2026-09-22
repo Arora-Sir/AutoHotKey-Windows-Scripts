@@ -59,6 +59,7 @@ g_LastManualDisplaySwitch := 0
 g_LastManualMouseSwitch   := 0
 g_ManualMouseOverride     := false
 g_ManualOverrideConnectId := ""
+g_ManualOverrideDisconnectId := ""
 PATH_HIBERNATE_ICO      := A_ScriptDir "\..\AutoHotkey Companion Files\tablet_hibernate.ico"
 g_PowerActionType       := "" ; "Hibernate" or "Shutdown"
 g_PowerCountdownSec     := 0
@@ -860,6 +861,7 @@ TrayReload(*) {
 ; v2: was a Gosub-only label, now a real function: every variable it touches needs an explicit global.
 SunshineWatchdogTick() {
 	global QuitFlag, LogDisconnectedStreak, OfflineStreak, g_ManualMouseOverride, g_ManualOverrideConnectId
+	global g_ManualOverrideDisconnectId
 	global ManualFlag, MarkerFile, SunshineLog, ConnectStreak, g_LastWakeLogSize
 	global RequiredConnectStreak, RequiredLogStreak, RequiredOfflineStreak, CheckIntervalMs, MaxFastHours
 
@@ -887,16 +889,22 @@ SunshineWatchdogTick() {
 	isStreaming := (LastEvent = "CONNECTED")
 
 	; Reset manual mouse override on session boundary:
-	; 1. Stream disconnected
+	; 1. Fresh stream disconnection (new CLIENT DISCONNECTED log line since the override was engaged)
 	; 2. Fresh stream reconnection (new CLIENT CONNECTED timestamp signature)
+	; Both compare against the exact log-line signature captured at toggle time, not just the current
+	; state: DISCONNECTED is the normal resting state whenever nothing is streaming, so a level-based
+	; check (state == DISCONNECTED) would clear a toggle made while already idle on literally the next
+	; tick. Only a genuinely new event line should clear it.
 	if (g_ManualMouseOverride) {
-		if (LastEvent = "DISCONNECTED") {
+		if (LastEvent = "DISCONNECTED" && lastDisconnectId != "" && lastDisconnectId != g_ManualOverrideDisconnectId) {
 			g_ManualMouseOverride := false
 			g_ManualOverrideConnectId := ""
+			g_ManualOverrideDisconnectId := ""
 			SunshineDisplay_Log("Disconnection event: Cleared manual mouse override. Automatic mode restored.")
 		} else if (isStreaming && lastConnectId != "" && g_ManualOverrideConnectId != "" && lastConnectId != g_ManualOverrideConnectId) {
 			g_ManualMouseOverride := false
 			g_ManualOverrideConnectId := ""
+			g_ManualOverrideDisconnectId := ""
 			SunshineDisplay_Log("Reconnection detected (" lastConnectId "): Cleared manual mouse override. Automatic mode restored.")
 		}
 	}
@@ -967,13 +975,10 @@ SunshineWatchdogTick() {
 	; -------------------------------------------------------------------------
 	else if (LastEvent = "DISCONNECTED") {
 		ConnectStreak := 0
-		if (g_ManualMouseOverride) {
-			g_ManualMouseOverride := false
-			g_ManualOverrideConnectId := ""
-			SunshineDisplay_Log("Disconnection event: Cleared manual mouse override.")
-		}
-
-		if (!isManualGrace) {
+		; Override clearing (if this disconnect is fresh) already happened above, in the shared
+		; session-boundary check. If g_ManualMouseOverride is still true here, it's a stale/steady-state
+		; DISCONNECTED reading (nothing new happened), so the manual choice must keep holding.
+		if (!g_ManualMouseOverride && !isManualGrace) {
 			LogDisconnectedStreak++
 			; RequiredLogStreak is 1: restores mouse normal on very first tick (under 1.5s)
 			if (LogDisconnectedStreak >= RequiredLogStreak) {
@@ -1217,15 +1222,17 @@ Action_ToggleMouseSpeed(*) {
 }
 
 ToggleMouseSpeed() {
-	global g_LastManualMouseSwitch, g_ManualMouseOverride, g_ManualOverrideConnectId
+	global g_LastManualMouseSwitch, g_ManualMouseOverride, g_ManualOverrideConnectId, g_ManualOverrideDisconnectId
 	g_LastManualMouseSwitch := A_TickCount
 	g_ManualMouseOverride := true
 
-	; Capture active connection signature to detect any subsequent reconnection
+	; Capture active connect/disconnect signatures so the watchdog can tell a genuinely fresh
+	; session-boundary event apart from the same stale log line it already saw last tick.
 	curConnectId := ""
 	curDisconnectId := ""
 	SunshineWatchdog_LastClientEvent(&curConnectId, &curDisconnectId)
 	g_ManualOverrideConnectId := curConnectId
+	g_ManualOverrideDisconnectId := curDisconnectId
 
 	curSpeed := GetCurrentMouseSpeed()
 	if (curSpeed >= 20) {
