@@ -99,8 +99,9 @@ Files.Push(Script_13)
 ; Scripts pinned to the top of the tray menu's per-script list, in display order.
 ; Everything else falls back to the normal (alphabetical-looking) order below them.
 ; Add or remove a name here to change what's pinned: MenuBuild() below needs no other change.
-PinnedScripts := ["BasicTasks", "PersonalKeywords", "SunshineDisplayWatchdog", "WirelessShare"]
+PinnedScripts := ["BasicTasks", "PersonalKeywords", "SunshineDisplayWatchdog"]
 g_CurrentBasicTasksDrmItem := ""
+g_CurrentBasicTasksEffectsItem := ""
 g_CurrentSunshineMouseSpeedItem := ""
 
 ; Loop 1 {
@@ -392,7 +393,7 @@ Master_WM_ENDSESSION(wParam, lParam, *) {
 ;
 MenuBuild() {
 	global Scripts, PinnedScripts, MenuText_SuspendAll, MenuText_ExitAll, MenuText_AdditionalScripts
-	global g_ScriptMenus, g_CurrentBasicTasksDrmItem, g_CurrentSunshineMouseSpeedItem
+	global g_ScriptMenus, g_CurrentBasicTasksDrmItem, g_CurrentBasicTasksEffectsItem, g_CurrentSunshineMouseSpeedItem
 
 	; v2: fresh Menu() objects every call, replacing v1's DeleteAll-and-reuse-by-name approach: simpler, and avoids
 	; ever handing out a stale Menu object for a PID that no longer applies.
@@ -437,6 +438,8 @@ MenuBuild() {
 						if (scriptName = "BasicTasks") {
 							if (InStr(customItem1, "Graphics Accel") || InStr(customItem1, "DRM Streaming"))
 								g_CurrentBasicTasksDrmItem := customItem1
+							else if InStr(customItem1, "ShareX Image Effects")
+								g_CurrentBasicTasksEffectsItem := customItem1
 						} else if (scriptName = "SunshineDisplayWatchdog") {
 							if InStr(customItem1, "Mouse Speed:")
 								g_CurrentSunshineMouseSpeedItem := customItem1
@@ -609,7 +612,7 @@ UpdateSunshineDisplayMenuChecks() {
 ; (cbaeb08) that replaced the single cycling Skills Vault item with 3 dedicated checkmarked items: see
 ; UpdateBasicTasksMenuChecks() above, which now owns that state sync instead of a label rename.
 UpdateBasicTasksMenuLabels() {
-	global Scripts, g_ScriptMenus, g_CurrentBasicTasksDrmItem
+	global Scripts, g_ScriptMenus, g_CurrentBasicTasksDrmItem, g_CurrentBasicTasksEffectsItem
 	if (!Scripts.Has("BasicTasks"))
 		return
 	pid := Scripts["BasicTasks"].Pid
@@ -628,6 +631,11 @@ UpdateBasicTasksMenuLabels() {
 			if (g_CurrentBasicTasksDrmItem && g_CurrentBasicTasksDrmItem != item1) {
 				try scriptMenu.Rename(g_CurrentBasicTasksDrmItem, item1)
 				g_CurrentBasicTasksDrmItem := item1
+			}
+		} else if InStr(item1, "ShareX Image Effects") {
+			if (g_CurrentBasicTasksEffectsItem && g_CurrentBasicTasksEffectsItem != item1) {
+				try scriptMenu.Rename(g_CurrentBasicTasksEffectsItem, item1)
+				g_CurrentBasicTasksEffectsItem := item1
 			}
 		}
 	}
@@ -723,7 +731,8 @@ RemoteMenuCommand(pid, scriptName, itemName, itemPos, menuObj) {
 		if (customItem1 = itemName
 			|| (InStr(customItem1, "Graphics Accel") && InStr(itemName, "Graphics Accel"))
 			|| (InStr(customItem1, "DRM Streaming") && InStr(itemName, "DRM Streaming"))
-			|| (InStr(customItem1, "Mouse Speed:") && InStr(itemName, "Mouse Speed:"))) {
+			|| (InStr(customItem1, "Mouse Speed:") && InStr(itemName, "Mouse Speed:"))
+			|| (InStr(customItem1, "ShareX Image Effects") && InStr(itemName, "ShareX Image Effects"))) {
 			remoteTrayTriggerMsg := DllCall("RegisterWindowMessage", "Str", "AHK_RemoteTrayMenuTrigger_v1", "UInt")
 			PostMessage(remoteTrayTriggerMsg, lineNum, 0, , "ahk_pid " pid)
 			break
