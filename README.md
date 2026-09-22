@@ -156,6 +156,21 @@ When streaming your desktop to a tablet or remote client via Moonlight/Sunshine,
 
 ---
 
+## ShareX image effects toggle
+
+ShareX has no built-in hotkey or command-line action to toggle a single after-capture task, so this reads and writes its `ApplicationConfig.json` directly, the same way the DRM toggle above edits Chromium's `Local State`.
+
+- **Toggle Action**: Press `Win+Alt+E`, or click **"ShareX Image Effects: ON/OFF"** inside the `BasicTasks` tray submenu.
+- **Live Status Indication**: The tray label always reflects the real on-disk state, even after you change it by hand through ShareX's own tray menu instead.
+- **How it Works**:
+  1. Closes ShareX via its own `-ExitShareX` CLI job, escalating to `taskkill` and then `taskkill /F` if it does not exit gracefully in time, since ShareX only reads its settings file at process startup.
+  2. Toggles the `AddImageEffects` flag inside `DefaultTaskSettings.AfterCaptureJob` in `ApplicationConfig.json`, leaving every other after-capture task untouched.
+  3. Relaunches ShareX with `-silent`.
+  4. Displays a color-coded bottom-right corner badge indicating the new status.
+- **Brief Disruption**: Screenshot hotkeys are unavailable for the one to two seconds ShareX takes to close and reopen.
+
+---
+
 ## Dynamic Bottom-Right Corner Badge Engine & Dual Option Prompt
 
 Shared visual feedback and interactive modal surface (`AllScripts/SharedHelpers.ahk`).
@@ -281,6 +296,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
   | `Win+Ctrl+Alt+M`        | Toggle Microphone Mute state across all endpoints with HUD badge and dynamic tray indicator          |
   | `Win+Alt+T`             | Wirelessly send selected file(s) to S24 Ultra (Double-tap within 500ms sends to Tab S10 Ultra)       |
   | `Alt+Ctrl+Z`            | Capture selection and open in ShareX Image Editor                                                    |
+  | `Win+Alt+E`             | Toggle ShareX "Add image effects" after-capture task (watermark) on/off, with badge + tray status    |
   | `Ctrl+C`                | (In OneNote) Intercepts OneNote copy to extract clean text instead of pasting as an image/screenshot |
   | `Alt+F11`               | Toggle Window Caption Bar / Titlebar on active window (borderless fullscreen)                        |
   | `Alt+X`                 | Open Today's Calendar in browser (Checker Plus extension / Google Calendar)                          |

@@ -110,6 +110,7 @@ RegisterTrayMenuHandler("TraySkillsVaultAuto", TraySkillsVaultAuto)
 RegisterTrayMenuHandler("TraySkillsVaultLocked", TraySkillsVaultLocked)
 RegisterTrayMenuHandler("TraySkillsVaultUnlocked", TraySkillsVaultUnlocked)
 RegisterTrayMenuHandler("TrayDRMStreamingModeToggle", ToggleDRMStreamingMode)
+RegisterTrayMenuHandler("TrayShareXImageEffectsToggle", ToggleShareXImageEffects)
 
 ; Microphone Mute Tray Icon & Background Sync
 ; v2: Menu,Tray,NoStandard has no separate directive: A_TrayMenu.Delete() alone (never calling
@@ -1091,17 +1092,21 @@ SetPersonalSkillsMode(targetMode) {
 PublishBasicTasksManifest() {
 	braveAccel := GetBrowserHardwareAcceleration("Brave") ? "ON" : "OFF"
 	chromeAccel := GetBrowserHardwareAcceleration("Chrome") ? "ON" : "OFF"
+	effectsState := GetShareXAddImageEffectsEnabled() ? "ON" : "OFF"
 
 	itemAuto     := "Skills Vault: Auto (Focus-Driven)`tWin+Alt+L"
 	itemLocked   := "Skills Vault: Locked (Org Safe Mode)"
 	itemUnlocked := "Skills Vault: Unlocked (Personal Mode)"
 	accelLabel   := "Graphics Accel: Brave (" braveAccel ") / Chrome (" chromeAccel ")"
+	effectsLabel := "ShareX Image Effects: " effectsState "`tWin+Alt+E"
 
 	PublishTrayMenuManifest([ [itemAuto, "TraySkillsVaultAuto"]
 	                        , [itemLocked, "TraySkillsVaultLocked"]
 	                        , [itemUnlocked, "TraySkillsVaultUnlocked"]
 	                        , ["-"]
-	                        , [accelLabel, "TrayDRMStreamingModeToggle"] ])
+	                        , [accelLabel, "TrayDRMStreamingModeToggle"]
+	                        , ["-"]
+	                        , [effectsLabel, "TrayShareXImageEffectsToggle"] ])
 }
 
 TraySkillsVaultAuto() {
@@ -1228,5 +1233,147 @@ TrackActiveBrowser() {
 	}
 }
 ; [END: DRM Video Streaming & Hardware Acceleration Toggle]
+
+; [START: ShareX After-Capture Image Effects Toggle]
+; ShareX has no built-in hotkey/CLI job to toggle a single After Capture Task (checked directly
+; against ShareX's own HotkeyType enum on GitHub: no such action exists, and the closest thing,
+; -ImageEffects, only opens the effects editor window). The only way to flip "Add image effects"
+; outside ShareX's own tray/main-window checkbox is to edit DefaultTaskSettings.AfterCaptureJob
+; (a comma-separated flags string) directly in ApplicationConfig.json: ShareX only reads that file
+; at process start, so this needs the same graceful-close -> edit -> relaunch shape as
+; ToggleDRMStreamingMode above, just against ShareX's own settings file instead of a browser's.
+
+; Win+Alt+E -> Toggle ShareX "Add image effects" after-capture task (the watermark preset on/off)
+#!e::ToggleShareXImageEffects() ;{ <- Toggle ShareX Image Effects (Watermark)
+
+GetShareXConfigPath() {
+	global PATH_SHAREX_CONFIG
+	if (IsSet(PATH_SHAREX_CONFIG) && PATH_SHAREX_CONFIG)
+		return PATH_SHAREX_CONFIG
+	return A_MyDocuments "\ShareX\ApplicationConfig.json"
+}
+
+; Reads live off disk (never a cached AHK-side flag) so this stays correct even when the user
+; last toggled it by hand through ShareX's own tray menu instead of this hotkey/tray item.
+GetShareXAddImageEffectsEnabled() {
+	configPath := GetShareXConfigPath()
+	if (!FileExist(configPath))
+		return false
+	try content := FileRead(configPath, "UTF-8")
+	catch
+		return false
+	if (!content)
+		return false
+	; Split-and-compare rather than a raw substring search: ShareX writes "X, Y" (space after
+	; each comma), so a naive InStr(",AddImageEffects,") would miss the space and never match.
+	if !RegExMatch(content, '"AfterCaptureJob"\s*:\s*"([^"]*)"', &m)
+		return false
+	for , f in StrSplit(m[1], ",") {
+		if (Trim(f) = "AddImageEffects")
+			return true
+	}
+	return false
+}
+
+SetShareXAddImageEffectsEnabled(enable) {
+	configPath := GetShareXConfigPath()
+	if (!FileExist(configPath))
+		return false
+	try content := FileRead(configPath, "UTF-8")
+	catch
+		return false
+	if (!content || !RegExMatch(content, '"AfterCaptureJob"\s*:\s*"([^"]*)"', &m))
+		return false
+
+	; Rebuild the flag list rather than a blind string-replace, so every OTHER after-capture task
+	; (Copy image to clipboard, Save image to file, etc.) survives untouched either way.
+	flags := []
+	for , f in StrSplit(m[1], ",") {
+		f := Trim(f)
+		if (f != "" && f != "AddImageEffects")
+			flags.Push(f)
+	}
+	if (enable)
+		flags.Push("AddImageEffects")
+
+	newValue := ""
+	for idx, f in flags
+		newValue .= (idx > 1 ? ", " : "") f
+
+	content := RegExReplace(content, '"AfterCaptureJob"\s*:\s*"[^"]*"', '"AfterCaptureJob": "' newValue '"')
+
+	; Atomic write, same shape as SetBrowserHardwareAcceleration's Local State edit above.
+	tempPath := configPath ".tmp"
+	try FileDelete(tempPath)
+	FileAppend(content, tempPath, "UTF-8")
+	if FileExist(tempPath) {
+		FileMove(tempPath, configPath, 1)
+		return true
+	}
+	return false
+}
+
+; Escalating graceful-close, same shape as CloseBrowserGracefully in SharedHelpers.ahk: a polite
+; request first, then taskkill (no /F), then taskkill /F as a guaranteed last resort. -ExitShareX
+; has to cold-spawn a fresh helper process just to forward the command via ShareX's single-instance
+; IPC to the already-running one, so the first wait is deliberately generous rather than assumed-instant;
+; a single short wait with no escalation (the earlier bug) can silently bail out before ShareX
+; actually finishes exiting, leaving the JSON edit and relaunch never reached at all.
+CloseShareXGracefully(sharexExe, timeoutMs := 4000) {
+	if (!ProcessExist("ShareX.exe"))
+		return true ; Already not running
+
+	Run('"' sharexExe '" -ExitShareX')
+	timeoutSec := Ceil(timeoutMs / 1000)
+	ProcessWaitClose("ShareX.exe", timeoutSec)
+
+	if (ProcessExist("ShareX.exe")) {
+		try RunWait("taskkill /IM ShareX.exe", , "Hide")
+		Loop 15 {
+			if (!ProcessExist("ShareX.exe"))
+				break
+			Sleep(100)
+		}
+		if (ProcessExist("ShareX.exe")) {
+			try RunWait("taskkill /F /IM ShareX.exe", , "Hide")
+			Sleep(300)
+		}
+	}
+	Sleep(200) ; Settle delay so the OS releases the file handle on ApplicationConfig.json
+	return !ProcessExist("ShareX.exe")
+}
+
+ToggleShareXImageEffects() {
+	global PATH_SHAREX_EXE
+
+	configPath := GetShareXConfigPath()
+	if (!FileExist(configPath)) {
+		ShowBottomRightBadge("ShareX config not found - run ShareX once first", "7A3B00", 3000)
+		return
+	}
+
+	sharexExe := (IsSet(PATH_SHAREX_EXE) && PATH_SHAREX_EXE && FileExist(PATH_SHAREX_EXE)) ? PATH_SHAREX_EXE : "ShareX.exe"
+	newState := !GetShareXAddImageEffectsEnabled()
+
+	; Editing the JSON while ShareX is still alive would just get overwritten by ShareX's own next
+	; in-memory settings save, so this must fully finish (guaranteed force-kill fallback, not just
+	; a single hopeful wait) before the file is touched.
+	if !CloseShareXGracefully(sharexExe) {
+		ShowBottomRightBadge("ShareX would not close - try again", "7A3B00", 3000)
+		return
+	}
+
+	SetShareXAddImageEffectsEnabled(newState)
+
+	Run('"' sharexExe '" -silent')
+
+	if (newState)
+		ShowBottomRightBadge("ShareX Image Effects: ON", "1A6E3C", 2500)
+	else
+		ShowBottomRightBadge("ShareX Image Effects: OFF", "6E1A1A", 2500)
+
+	PublishBasicTasksManifest()
+}
+; [END: ShareX After-Capture Image Effects Toggle]
 
 $F9::Send("{PrintScreen}") ;{ <- Screen Capture via PrintScreen (ShareX)
