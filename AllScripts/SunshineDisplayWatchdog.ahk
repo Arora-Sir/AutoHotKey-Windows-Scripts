@@ -742,6 +742,9 @@ ShowHibernateCountdownBadge(sec) {
 }
 
 ExecuteSafeHibernate() {
+	; Write sentinel file before switching displays so StartupScript skips icon cleanup loops
+	try FileAppend("", A_Temp "\ahk_shutdown_imminent.flag")
+
 	ShowBottomRightBadge("[HIBERNATING] Restoring Laptop Panel...`nCommitting session to disk.", "1A5A3A", 3000)
 	SwitchToLaptopOnlyMode(0, true, true)
 	Sleep(200)
@@ -749,6 +752,9 @@ ExecuteSafeHibernate() {
 }
 
 ExecuteSafeShutdown() {
+	; Write sentinel file before switching displays so StartupScript skips icon cleanup loops
+	try FileAppend("", A_Temp "\ahk_shutdown_imminent.flag")
+
 	ShowBottomRightBadge("[SHUTTING DOWN] Restoring Laptop Panel...`nSaving browser sessions and powering down.", "8B1A1A", 4000)
 	SwitchToLaptopOnlyMode(0, true, true)
 	Sleep(200)
@@ -971,25 +977,22 @@ SunshineWatchdogTick() {
 		}
 	}
 	; -------------------------------------------------------------------------
-	; 2. CLIENT DISCONNECTED: Stream paused or closed on tablet
+	; 2. Stream disconnected: stream paused, timed out, or closed on tablet
 	; -------------------------------------------------------------------------
 	else if (LastEvent = "DISCONNECTED") {
 		ConnectStreak := 0
-		; Override clearing (if this disconnect is fresh) already happened above, in the shared
-		; session-boundary check. If g_ManualMouseOverride is still true here, it's a stale/steady-state
-		; DISCONNECTED reading (nothing new happened), so the manual choice must keep holding.
+		; Stale or steady-state disconnect readings preserve active manual overrides until a fresh event occurs.
 		if (!g_ManualMouseOverride && !isManualGrace) {
 			LogDisconnectedStreak++
-			; RequiredLogStreak is 1: restores mouse normal on very first tick (under 1.5s)
+			; RequiredLogStreak of 1 restores normal mouse speed on the very first tick within 1.5 seconds.
 			if (LogDisconnectedStreak >= RequiredLogStreak) {
-				; On PC Screen Only (topo 1), Duplicate (topo 2), or Extend (topo 4),
-				; the user is using the laptop display locally; restore normal speed 10.
+				; Restore normal speed 10 on laptop and mirrored topologies when stream is disconnected.
 				if (topo == 1 || topo == 2 || topo == 4) {
 					if (FileExist(MarkerFile) || GetCurrentMouseSpeed() > 10) {
-						SunshineWatchdog_RestoreMouseNormal("sunshine.log shows CLIENT DISCONNECTED on topo " topo " (stream paused/ended)")
+						SunshineWatchdog_RestoreMouseNormal("sunshine.log shows stream disconnection on topo " topo " (stream paused/ended)")
 					}
 				} else if (topo == 8 || (topo == 0 && IsSecondScreenOnly())) {
-					; Tablet Only mode: laptop screen is off. Clear MarkerFile without oscillating.
+					; In Tablet Only mode the laptop screen is off, so clear MarkerFile without oscillating mouse speed.
 					if FileExist(MarkerFile)
 						FileDelete(MarkerFile)
 				}
@@ -1060,6 +1063,11 @@ SunshineWatchdog_LastClientEvent(&outConnectId := "", &outDisconnectId := "") {
 	global SunshineLog
 	outConnectId := ""
 	outDisconnectId := ""
+
+	; Guard against host dormancy when Sunshine is not running.
+	if (!ProcessExist("sunshine.exe"))
+		return "DISCONNECTED"
+
 	if (!SunshineLog || !FileExist(SunshineLog))
 		return ""
 
@@ -1086,19 +1094,30 @@ SunshineWatchdog_LastClientEvent(&outConnectId := "", &outDisconnectId := "") {
 		LastConnectedPos := FoundPos
 		SearchPos := FoundPos + 1
 	}
-	SearchPos := 1
-	Loop {
-		FoundPos := InStr(Text, "CLIENT DISCONNECTED", , SearchPos)
-		if !FoundPos
-			break
-		LastDisconnectedPos := FoundPos
-		SearchPos := FoundPos + 1
+
+	; Search for all session termination keywords logged by Sunshine.
+	disconnectKeywords := [
+		"CLIENT DISCONNECTED",
+		"Ping Timeout",
+		"Async encoder teardown complete",
+		"Connection Terminated",
+		"Sunshine version:",
+		"Registered Sunshine mDNS service"
+	]
+	for kw in disconnectKeywords {
+		SearchPos := 1
+		Loop {
+			FoundPos := InStr(Text, kw, , SearchPos)
+			if !FoundPos
+				break
+			if (FoundPos > LastDisconnectedPos)
+				LastDisconnectedPos := FoundPos
+			SearchPos := FoundPos + 1
+		}
 	}
 
-	; v2: StartingPos=0 (v1's implicit "search from end") hangs v2 indefinitely: confirmed empirically this
-	; session (Migration-Notes.md 18.9). -1 is the explicit v2 equivalent; the substring here is already
-	; bounded to end exactly at the position of interest, so "search backward from its own end" is exactly
-	; the intended semantic (find the start of the line containing that position).
+	; In v2 StartingPos=0 hangs indefinitely as documented in Migration-Notes.md 18.9.
+	; Value -1 is the explicit v2 equivalent searching backward from the end.
 	if (LastConnectedPos > 0) {
 		lineStart := InStr(SubStr(Text, 1, LastConnectedPos), "`n", false, -1)
 		lineStart := (lineStart > 0) ? lineStart + 1 : 1
@@ -1117,6 +1136,20 @@ SunshineWatchdog_LastClientEvent(&outConnectId := "", &outDisconnectId := "") {
 
 	if (LastConnectedPos = 0 && LastDisconnectedPos = 0)
 		return ""
+
+	; Reject stale connect events recorded prior to the current Windows boot session.
+	if (LastConnectedPos > LastDisconnectedPos) {
+		if RegExMatch(outConnectId, "\[(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})", &m) {
+			connectTs := m[1] . m[2] . m[3] . m[4] . m[5] . m[6]
+			try {
+				connectAgeSec := DateDiff(A_Now, connectTs, "Seconds")
+				systemUptimeSec := A_TickCount / 1000
+				if (connectAgeSec > systemUptimeSec + 30)
+					return "DISCONNECTED"
+			}
+		}
+	}
+
 	return (LastDisconnectedPos > LastConnectedPos) ? "DISCONNECTED" : "CONNECTED"
 }
 

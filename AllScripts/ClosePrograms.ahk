@@ -45,6 +45,11 @@ CLoseCurrentlyActiveScreen()
         Case "wps.exe": Run("cmd.exe /c taskkill /F /IM wpscenter.exe & taskkill /F /IM wpscloudsvr.exe", , "Hide")
         Case "Zoom.exe": Run("cmd.exe /c taskkill /F /IM zoom.exe", , "Hide")
         Case "hsscp.exe": Run("cmd.exe /c taskkill /F /IM hsscp.exe", , "Hide") ;HotSpot Sheild
+        Case "olk.exe":
+        {
+            WinMinimize("ahk_id " Active_ID)
+            return
+        }
         Default:
     }
 
@@ -66,9 +71,14 @@ CLoseAllPrograms()
         {
             continue
         }
+        if (WinGetProcessName("ahk_id " hwnd) = "olk.exe")
+        {
+            WinMinimize("ahk_id " hwnd)
+            continue
+        }
         ; msgbox % str
         str .= "HWND: " hwnd ", Title: " title "`n"
-        WinClose("ahk_id " hwnd)
+        try WinClose("ahk_id " hwnd)
     }
     ; msgbox % str
     return

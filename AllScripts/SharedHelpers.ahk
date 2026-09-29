@@ -1028,7 +1028,7 @@ CloseBrowserGracefully(browserName, timeoutMs := 3000) {
 	; Send WM_CLOSE to all top-level windows of this browser to flush session tabs
 	idList := WinGetList("ahk_exe " exeName)
 	for this_id in idList
-		WinClose("ahk_id " this_id)
+		try WinClose("ahk_id " this_id)
 
 	timeoutSec := Ceil(timeoutMs / 1000)
 	WinWaitClose("ahk_exe " exeName, , timeoutSec)

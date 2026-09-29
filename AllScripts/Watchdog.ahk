@@ -54,11 +54,32 @@ if !IsObject(WATCHDOG_APPS)
     WATCHDOG_APPS := [] ; no LocalPaths.ahk / nothing configured -> idle, watches nothing
 
 TrafficMonitorHungCount := 0
+LastExplorerPid := ProcessExist("explorer.exe")
 
 Loop
 {
     if (g_IsWatchdogSessionEnding)
         break
+
+    currentExplorerPid := ProcessExist("explorer.exe")
+    if (LastExplorerPid && currentExplorerPid && currentExplorerPid != LastExplorerPid)
+    {
+        LastExplorerPid := currentExplorerPid
+        if ProcessExist("olk.exe") {
+            try RunWait('cmd.exe /c taskkill /F /T /IM olk.exe', , "Hide")
+            Sleep(800)
+        }
+        outlookLnk := A_AppData "\Microsoft\Windows\Start Menu\Programs\Startup\Outlook (New Minimized).lnk"
+        if FileExist(outlookLnk) {
+            try Run('"' outlookLnk '"')
+        } else {
+            try Run("olk.exe", , "Min")
+        }
+    }
+    else if (currentExplorerPid)
+    {
+        LastExplorerPid := currentExplorerPid
+    }
 
     for index, app in WATCHDOG_APPS
     {
@@ -74,13 +95,17 @@ Loop
             exeOnly := cmd
             if RegExMatch(cmd, '^"([^"]+)"', &match)
                 exeOnly := match[1]
-            else if RegExMatch(cmd, "^(.*?\.exe)(?:\s|$)", &match)
+            else if RegExMatch(cmd, "^(.*?(\.exe|\.lnk))(?:\s|$)", &match)
                 exeOnly := match[1]
             SplitPath(exeOnly, , &appDir)
 
             if (SubStr(cmd, 1, 1) != '"' && InStr(cmd, " "))
                 cmd := '"' cmd '"'
-            try Run(cmd, appDir, "Hide")
+            if (appName = "olk.exe") {
+                try Run(cmd)
+            } else {
+                try Run(cmd, appDir, "Hide")
+            }
         }
         else if (appName = "TrafficMonitor.exe")
         {

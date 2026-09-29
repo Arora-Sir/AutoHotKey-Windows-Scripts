@@ -10,7 +10,7 @@ Getting the fleet running on a new machine requires a few one-time manual config
 
 1. **Install AutoHotkey v2**:
    - Download the official [v2 installer](https://www.autohotkey.com/) or run `winget install AutoHotkey.AutoHotkey`.
-   - *Note*: Every script in this fleet declares `#Requires AutoHotkey v2.0`; the compiled `StartupScript.exe` runs against `AutoHotkey\v2\AutoHotkey64.exe`.
+   - *Note*: Every script in this fleet declares `#Requires AutoHotkey v2.0`. The compiled `StartupScript.exe` runs against `AutoHotkey\v2\AutoHotkey64.exe`.
 2. **Configure Local Paths**:
    - Copy `AllScripts/LocalPaths.ahk.example` -> `AllScripts/LocalPaths.ahk`.
    - Fill in your machine-specific paths, device IPs, and optional tool locations.
@@ -130,7 +130,7 @@ Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or 
   - Displays a high-contrast power glyph icon (`tablet_hibernate.ico`) in the taskbar notification area strictly while in Tablet Only mode.
   - **Single-Click Power HUD**: Left-clicking the icon opens an interactive dark-themed card offering **Hibernate** and **Shutdown** with a live 10-second auto-dismiss timer.
   - **5-Second Countdown Badge**: Selecting an action triggers a 5-second countdown HUD badge with Esc, Delete, or click-to-cancel protection.
-  - **Pre-Power-Off Display Restoration**: Synchronously switches display topology back to Laptop Only (`DisplaySwitch.exe /internal`) before invoking hibernation or shutdown, guaranteeing the internal laptop display illuminates on subsequent power-on without requiring remote tablet interaction.
+  - **Pre-Power-Off Display Restoration**: Writes a shutdown sentinel file (`%TEMP%\ahk_shutdown_imminent.flag`) and switches display topology back to Laptop Only (`DisplaySwitch.exe /internal`) before invoking hibernation or shutdown. The sentinel flag instructs `StartupScript.ahk` to bypass blocking tray cleanup loops, guaranteeing the Windows session closure acknowledges `WM_QUERYENDSESSION` instantly and illuminates the internal laptop display on subsequent power-on.
   - **Graceful Browser Session Flush & ADB Teardown**: Sends Win32 `WM_CLOSE` to visible Chromium/Firefox windows to save open tabs to disk without crash dialogs, halts background AHK timers, and cleanly terminates lingering ADB daemons before system power-off.
 - **Simple Sticky Notes Multi-Resolution Auto-Arrangement (`apply_ssn_layout.ps1`)**:
   - Automatically re-arranges Simple Sticky Notes (`ssn.exe`) windows to match the active screen resolution and DPI scaling:
@@ -213,6 +213,8 @@ Global system-wide microphone mute toggle with real-time HUD feedback and an int
   WATCHDOG_APPS := [{name: "SomeApp.exe", path: "C:\Path\To\SomeApp.exe"}]
   ```
 - Reacts to any application termination, checking every 10 seconds (`CheckIntervalMs`) and restarting missing processes silently.
+- Detects Windows Explorer restarts and shell crashes by tracking `explorer.exe`'s process ID. Automatically recycles detached packaged applications like New Outlook (`olk.exe`) to restore missing system tray notification icons with zero user interaction.
+- Paired with `ClosePrograms.ahk` to intercept `Alt+F4` on Outlook windows, minimizing them to the system tray rather than closing the application.
 
 ---
 

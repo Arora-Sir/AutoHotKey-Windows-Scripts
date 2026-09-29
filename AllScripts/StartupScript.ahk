@@ -184,7 +184,7 @@ for scriptName, script in Scripts {
 	DetectHiddenWindows(true)
 	SetTitleMatchMode(2)
 	if WinExist(script.Path " ahk_class AutoHotkey")
-		WinClose(script.Path " ahk_class AutoHotkey")
+		try WinClose(script.Path " ahk_class AutoHotkey")
 
 	; Use same AutoHotkey version to run scripts as this current script is using
 	; Required to deal with 'launcher' that was introduced when Autohotkey v2 is installed
@@ -214,6 +214,9 @@ DllCall("User32\ChangeWindowMessageFilterEx", "Ptr", A_ScriptHwnd, "UInt", 0x007
 ; Global hotkey-suspend state: see SuspendAllToggle() below.
 ; A plain single-process boolean is the source of truth; the PostMessage cascade to every child is a one-way toggle with no way to query a remote process's real suspend state, so this variable (not the children's own internal state) is what the tray checkmark reflects.
 GlobalHotkeysSuspended     := false
+; Set true on WM_QUERYENDSESSION, WM_ENDSESSION, or sentinel file detection.
+; Prevents TrayIconRemove from blocking shutdown and disarms exit loops.
+g_IsMasterSessionEnding    := false
 MenuText_SuspendAll        := "Suspend Hotkeys" ; must match byte-for-byte at every Check/UnCheck
 MenuText_ExitAll           := "Exit"
 MenuText_AdditionalScripts := "Additional Scripts"
@@ -262,7 +265,7 @@ ReloadAll(*) {
 		; loop above (Migration-Notes.md section 18.6). ProcessClose(script.Pid) below remains the real termination
 		; mechanism regardless; this is just the same "let it exit gracefully first" nicety v1 had.
 		if script.Path && WinExist(script.Path " ahk_class AutoHotkey")
-			WinClose(script.Path " ahk_class AutoHotkey")
+			try WinClose(script.Path " ahk_class AutoHotkey")
 		if script.HasOwnProp("Pid") && script.Pid {
 			try ProcessClose(script.Pid)
 			try ProcessWaitClose(script.Pid, 1)
@@ -366,7 +369,7 @@ ExitSub(ExitReason, ExitCode) {
 		; loop above (Migration-Notes.md section 18.6). ProcessClose(script.Pid) below remains the real termination
 		; mechanism regardless.
 		if script.Path && WinExist(script.Path " ahk_class AutoHotkey")
-			WinClose(script.Path " ahk_class AutoHotkey")
+			try WinClose(script.Path " ahk_class AutoHotkey")
 		if script.HasOwnProp("Pid") && script.Pid {
 			try ProcessClose(script.Pid)
 			try ProcessWaitClose(script.Pid, 1)
@@ -375,14 +378,18 @@ ExitSub(ExitReason, ExitCode) {
 }
 
 Master_WM_QUERYENDSESSION(wParam, lParam, *) {
-	ExitSub("Shutdown", 0)
+	global g_IsMasterSessionEnding
+	g_IsMasterSessionEnding := true
+	try ExitSub("Shutdown", 0)
 	try RunWait("taskkill.exe /F /T /IM adb.exe", , "Hide")
 	return true
 }
 
 Master_WM_ENDSESSION(wParam, lParam, *) {
+	global g_IsMasterSessionEnding
 	if (wParam) {
-		ExitSub("Shutdown", 0)
+		g_IsMasterSessionEnding := true
+		try ExitSub("Shutdown", 0)
 		try RunWait("taskkill.exe /F /T /IM adb.exe", , "Hide")
 	}
 }
@@ -774,8 +781,10 @@ ScriptCommand_Load(itemName, itemPos, menuObj) {
 ;{-----------------------------------------------
 ;
 TrayIconRemove(Attempts) {
-	global Scripts
+	global Scripts, g_IsMasterSessionEnding
 	Loop Attempts { ; Try To Remove Over Time Because Icons May Lag Especially During Bootup
+		if (IsSet(g_IsMasterSessionEnding) && g_IsMasterSessionEnding)
+			return
 		for scriptName, script in Scripts
 			; BasicTasks, SunshineDisplayWatchdog, and WirelessShare manage their own taskbar tray indicators
 			if (script.Status && scriptName != "BasicTasks" && scriptName != "SunshineDisplayWatchdog" && scriptName != "WirelessShare") {
@@ -894,8 +903,24 @@ AHK_NOTIFYICON(wParam, lParam, uMsg, hWnd) { ; OnMessage(0x404, AHK_NOTIFYICON)
 }
 
 AHK_DISPLAYCHANGE(wParam, lParam, msg, hwnd) { ; OnMessage(0x7E, AHK_DISPLAYCHANGE)
-	TrayIconRemove(8) ; Resolution Change can take a moment so try over time
+	global g_IsMasterSessionEnding
+	; Check sentinel file written by ExecuteSafeShutdown or Hibernate before the display switch.
+	; Deletes it immediately so the flag does not persist across normal reboots.
+	flagFile := A_Temp "\ahk_shutdown_imminent.flag"
+	if FileExist(flagFile) {
+		try FileDelete(flagFile)
+		g_IsMasterSessionEnding := true
+	}
+	if (IsSet(g_IsMasterSessionEnding) && g_IsMasterSessionEnding)
+		return
 	UpdateSunshineDisplayMenuChecks()
+	SetTimer(TrayIconRemoveAsync, -500)
+}
+
+TrayIconRemoveAsync() {
+	global g_IsMasterSessionEnding
+	if (!IsSet(g_IsMasterSessionEnding) || !g_IsMasterSessionEnding)
+		TrayIconRemove(8)
 }
 
 AHK_TASKBARCREATED(wParam, lParam, msg, hwnd) {
@@ -906,5 +931,21 @@ AHK_TASKBARCREATED(wParam, lParam, msg, hwnd) {
 	else if FileExist(A_ScriptDir "\..\Startup_Script.ico")
 		TraySetIcon(A_ScriptDir "\..\Startup_Script.ico")
 	TrayIconRemove(5)
+	SetTimer(ReviveOutlookOnTaskbarCreated, -1500)
+}
+
+; Relaunch minimized Outlook after Explorer restarts so its notification tray icon re-attaches cleanly.
+ReviveOutlookOnTaskbarCreated() {
+	outlookLnk := A_AppData "\Microsoft\Windows\Start Menu\Programs\Startup\Outlook (New Minimized).lnk"
+	if ProcessExist("olk.exe") {
+		try RunWait('cmd.exe /c taskkill /F /T /IM olk.exe', , "Hide")
+		Sleep(500)
+	}
+	if FileExist(outlookLnk) {
+		try Run('"' outlookLnk '"')
+	} else {
+		try Run("olk.exe", , "Min")
+	}
 }
 ;}
+

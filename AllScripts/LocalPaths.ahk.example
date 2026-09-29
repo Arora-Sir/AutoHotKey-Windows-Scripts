@@ -42,7 +42,8 @@ WATCHDOG_APPS := [ {name: "TrafficMonitor.exe", path: "D:\Path\To\TrafficMonitor
 				 , {name: "GoogleDriveFS.exe", path: GoogleDrivePath}
 				 , {name: "Fences.exe",        path: '"C:\Program Files (x86)\Stardock\Fences\Fences.exe" /startup'}
 				 , {name: "GravityBridge_Python.exe", path: '"D:\Path\To\Your\AllScripts\PythonExes\GravityBridge_Python.exe" "D:\Path\To\Your\Gravity-Bridge\proxy.py"'}
-				 , {name: "CopyClip_Python.exe",      path: '"D:\Path\To\Your\AllScripts\PythonExes\CopyClip_Python.exe" "D:\Path\To\Your\CopyClip\copyclip.py"'} ]
+				 , {name: "CopyClip_Python.exe",      path: '"D:\Path\To\Your\AllScripts\PythonExes\CopyClip_Python.exe" "D:\Path\To\Your\CopyClip\copyclip.py"'}
+				 , {name: "olk.exe",                  path: A_AppData "\Microsoft\Windows\Start Menu\Programs\Startup\Outlook (New Minimized).lnk"} ]
 
 ; SunshineDisplayWatchdog: Sunshine scripts directory & tablet's Tailscale IP
 ; (force normal mouse speed if tablet drops offline while fast mode is active)
