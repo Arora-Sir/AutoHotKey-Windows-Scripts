@@ -299,6 +299,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
   | `Win+Alt+T`             | Wirelessly send selected file(s) to S24 Ultra (Double-tap within 500ms sends to Tab S10 Ultra)       |
   | `Alt+Ctrl+Z`            | Capture selection and open in ShareX Image Editor                                                    |
   | `Win+Alt+E`             | Toggle ShareX "Add image effects" after-capture task (watermark) on/off, with badge + tray status    |
+  | `F9`                    | Screen Capture via PrintScreen (ShareX single-key trigger on laptop keyboards)                       |
   | `Ctrl+C`                | (In OneNote) Intercepts OneNote copy to extract clean text instead of pasting as an image/screenshot |
   | `Alt+F11`               | Toggle Window Caption Bar / Titlebar on active window (borderless fullscreen)                        |
   | `Alt+X`                 | Open Today's Calendar in browser (Checker Plus extension / Google Calendar)                          |
@@ -401,7 +402,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
 
 <h3>
   <p align="center">
-    💡 <b>Fleet Maintenance Tip:</b> After editing any child script (e.g. <code>BasicTasks.ahk</code>), press <code>Win+Ctrl+Alt+R</code> (or select <b>"Reload All"</b> in the tray menu) to reload the fleet instantly. Recompilation via <code>build_startup_exe.ps1</code> is only required when modifying <code>StartupScript.ahk</code>.
+    💡 <b>Fleet Maintenance Tip:</b> After editing any child script (e.g. <code>BasicTasks.ahk</code>), press <code>Win+Ctrl+Alt+R</code> (or select <b>"Reload All"</b> in the tray menu) to reload the fleet instantly. Recompilation via <code>build_startup_exe.ps1</code> is only required when modifying <code>StartupScript.ahk</code> or <code>WirelessShare.ahk</code>.
   </p>
 </h3>
 
