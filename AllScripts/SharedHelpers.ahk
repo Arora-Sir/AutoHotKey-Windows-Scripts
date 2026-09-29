@@ -374,6 +374,7 @@ ShowDualOptionPrompt(
 	g_DualOptionGui.MarginX := 0
 	g_DualOptionGui.MarginY := 0
 	g_DualOptionGui.BackColor := cardBg
+	g_DualOptionGui.OnEvent("Escape", (*) => DismissDualOptionPrompt(true))
 
 	; Header
 	g_DualOptionGui.SetFont("s11 Bold cF0F6FC", "Segoe UI")
@@ -514,6 +515,12 @@ HandleDualOptionLButtonClick() {
 		}
 	}
 }
+
+#HotIf IsDualOptionPromptActive()
+*Esc::DismissDualOptionPrompt(true)
+*Del::DismissDualOptionPrompt(true)
+~*LButton::HandleDualOptionLButtonClick()
+#HotIf
 
 
 ; -----------------------------------------------------------------------------
