@@ -36,6 +36,7 @@ This guide documents the complete procedure to configure, provision, and recover
    PATH_ADB_EXE := "D:\Path\To\Your\adb.exe"
    SEFIRAH_ADB_TARGETS := "100.x.y.w:5555 100.x.y.z:5555"
    SEFIRAH_PRIORITY_TARGET := "100.x.y.w:5555"
+   PATH_EDITOR := "" ; Blank to auto-detect VS Code -> Notepad++ -> Notepad, or explicit executable path
    ```
 
    > [!IMPORTANT]

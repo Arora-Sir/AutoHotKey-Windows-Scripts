@@ -97,14 +97,35 @@ try {
 }
 "@
 
-    [System.IO.File]::WriteAllText($appsPath, $jsonContent)
-    Write-Host 'Apps configuration written successfully.' -ForegroundColor Green
+    $targetAppsPaths = @('C:\Program Files\Sunshine\config\apps.json')
+    if (Test-Path 'C:\Program Files\Apollo\config') {
+        $targetAppsPaths += 'C:\Program Files\Apollo\config\apps.json'
+    }
+    if (Test-Path 'C:\ProgramData\Apollo') {
+        $targetAppsPaths += 'C:\ProgramData\Apollo\apps.json'
+    }
+
+    foreach ($path in $targetAppsPaths) {
+        $parentDir = Split-Path $path -Parent
+        if (Test-Path $parentDir) {
+            [System.IO.File]::WriteAllText($path, $jsonContent)
+            Write-Host "Apps configuration written successfully to $path" -ForegroundColor Green
+        }
+    }
     Add-Content -Path $logFile -Value 'Apps written successfully.'
 
-    Write-Host 'Restarting SunshineService...' -ForegroundColor Cyan
-    Restart-Service -Name SunshineService -Force -ErrorAction Stop
-    Write-Host 'SunshineService restarted successfully!' -ForegroundColor Green
-    Add-Content -Path $logFile -Value 'SunshineService restarted successfully.'
+    # Restart active host streaming service
+    if (Get-Service -Name ApolloService -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Running' }) {
+        Write-Host 'Restarting ApolloService...' -ForegroundColor Cyan
+        Restart-Service -Name ApolloService -Force -ErrorAction Stop
+        Write-Host 'ApolloService restarted successfully!' -ForegroundColor Green
+        Add-Content -Path $logFile -Value 'ApolloService restarted successfully.'
+    } elseif (Get-Service -Name SunshineService -ErrorAction SilentlyContinue) {
+        Write-Host 'Restarting SunshineService...' -ForegroundColor Cyan
+        Restart-Service -Name SunshineService -Force -ErrorAction Stop
+        Write-Host 'SunshineService restarted successfully!' -ForegroundColor Green
+        Add-Content -Path $logFile -Value 'SunshineService restarted successfully.'
+    }
 } catch {
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
     Add-Content -Path $logFile -Value ('ERROR: ' + $_.Exception.Message)

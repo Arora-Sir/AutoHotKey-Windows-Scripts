@@ -82,6 +82,7 @@ PATH_SKILLS_UNLOCK_SCRIPT := "D:\Path\To\Your\.claude\scripts\unlock-personal-sk
 PATH_SKILLS_TEST_FILE     := "D:\Path\To\Your\.gemini\skills\Global-Developer-Skills\00-user-context\SKILL.md"
 
 ; Optional Application Paths & Tool Overrides (auto-detected if blank or omitted)
+PATH_EDITOR            := "" ; Blank to auto-detect VS Code -> Notepad++ -> Notepad, or set custom executable path
 PATH_SHAREX_EXE        := "C:\Program Files\ShareX\ShareX.exe"
 PATH_SHAREX_CONFIG     := "" ; Blank to auto-detect A_MyDocuments\ShareX\ApplicationConfig.json (non-portable install)
 PATH_BRAVE_EXE         := "" ; Blank to auto-detect from LocalAppData / Program Files

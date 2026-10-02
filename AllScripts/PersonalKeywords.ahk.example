@@ -10,7 +10,7 @@
 ; Example Key Bindings:
 ; Win+Alt+A -> Open Notes App
 ; Win+Alt+S -> Open Workspace App
-; Win+Shift+P -> Open Password Manager
+; Win+P -> Open Password Manager
 ; Keyword thnk.     -> Paste comprehensive AI reasoning prompt
 ; Keywords E1.-E8.  -> Paste email addresses (instant, unicode-safe)
 ; Keywords *Pro.    -> Paste profile and website URLs
@@ -19,6 +19,7 @@ SendMode("Input") ; Recommended for new scripts due to its superior speed and re
 SetWorkingDir(A_ScriptDir) ; Ensures a consistent starting directory.
 #SingleInstance force ; Ensures that only the last executed instance of script is running
 DetectHiddenWindows(true)
+#Include %A_ScriptDir%\SharedHelpers.ahk ; Fleet control protocol and shared utilities
 
 ; =============================================================================
 ; KEYWORDS AND EXPANSIONS
@@ -186,26 +187,27 @@ OpenNotion(){
 }
 
 ; Example: focus your password manager (Bitwarden desktop app, or browser password manager)
-; Working: Checks if Bitwarden is running, unhides and activates its window.
-; If not running, launches Bitwarden via shell:AppsFolder.
+; Working: Activates Bitwarden if already visible.
+; If hidden in tray or closed, activates via shell:AppsFolder to trigger Electron native wake routine.
 ; Previous working: Focused Brave/Chrome, opened a new tab, and navigated to chrome://password-manager/passwords.
 ; (Preserved in comment block below so you can easily toggle back anytime).
 OpenPass()
 {
     ; === Bitwarden Desktop Vault (Active) ===
-    If WinExist("ahk_class Chrome_WidgetWin_1 ahk_exe Bitwarden.exe")
+    ; NOTE: Never call WinShow on Electron windows hidden in the tray.
+    ; NOTE: Win32 ShowWindow forces the HWND visible while Chromium input routing stays dormant.
+    ; NOTE: Calling shell:AppsFolder triggers Electron second-instance activation event cleanly.
+    prevDetect := A_DetectHiddenWindows
+    DetectHiddenWindows(false)
+    if WinExist("ahk_exe Bitwarden.exe")
     {
-        WinShow
         WinActivate
     }
-    else If WinExist("ahk_exe Bitwarden.exe")
+    else
     {
-        WinShow
-        WinActivate
-    }
-    else{
         Run("shell:AppsFolder\8bitSolutionsLLC.bitwardendesktop_h4e712dmw3xyy!bitwardendesktop")
     }
+    DetectHiddenWindows(prevDetect)
     return
 
     ; === Chrome / Brave Browser Password Manager (Previous) ===
@@ -246,4 +248,4 @@ OpenPass()
 ; Hotkey Bindings
 #!a:: OpenSamsungNotes()
 #!s:: OpenNotion()
-#+p:: OpenPass()
+#p:: OpenPass()

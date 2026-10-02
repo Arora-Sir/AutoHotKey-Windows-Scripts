@@ -282,14 +282,52 @@ MenuRecompileStartup(*) {
 	Run('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "' buildScript '" -Relaunch', , "Hide")
 }
 
-; Opens StartupScript.ahk in default registered editor (with notepad fallback)
-MenuEditStartupScript(*) {
-	startupAhk := A_ScriptDir "\StartupScript.ahk"
-	try {
-		Run('edit "' startupAhk '"')
-	} catch {
-		Run('notepad.exe "' startupAhk '"')
+; Launches the specified script path in the preferred editor.
+; Priority cascade: LocalPaths.ahk override -> VS Code -> Notepad++ -> Shell edit verb -> Notepad.
+OpenScriptInEditor(scriptPath) {
+	if FileExist(A_ScriptDir "\LocalPaths.ahk") {
+		try {
+			content := FileRead(A_ScriptDir "\LocalPaths.ahk")
+			if RegExMatch(content, 'm)^\s*PATH_EDITOR\s*:=\s*"([^"]+)"', &match) && FileExist(match[1]) {
+				Run('"' match[1] '" "' scriptPath '"')
+				return
+			}
+		}
 	}
+	vsCodeUser := EnvGet("LocalAppData") "\Programs\Microsoft VS Code\Code.exe"
+	if FileExist(vsCodeUser) {
+		Run('"' vsCodeUser '" "' scriptPath '"')
+		return
+	}
+	vsCodeSys := A_ProgramFiles "\Microsoft VS Code\Code.exe"
+	if FileExist(vsCodeSys) {
+		Run('"' vsCodeSys '" "' scriptPath '"')
+		return
+	}
+	npp64 := A_ProgramFiles "\Notepad++\notepad++.exe"
+	if FileExist(npp64) {
+		Run('"' npp64 '" "' scriptPath '"')
+		return
+	}
+	npp32 := "C:\Program Files (x86)\Notepad++\notepad++.exe"
+	if FileExist(npp32) {
+		Run('"' npp32 '" "' scriptPath '"')
+		return
+	}
+	try {
+		Run('edit "' scriptPath '"')
+	} catch {
+		Run('notepad.exe "' scriptPath '"')
+	}
+}
+
+MenuEditScriptFile(scriptPath, *) {
+	OpenScriptInEditor(scriptPath)
+}
+
+; Opens StartupScript.ahk in preferred editor
+MenuEditStartupScript(*) {
+	OpenScriptInEditor(A_ScriptDir "\StartupScript.ahk")
 }
 
 MenuViewKeyHistoryMaster(*) {
@@ -418,7 +456,7 @@ MenuBuild() {
 			pid := script.Pid
 			scriptMenu := Menu()
 			scriptMenu.Add("View Key History", ScriptCommand.Bind(pid, "ViewKeyHistory"))
-			scriptMenu.Add("Edit", ScriptCommand.Bind(pid, "Edit"))
+			scriptMenu.Add("Edit", MenuEditScriptFile.Bind(script.Path))
 			scriptMenu.Add("Restart", ScriptCommand.Bind(pid, "Restart"))
 			scriptMenu.Add("Exit", ScriptCommand.Bind(pid, "Exit"))
 			g_ScriptMenus[pid] := scriptMenu

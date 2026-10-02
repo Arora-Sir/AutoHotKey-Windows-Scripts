@@ -337,8 +337,9 @@ SwitchToExtendMode(delayNotesMs := 1200) {
 	if (IsSet(PATH_ADB_EXE) && PATH_ADB_EXE && FileExist(PATH_ADB_EXE) && IsSet(SUNSHINE_TABLET_TAILSCALE_IP) && SUNSHINE_TABLET_TAILSCALE_IP) {
 		; v2: Chr(34) for the literal embedded quote instead of v1's doubled-double-quote escaping, which is
 		; ambiguous to v2's parser and fails to load (Migration-Notes.md 18.13).
+		; Launch Artemis-mic (com.limelight.noirdebug), Artemis (com.limelight.noir), or fall back to Moonlight (com.limelight)
 		q := Chr(34)
-		adbArgs := "-s " SUNSHINE_TABLET_TAILSCALE_IP ":5555 shell " q "input keyevent KEYCODE_WAKEUP && am start -n com.limelight/.ShortcutTrampoline -e Name " A_ComputerName " -e AppName Desktop" q
+		adbArgs := "-s " SUNSHINE_TABLET_TAILSCALE_IP ":5555 shell " q "input keyevent KEYCODE_WAKEUP && (am start -n com.limelight.noirdebug/com.limelight.ShortcutTrampoline -e Name " A_ComputerName " -e AppName Desktop || am start -n com.limelight.noir/.ShortcutTrampoline -e Name " A_ComputerName " -e AppName Desktop || am start -n com.limelight/.ShortcutTrampoline -e Name " A_ComputerName " -e AppName Desktop)" q
 		RunSilentProcess(PATH_ADB_EXE, adbArgs)
 		SunshineDisplay_Log("Extend handshake: Dispatched ADB wake and connect intent to tablet.")
 	} else {
@@ -1232,6 +1233,11 @@ SetMouseSpeedFast(reason := "") {
 		FileAppend("manual", MarkerFile)
 	}
 
+	if FileExist("C:\Program Files\AutoHotkey\nircmd.exe") {
+		try Run('"C:\Program Files\AutoHotkey\nircmd.exe" setdefaultsounddevice "Microphone" 1', , "Hide")
+		try Run('"C:\Program Files\AutoHotkey\nircmd.exe" setdefaultsounddevice "Microphone" 2', , "Hide")
+	}
+
 	if (reason)
 		SunshineDisplay_Log("Set mouse speed FAST (20): " reason)
 	UpdateTrayStatusAndTooltip()
@@ -1244,6 +1250,11 @@ SetMouseSpeedNormal(reason := "") {
 	if (MarkerFile)
 		try FileDelete(MarkerFile)
 	try FileDelete(A_Temp "\sunshine_manual_switch.flag")
+
+	if FileExist("C:\Program Files\AutoHotkey\nircmd.exe") {
+		try Run('"C:\Program Files\AutoHotkey\nircmd.exe" setdefaultsounddevice "Microphone Array" 1', , "Hide")
+		try Run('"C:\Program Files\AutoHotkey\nircmd.exe" setdefaultsounddevice "Microphone Array" 2', , "Hide")
+	}
 
 	if (reason)
 		SunshineDisplay_Log("Set mouse speed NORMAL (10): " reason)

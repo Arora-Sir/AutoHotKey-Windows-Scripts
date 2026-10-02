@@ -132,6 +132,13 @@ Enables desktop streaming to a tablet (such as Samsung Galaxy Tab S10 Ultra) or 
   - **5-Second Countdown Badge**: Selecting an action triggers a 5-second countdown HUD badge with Esc, Delete, or click-to-cancel protection.
   - **Pre-Power-Off Display Restoration**: Writes a shutdown sentinel file (`%TEMP%\ahk_shutdown_imminent.flag`) and switches display topology back to Laptop Only (`DisplaySwitch.exe /internal`) before invoking hibernation or shutdown. The sentinel flag instructs `StartupScript.ahk` to bypass blocking tray cleanup loops, guaranteeing the Windows session closure acknowledges `WM_QUERYENDSESSION` instantly and illuminates the internal laptop display on subsequent power-on.
   - **Graceful Browser Session Flush & ADB Teardown**: Sends Win32 `WM_CLOSE` to visible Chromium/Firefox windows to save open tabs to disk without crash dialogs, halts background AHK timers, and cleanly terminates lingering ADB daemons before system power-off.
+- **Automatic Audio Recording Endpoint Switching**:
+  - Enforces default audio input routing during display transitions via NirCmd.
+  - Switching to fast mouse mode (tablet streaming) automatically selects "Microphone" for console and multimedia roles.
+  - Switching back to normal laptop mode restores the default recording endpoint to "Microphone Array".
+- **Multi-Host Streaming & Client Auto-Connect**:
+  - `update_sunshine_apps.ps1` dynamically writes application manifests to both Sunshine and Apollo server installations and restarts the active host daemon.
+  - Extend mode ADB intent sequentially checks for Artemis-mic, Artemis, and Moonlight client apps on the tablet.
 - **Simple Sticky Notes Multi-Resolution Auto-Arrangement (`apply_ssn_layout.ps1`)**:
   - Automatically re-arranges Simple Sticky Notes (`ssn.exe`) windows to match the active screen resolution and DPI scaling:
     - **Laptop (1536x864 DIP)**: 4 columns flush against the right bezel ($X = 1268$, $W = 268 \to 1536\text{px}$).
@@ -366,7 +373,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
     | `thnk.`       | Universal autonomous 5-phase engineering reasoning prompt     |
     | `Win+Alt+A`   | Open Samsung Notes / Notes App                                |
     | `Win+Alt+S`   | Open Notion                                                   |
-    | `Win+Shift+P` | Open Bitwarden Vault                                          |
+    | `Win+P`       | Open Bitwarden Vault                                          |
 
 - ### FORCE CLOSE PROGRAMS
   - For programs that go to the system tray when closed by pressing the close button
