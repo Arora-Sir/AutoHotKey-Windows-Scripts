@@ -45,7 +45,7 @@
 ; MouseLButton -> Double Click Functions (Taskbar Show/Hide; ) ->> Doing this with WindHawk Now
 ; Ctr+Shift+WheelUp -> (VS Code) Increase Whole UI Zoom (+0.05)
 ; Ctr+Shift+WheelDown -> (VS Code) Decrease Whole UI Zoom (-0.05)
-; F9 -> Screen Capture via PrintScreen (ShareX)
+; F9 (with modifiers) -> Screen Capture via PrintScreen (ShareX: F9 full screen, Ctrl+F9 region, Shift+F9 window, Alt+F9 recording)
 
 ; v2: #NoEnv is gone: v2 has no %Var%-vs-environment-variable ambiguity to guard against, nothing to port.
 SendMode("Input") ; Recommended for new scripts due to its superior speed and reliability.
@@ -1360,4 +1360,4 @@ ToggleShareXImageEffects() {
 }
 ; [END: ShareX After-Capture Image Effects Toggle]
 
-*$F9::Send("{Blind}{PrintScreen}") ;{ <- Screen Capture via PrintScreen (ShareX)
+*$F9::Send("{Blind}{PrintScreen}") ;{ <- Screen Capture via PrintScreen with modifiers for ShareX

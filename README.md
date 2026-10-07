@@ -25,6 +25,8 @@ Getting the fleet running on a new machine requires a few one-time manual config
      - Enforces clean code comments and documentation by running `python scripts/clean_dashes.py --check` (blocks em-dashes and comment double-hyphens). Auto-repair anytime using `python scripts/clean_dashes.py --staged`.
 5. **Optional: Linux ext4 Backup SSD Engine**:
    - If using external ext4 backup SSDs via WSL2: Copy `AllScripts/PowerShell/ssd_config.json.example` -> `AllScripts/PowerShell/ssd_config.json` (gitignored) and customize your drive letter, disk model, and WSL distro.
+6. **Configure Editor Workspace Settings (VS Code / Antigravity IDE)**:
+   - Ensure `.vscode/settings.json` contains `AHK++.v2.workingDirectories` and `AutoHotkey2.workingDirectories` mapping `["AllScripts"]` so the language server resolves `%A_ScriptDir%` correctly.
 
 ### 2. Automated 1-Click Build & Auto-Start
 
@@ -44,7 +46,7 @@ Once your local paths are configured, compile and register the fleet:
   - The task is registered with a **30-second logon delay** (`PT30S`).
   - At Windows user logon, Windows Explorer, audio services, network adapters (Tailscale/Wi-Fi), and graphics drivers initialize concurrently across multiple threads.
   - A 30-second delay guarantees that the desktop environment settles completely before the fleet launches, preventing startup race conditions and missing notification tray icons.
-  - Configured with `RunLevel Limited` under your standard account (`$env:USERNAME`), eliminating boot-time UAC prompts while preserving normal window message routing.
+  - Configured with `RunLevel Highest` under your standard account (`$env:USERNAME`), eliminating boot-time UAC prompts while enabling global keyboard hooks across elevated developer tools (Antigravity IDE, administrative terminals).
 
 ---
 
@@ -306,7 +308,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
   | `Win+Alt+T`             | Wirelessly send selected file(s) to S24 Ultra (Double-tap within 500ms sends to Tab S10 Ultra)       |
   | `Alt+Ctrl+Z`            | Capture selection and open in ShareX Image Editor                                                    |
   | `Win+Alt+E`             | Toggle ShareX "Add image effects" after-capture task (watermark) on/off, with badge + tray status    |
-  | `F9`                    | Screen Capture via PrintScreen (ShareX single-key trigger on laptop keyboards)                       |
+  | `F9` (with modifiers)   | ShareX capture shortcuts via PrintScreen forwarding (F9 full screen, Ctrl+F9 region, Shift+F9 window, Alt+F9 recording) |
   | `Ctrl+C`                | (In OneNote) Intercepts OneNote copy to extract clean text instead of pasting as an image/screenshot |
   | `Alt+F11`               | Toggle Window Caption Bar / Titlebar on active window (borderless fullscreen)                        |
   | `Alt+X`                 | Open Today's Calendar in browser (Checker Plus extension / Google Calendar)                          |
