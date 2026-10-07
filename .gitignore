@@ -4,7 +4,8 @@ upx*/
 bfg*
 
 # Editor/OS noise
-.vscode/
+.vscode/*
+!.vscode/settings.json
 *.log
 *.exe
 __pycache__/

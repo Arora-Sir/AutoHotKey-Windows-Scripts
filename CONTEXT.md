@@ -46,6 +46,7 @@ The fleet runs under AutoHotkey v2.0. Every script starts with `#Requires AutoHo
 3. **Named Mutex Over Lock Files**: Cross-process exclusion must use `AcquireNamedMutex(name, timeoutMs)` so crashed processes do not leave stuck lock files on disk.
 4. **Debounce Slow Operations**: Any operation taking over 100ms (such as `icacls` sweeps or ADB queries) must use the two-phase debounce pattern (`DebounceArmTimer` and `DebounceTryBeginCommit`) to keep the UI non-blocking.
 5. **Punctuation Standards**: Zero em-dashes (`\u2014`), zero en-dashes (`\u2013`), zero double-hyphens (`--`) in comments or documentation. Always run `python scripts/clean_dashes.py --check` before committing.
+6. **Editor Language Server Working Directory**: In `.vscode/settings.json`, maintain `AHK++.v2.workingDirectories: ["AllScripts"]` so editor language servers evaluate `%A_ScriptDir%` accurately rather than defaulting to the workspace root.
 
 ---
 

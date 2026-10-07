@@ -59,6 +59,19 @@ This guide documents the complete procedure to configure, provision, and recover
    powershell.exe -ExecutionPolicy Bypass -File .\build_startup_exe.ps1 -Relaunch
    ```
    This compiles both `StartupScript.exe` and `WirelessShare.exe` via `Ahk2Exe.exe` so each possesses an independent Windows 11 taskbar process identity, and launches the fleet via Task Scheduler.
+6. Configure editor workspace settings (VS Code / Antigravity IDE):
+   Ensure `.vscode\settings.json` contains the directory mappings for the AutoHotkey Language Server:
+   ```json
+   {
+     "AHK++.v2.workingDirectories": [
+       "AllScripts"
+     ],
+     "AutoHotkey2.workingDirectories": [
+       "AllScripts"
+     ]
+   }
+   ```
+   This ensures the static analyzer evaluates `%A_ScriptDir%` against `AllScripts` rather than the workspace root directory.
 
 ---
 

@@ -25,6 +25,12 @@ Every script that needs one of these includes it with an **explicit** `%A_Script
 - It only actually matters for this standalone run.
 - The explicit `%A_ScriptDir%\` form is immune to this regardless of how the script is launched.
 
+### Editor Language Server Working Directories
+
+- When opening the repository root in VS Code or Antigravity IDE, the AutoHotkey Language Server (`mark-wiemer.vscode-autohotkey-plus-plus` or `thqby.vscode-autohotkey2-lsp`) defaults `A_ScriptDir` to the workspace root if a script resides in a subdirectory without its own `Lib` folder.
+- This creates false-positive diagnostics claiming `SharedHelpers.ahk does not exist` when editing files in `AllScripts/`.
+- Workspace configuration in `.vscode/settings.json` explicitly lists `AllScripts` under `AHK++.v2.workingDirectories` and `AutoHotkey2.workingDirectories` to ensure the language server evaluates `A_ScriptDir` accurately.
+
 **Important gotcha: include it *before* any hotkey definition.**
 
 - AHK's auto-execute section ends at the first hotkey/hotstring definition, `Return`, or `Exit` encountered during a top-to-bottom load-time scan.
