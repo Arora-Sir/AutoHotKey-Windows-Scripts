@@ -301,7 +301,7 @@ OpenDeviceTransfers(target) {
 ; Double tap Win+Alt+T+T: Direct push to Tab S10 Ultra (Tablet)
 ; If transfer is active: Cancels in-flight transfer immediately
 ; =============================================================================
-#!t::SendToPhoneOrTablet()
+#!t::SendToPhoneOrTablet() ;{ <- Wireless Share to S24 (Tap) / Tab S10 (Double-tap)
 
 SendToPhoneOrTablet() {
 	global g_ActiveTransferPid

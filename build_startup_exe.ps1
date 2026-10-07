@@ -32,9 +32,16 @@ if (-not (Test-Path $src))      { throw "Source script not found: $src" }
 if (-not (Test-Path $icon))     { throw "Icon not found: $icon" }
 if (-not (Test-Path $base))     { throw "Base AutoHotkey binary not found: $base" }
 
-# Stop running instance to release file lock on executables before compilation.
+# Stop running fleet instances to release file lock on executables before compilation.
 Get-Process -Name "StartupScript" -ErrorAction SilentlyContinue | Stop-Process -Force
 Get-Process -Name "WirelessShare" -ErrorAction SilentlyContinue | Stop-Process -Force
+
+# Terminate child processes from AllScripts to prevent orphan locks or duplicate prompt dialogs.
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    $_.Name -eq "AutoHotkey64.exe" -and $_.CommandLine -like "*AllScripts*"
+} | ForEach-Object {
+    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+}
 
 $compileArgs = @(
     "/in", "`"$src`"",

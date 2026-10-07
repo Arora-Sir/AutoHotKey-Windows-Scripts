@@ -8,6 +8,8 @@
       - Disables pointer precision acceleration (accel=0) for 1:1 stylus and touch fidelity
       - Creates .fast_since timestamp marker file read by SunshineDisplayWatchdog.ahk
       - Clears any leftover .session_quit marker from prior sessions
+      - Switches Windows default audio recording endpoint to Steam Streaming Microphone across all roles
+      - Switches display topology to Second Screen Only
 #>
 
 Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class MouseSpeed { [DllImport("user32.dll", EntryPoint="SystemParametersInfo")] public static extern bool SetSpeed(uint uiAction, uint uiParam, uint pvParam, uint fWinIni); [DllImport("user32.dll", EntryPoint="SystemParametersInfo")] public static extern bool SetAccel(uint uiAction, uint uiParam, int[] pvParam, uint fWinIni); }'
@@ -23,3 +25,18 @@ New-Item -ItemType File -Path "$PSScriptRoot\.fast_since" -Force | Out-Null
 
 # Clean up any leftover quit flag from a previous session before the new one starts
 Remove-Item -Path "$PSScriptRoot\.session_quit" -Force -ErrorAction SilentlyContinue
+
+# Auto-switch Windows default recording device to Steam Streaming Microphone on stream connect
+$nircmd = "C:\Program Files\AutoHotkey\nircmd.exe"
+if (-not (Test-Path $nircmd)) {
+    $nircmd = "$PSScriptRoot\..\..\..\AutoHotkey Companion Files\nircmd.exe"
+}
+if (Test-Path $nircmd) {
+    & $nircmd setdefaultsounddevice "Microphone" 0 | Out-Null
+    & $nircmd setdefaultsounddevice "Microphone" 1 | Out-Null
+    & $nircmd setdefaultsounddevice "Microphone" 2 | Out-Null
+    & $nircmd setdefaultsounddevice "Microphone" | Out-Null
+}
+
+# Auto-switch display topology to Second Screen Only (2560x1600 @ 120Hz native 16:10) on stream connect
+Start-Process "$env:SystemRoot\System32\DisplaySwitch.exe" -ArgumentList "/external" -WindowStyle Hidden

@@ -14,6 +14,7 @@
 #Requires AutoHotkey v2.0
 ; Suppress individual child tray icon so only StartupScript.ahk's master icon is visible.
 #NoTrayIcon
+#SingleInstance force
 Persistent()
 
 ; v2 fleet control protocol: replaces v1's master PostMessage to AutoHotkey's own reserved tray-command IDs (Edit/Exit/
@@ -59,6 +60,159 @@ ReleaseNamedMutex(hMutex) {
 		DllCall("ReleaseMutex", "Ptr", hMutex)
 		DllCall("CloseHandle", "Ptr", hMutex)
 	}
+}
+
+
+; -----------------------------------------------------------------------------
+; SYSTEM THEME AND WINDOW STYLING HELPERS
+; -----------------------------------------------------------------------------
+; Centralized theme detection, DWM immersive dark title bars, dark menus,
+; and Win32 UAH custom menu bar drawing for all GUI scripts in the fleet.
+
+IsSystemDarkMode() {
+	try {
+		return RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1) = 0
+	} catch {
+		return false
+	}
+}
+
+ApplyWindowThemeMode(guiObj, isDark := -1) {
+	if (isDark = -1)
+		isDark := IsSystemDarkMode()
+	val := isDark ? 1 : 0
+	if (DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", guiObj.Hwnd, "UInt", 20, "Int*", val, "UInt", 4) != 0)
+		DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", guiObj.Hwnd, "UInt", 19, "Int*", val, "UInt", 4)
+	hUxtheme := DllCall("GetModuleHandle", "Str", "uxtheme.dll", "Ptr")
+	if (hUxtheme) {
+		pSetPreferredAppMode := DllCall("GetProcAddress", "Ptr", hUxtheme, "Ptr", 135, "Ptr")
+		pFlushMenuThemes     := DllCall("GetProcAddress", "Ptr", hUxtheme, "Ptr", 136, "Ptr")
+		if (pSetPreferredAppMode && pFlushMenuThemes) {
+			DllCall(pSetPreferredAppMode, "Int", isDark ? 2 : 3)
+			DllCall(pFlushMenuThemes)
+		}
+	}
+}
+
+global g_DarkMenuBarWindows := Map()
+global g_DarkMenuBarInitialized := false
+global g_hSharedDarkBrush := 0
+global g_hSharedDarkHotBrush := 0
+
+EnableDarkMenuBar(guiObj) {
+	global g_DarkMenuBarWindows, g_DarkMenuBarInitialized
+	g_DarkMenuBarWindows[guiObj.Hwnd] := guiObj
+	if (!g_DarkMenuBarInitialized) {
+		OnMessage(0x0091, Shared_WM_UAHDRAWMENU)
+		OnMessage(0x0092, Shared_WM_UAHDRAWMENUITEM)
+		OnMessage(0x0085, Shared_WM_UAHNCPAINT)
+		OnMessage(0x0086, Shared_WM_UAHNCPAINT)
+		g_DarkMenuBarInitialized := true
+	}
+}
+
+Shared_WM_UAHDRAWMENU(wParam, lParam, msg, hwnd) {
+	global g_DarkMenuBarWindows, g_hSharedDarkBrush
+	if (!IsSystemDarkMode() || !g_DarkMenuBarWindows.Has(hwnd))
+		return
+	hdc := NumGet(lParam, A_PtrSize, "Ptr")
+	mbi := Buffer(A_PtrSize == 8 ? 48 : 32, 0)
+	NumPut("UInt", mbi.Size, mbi, 0)
+	DllCall("GetMenuBarInfo", "Ptr", hwnd, "Int", -3, "Int", 0, "Ptr", mbi.Ptr)
+
+	rcWin := Buffer(16, 0)
+	DllCall("GetWindowRect", "Ptr", hwnd, "Ptr", rcWin.Ptr)
+	winLeft := NumGet(rcWin, 0, "Int")
+	winTop  := NumGet(rcWin, 4, "Int")
+
+	rcBar := Buffer(16, 0)
+	NumPut("Int", NumGet(mbi, 4, "Int") - winLeft, rcBar, 0)
+	NumPut("Int", NumGet(mbi, 8, "Int") - winTop, rcBar, 4)
+	NumPut("Int", NumGet(mbi, 12, "Int") - winLeft, rcBar, 8)
+	NumPut("Int", NumGet(mbi, 16, "Int") - winTop, rcBar, 12)
+
+	if (!g_hSharedDarkBrush)
+		g_hSharedDarkBrush := DllCall("CreateSolidBrush", "UInt", 0x001E1E1E, "Ptr")
+	DllCall("FillRect", "Ptr", hdc, "Ptr", rcBar.Ptr, "Ptr", g_hSharedDarkBrush)
+	return 1
+}
+
+Shared_WM_UAHDRAWMENUITEM(wParam, lParam, msg, hwnd) {
+	global g_DarkMenuBarWindows, g_hSharedDarkBrush, g_hSharedDarkHotBrush
+	if (!IsSystemDarkMode() || !g_DarkMenuBarWindows.Has(hwnd))
+		return
+	itemState := NumGet(lParam, 16, "UInt")
+	hdc := NumGet(lParam, 24 + A_PtrSize, "Ptr")
+	rcLeft   := NumGet(lParam, 24 + 2*A_PtrSize, "Int")
+	rcTop    := NumGet(lParam, 24 + 2*A_PtrSize + 4, "Int")
+	rcRight  := NumGet(lParam, 24 + 2*A_PtrSize + 8, "Int")
+	rcBottom := NumGet(lParam, 24 + 2*A_PtrSize + 12, "Int")
+
+	disSize := (A_PtrSize == 8) ? 64 : 48
+	hmenu := NumGet(lParam, disSize, "Ptr")
+	iPos  := NumGet(lParam, disSize + (A_PtrSize == 8 ? 24 : 12), "Int")
+
+	rcItem := Buffer(16, 0)
+	NumPut("Int", rcLeft, rcItem, 0)
+	NumPut("Int", rcTop, rcItem, 4)
+	NumPut("Int", rcRight, rcItem, 8)
+	NumPut("Int", rcBottom, rcItem, 12)
+
+	if (!g_hSharedDarkBrush)
+		g_hSharedDarkBrush := DllCall("CreateSolidBrush", "UInt", 0x001E1E1E, "Ptr")
+	if (!g_hSharedDarkHotBrush)
+		g_hSharedDarkHotBrush := DllCall("CreateSolidBrush", "UInt", 0x00383838, "Ptr")
+
+	isHot := (itemState & 0x0040) || (itemState & 0x0001)
+	DllCall("FillRect", "Ptr", hdc, "Ptr", rcItem.Ptr, "Ptr", isHot ? g_hSharedDarkHotBrush : g_hSharedDarkBrush)
+
+	buf := Buffer(256, 0)
+	mii := Buffer(A_PtrSize == 8 ? 80 : 48, 0)
+	NumPut("UInt", mii.Size, mii, 0)
+	NumPut("UInt", 0x00000040, mii, 4)
+	NumPut("Ptr", buf.Ptr, mii, (A_PtrSize == 8 ? 56 : 36))
+	NumPut("UInt", 128, mii, (A_PtrSize == 8 ? 64 : 40))
+	DllCall("GetMenuItemInfoW", "Ptr", hmenu, "UInt", iPos, "Int", 1, "Ptr", mii.Ptr)
+
+	DllCall("SetBkMode", "Ptr", hdc, "Int", 1)
+	DllCall("SetTextColor", "Ptr", hdc, "UInt", 0x00D4D4D4)
+	DllCall("DrawTextW", "Ptr", hdc, "Ptr", buf.Ptr, "Int", -1, "Ptr", rcItem.Ptr, "UInt", 0x25)
+	return 1
+}
+
+Shared_WM_UAHNCPAINT(wParam, lParam, msg, hwnd) {
+	global g_DarkMenuBarWindows, g_hSharedDarkBrush
+	if (!IsSystemDarkMode() || !g_DarkMenuBarWindows.Has(hwnd))
+		return
+	DllCall("DefWindowProc", "Ptr", hwnd, "UInt", msg, "Ptr", wParam, "Ptr", lParam, "Ptr")
+
+	mbi := Buffer(A_PtrSize == 8 ? 48 : 32, 0)
+	NumPut("UInt", mbi.Size, mbi, 0)
+	if !DllCall("GetMenuBarInfo", "Ptr", hwnd, "Int", -3, "Int", 0, "Ptr", mbi.Ptr)
+		return 0
+	rcClient := Buffer(16, 0)
+	DllCall("GetClientRect", "Ptr", hwnd, "Ptr", rcClient.Ptr)
+	DllCall("MapWindowPoints", "Ptr", hwnd, "Ptr", 0, "Ptr", rcClient.Ptr, "UInt", 2)
+	rcWindow := Buffer(16, 0)
+	DllCall("GetWindowRect", "Ptr", hwnd, "Ptr", rcWindow.Ptr)
+	wLeft := NumGet(rcWindow, 0, "Int")
+	wTop  := NumGet(rcWindow, 4, "Int")
+	cTop  := NumGet(rcClient, 4, "Int") - wTop
+	cLeft := NumGet(rcClient, 0, "Int") - wLeft
+	cRight:= NumGet(rcClient, 8, "Int") - wLeft
+	rcLine := Buffer(16, 0)
+	NumPut("Int", cLeft, rcLine, 0)
+	NumPut("Int", cTop - 1, rcLine, 4)
+	NumPut("Int", cRight, rcLine, 8)
+	NumPut("Int", cTop, rcLine, 12)
+	hdc := DllCall("GetWindowDC", "Ptr", hwnd, "Ptr")
+	if (hdc) {
+		if (!g_hSharedDarkBrush)
+			g_hSharedDarkBrush := DllCall("CreateSolidBrush", "UInt", 0x001E1E1E, "Ptr")
+		DllCall("FillRect", "Ptr", hdc, "Ptr", rcLine.Ptr, "Ptr", g_hSharedDarkBrush)
+		DllCall("ReleaseDC", "Ptr", hwnd, "Ptr", hdc)
+	}
+	return 0
 }
 
 
@@ -517,9 +671,9 @@ HandleDualOptionLButtonClick() {
 }
 
 #HotIf IsDualOptionPromptActive()
-*Esc::DismissDualOptionPrompt(true)
-*Del::DismissDualOptionPrompt(true)
-~*LButton::HandleDualOptionLButtonClick()
+*Esc::DismissDualOptionPrompt(true) ;{ <- Dismiss Dual Option Prompt
+*Del::DismissDualOptionPrompt(true) ;{ <- Dismiss Dual Option Prompt
+~*LButton::HandleDualOptionLButtonClick() ;{ <- Click Outside to Dismiss Prompt
 #HotIf
 
 
@@ -1125,6 +1279,34 @@ LaunchBrowserInstance(browserName, args := "") {
 	return true
 }
 
+LaunchPreferredBrowser(args := "") {
+	for name in ["Brave", "Chrome"] {
+		meta := GetBrowserMeta(name)
+		if (meta.exePath && FileExist(meta.exePath))
+			return LaunchBrowserInstance(name, args)
+	}
+	Run(args != "" ? ("brave.exe " args) : "brave.exe")
+	return true
+}
+
+OpenUrlInPreferredBrowser(url) {
+	if IsChromiumBrowserActive() {
+		Run(url)
+		return true
+	}
+	if WinExist("ahk_exe brave.exe") {
+		WinActivate("ahk_exe brave.exe")
+		Run(url)
+		return true
+	}
+	if WinExist("ahk_exe chrome.exe") {
+		WinActivate("ahk_exe chrome.exe")
+		Run(url)
+		return true
+	}
+	return LaunchPreferredBrowser(url)
+}
+
 ; =============================================================================
 ; Simple Sticky Notes (ssn.exe) Dual Deterministic Layout Engine
 ; =============================================================================
@@ -1334,3 +1516,30 @@ UpdateMicrophoneTrayIcon(isMuted) {
 		A_IconHidden := true
 	}
 }
+
+; -----------------------------------------------------------------------------
+; AUDIO RECORDING ENDPOINT ROUTER: NirCmd system capture switching
+; -----------------------------------------------------------------------------
+; Sets Windows recording default across all roles (Console=0, Multimedia=1, Communications=2)
+; and system-wide default without role argument.
+; Console (0) controls the Windows 11 primary Default Device in Settings and Volume flyout.
+SetAudioRecordingDevice(deviceName) {
+	if (!deviceName)
+		return false
+
+	nircmdPath := "C:\Program Files\AutoHotkey\nircmd.exe"
+	if (!FileExist(nircmdPath))
+		nircmdPath := A_ScriptDir "\..\AutoHotkey Companion Files\nircmd.exe"
+	if (!FileExist(nircmdPath))
+		nircmdPath := A_ScriptDir "\AutoHotkey Companion Files\nircmd.exe"
+	if (!FileExist(nircmdPath))
+		return false
+
+	; NirCmd setdefaultsounddevice without role argument updates all three roles:
+	; Console (0, primary Windows Default Device), Multimedia (1), and Communications (2).
+	; Also explicitly assert role 0 to guarantee primary Windows 11 console focus.
+	try RunWait('"' nircmdPath '" setdefaultsounddevice "' deviceName '"', , "Hide")
+	try RunWait('"' nircmdPath '" setdefaultsounddevice "' deviceName '" 0', , "Hide")
+	return true
+}
+

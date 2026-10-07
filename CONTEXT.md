@@ -20,19 +20,22 @@ The fleet runs under AutoHotkey v2.0. Every script starts with `#Requires AutoHo
 | `AllScripts/BasicTasks.ahk` | Productivity Hotkeys | Child process managed by master | App launchers, tab navigation, clipboard utilities, DRM mode (Tray toggle), Skills Vault mode. |
 | `AllScripts/WirelessShare.ahk` | Wireless Share to Phone / Tablet | Child process compiled as `WirelessShare.exe` | Dedicated system tray icon, single-click dual-toast popup (`ShowDualOptionPrompt`), `Win+Alt+T` / `Win+Alt+T+T` keyboard shortcuts, in-flight transfer cancellation, dynamic tooltip, recursive folder and file transfers to S24 Ultra and Tab S10 Ultra. |
 | `AllScripts/BackgroundAutomations.ahk` | Window Focus Watcher | Child process managed by master | Focus watcher for Org Safe Mode (locks personal skills when Claude is focused, unlocks when Antigravity is focused). |
-| `AllScripts/SunshineDisplayWatchdog.ahk` | Streaming & Display Manager | Child process managed by master (pinned tray icon) | Controls display topologies (PC Screen Only, Tablet Only, Extend, Duplicate), hotkeys (`Win+Alt+P`, `Win+Alt+Shift+P`), instant mouse speed sync, Sunshine log/Tailscale monitoring, hardware event recovery, and Simple Sticky Notes geometry. |
-| `AllScripts/SharedHelpers.ahk` | Shared Function Library | Included by children (`Persistent()` call for its own standalone tray item) | HUD badges (`ShowBottomRightBadge`), dual option popup (`ShowDualOptionPrompt`), named mutex (`AcquireNamedMutex`), debounce timers (`DebounceArmTimer`), and tray manifest publishing. |
+| `AllScripts/SunshineDisplayWatchdog.ahk` | Streaming & Display Manager | Child process managed by master (pinned tray icon) | Controls display topologies (PC Screen Only, Tablet Only, Extend, Duplicate), hotkeys (`Win+Alt+P`, `Win+Alt+Shift+P`), instant mouse speed sync, Sunshine log/Tailscale monitoring, decoupled audio recording endpoint switching (Microphone Array vs Steam Streaming Microphone), hardware event recovery, and Simple Sticky Notes geometry. |
+| `AllScripts/HotkeyHelp.ahk` | Hotkey Cheatsheet GUI | Child process managed by master | Two-column cheatsheet popup (`Win+F1`), caret suppression on focus (`user32\HideCaret`), Consolas s10 typography, and `#ECECEC` contrast dark theme. |
+| `AutoHotkey Companion Files/WindowSpy.ahk` | Window Inspection Tool | Standalone diagnostic tool | Active window inspector (`Win+Ctrl+Alt+W`), stripped `WS_EX_CLIENTEDGE` (`-E0x200`) border boxes in dark mode, and `#ECECEC` text contrast. |
+| `AllScripts/SharedHelpers.ahk` | Shared Function Library | Included by children (`Persistent()` call for its own standalone tray item) | HUD badges (`ShowBottomRightBadge`), dual option popup (`ShowDualOptionPrompt`), named mutex (`AcquireNamedMutex`), debounce timers (`DebounceArmTimer`), atomic audio endpoint routing (`SetAudioRecordingDevice`), and tray manifest publishing. |
 | `AllScripts/PowerShell/SendToDevice_Adb.ps1` | Wireless ADB Pusher | Spawned asynchronously by `WirelessShare.ahk` | Fast .NET socket probe (500ms), dual-IP failover (Tailscale to local Wi-Fi), non-destructive duplicate auto-numbering, Android 14 MediaStore volume indexing, on-screen HUD completion badges, and direct DocumentsUI folder viewing. |
 | `AllScripts/PowerShell/apply_ssn_layout.ps1` | Sticky Notes Engine | Spawned on display changes | Uses native Win32 `OpenDesktop` and thread enumeration to lock Simple Sticky Notes into deterministic pixel columns. |
+| `AllScripts/Tests/Test_SunshineWatchdog.ahk` | Automated Test Suite | Standalone test runner | Validates 15 test cases covering stream event parsing, process dormancy guards, and uptime freshness with zero external network or process dependencies. |
 
 ---
 
 ## 3. Current Runtime State
 
-- **Fleet Health**: All 12 AHK and PowerShell background processes are verified live and stable.
+- **Fleet Health**: All 13 AHK and PowerShell background processes are verified live and stable with elevated integrity (`RunLevel Highest`) to hook elevated IDEs and consoles.
 - **Master Tray Reflection**: Scripts publish custom menus via `PublishTrayMenuManifest`. `StartupScript.ahk` reflects them under separate submenus.
 - **Git Hook Quality Gate**: `.githooks/pre-commit` enforces 3 checks (private path leak prevention, prohibited file staging, and language-aware dash linting via `scripts/clean_dashes.py`).
-- **Developer Tooling**: `scripts/clean_dashes.py` is staged for tracking and tested clean across all repo files.
+- **Developer Tooling**: `scripts/clean_dashes.py` scans for prohibited punctuation. `scripts/verify_github_ready.ps1` runs pre-flight syntax, test suite, leak audits, and compilation checks before pushing.
 
 ---
 
@@ -69,4 +72,10 @@ python scripts/clean_dashes.py --check
 
 # Auto-repair dash violations across staged files
 python scripts/clean_dashes.py --staged
+
+# Run Sunshine Watchdog automated test suite
+"C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe" AllScripts\Tests\Test_SunshineWatchdog.ahk
+
+# Run full GitHub workflow pre-flight verification
+pwsh -ExecutionPolicy Bypass -File scripts\verify_github_ready.ps1
 ```

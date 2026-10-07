@@ -73,6 +73,7 @@ g_BtnShutHwnd           := 0
 g_HibernateCountdownActive := false ; Backward-compatible alias
 g_CurrentDisplayModeLabel := "Unknown"
 g_CurrentMouseSpeedLabel  := ""
+g_CurrentRecordingDevice  := ""
 
 ; Closed-loop handshake state for Extend Displays mode
 g_ExtendPendingConnect := false
@@ -194,7 +195,10 @@ SwitchToLaptopOnlyMode(delayNotesMs := 1200, skipNotes := false, isBlocking := f
 	; 1. Win32 instant mouse speed set to 10 (normal) and acceleration ON (0 ms)
 	ApplyMouseSpeedAndAccel(10, true)
 
-	; 2. Clear marker files
+	; 2. Enforce local PC microphone array across all audio roles
+	EnsureAudioRecordingDevice("Microphone Array", true)
+
+	; 3. Clear marker files
 	if (MarkerFile)
 		try FileDelete(MarkerFile)
 	try FileDelete(A_Temp "\sunshine_manual_switch.flag")
@@ -241,7 +245,10 @@ SwitchToTabletOnlyMode(delayNotesMs := 1200) {
 	; 1. Win32 instant boost of mouse speed to 20 and acceleration OFF (0 ms)
 	ApplyMouseSpeedAndAccel(20, false)
 
-	; 2. Create marker files with "manual" content and grace window
+	; 2. Enforce tablet streaming microphone across all audio roles
+	EnsureAudioRecordingDevice("Microphone", true)
+
+	; 3. Create marker files with "manual" content and grace window
 	try FileDelete(MarkerFile)
 	FileAppend("manual", MarkerFile)
 	if (QuitFlag)
@@ -292,6 +299,9 @@ SwitchToExtendMode(delayNotesMs := 1200) {
 	if (topo == 8 || topo == 4) {
 		; 1. Normal mouse speed for precision on primary laptop display
 		ApplyMouseSpeedAndAccel(10, true)
+
+		; 2. Enforce local PC microphone array across all audio roles
+		EnsureAudioRecordingDevice("Microphone Array", true)
 
 		if (MarkerFile)
 			try FileDelete(MarkerFile)
@@ -408,6 +418,9 @@ SunshineDisplay_ApplyExtendAfterConnect() {
 	; Normal mouse speed for precision on primary laptop display
 	ApplyMouseSpeedAndAccel(10, true)
 
+	; Enforce local PC microphone array across all audio roles
+	EnsureAudioRecordingDevice("Microphone Array", true)
+
 	if (MarkerFile)
 		try FileDelete(MarkerFile)
 
@@ -438,6 +451,9 @@ SwitchToDuplicateMode(delayNotesMs := 1200) {
 
 	; 1. Boost mouse speed to 20 for streaming canvas navigation
 	ApplyMouseSpeedAndAccel(20, false)
+
+	; 2. Enforce tablet streaming microphone across all audio roles
+	EnsureAudioRecordingDevice("Microphone", true)
 
 	try FileDelete(MarkerFile)
 	FileAppend("manual", MarkerFile)
@@ -947,6 +963,7 @@ SunshineWatchdogTick() {
 		else if (topo == 4) {
 			if (GetCurrentMouseSpeed() > 10)
 				SunshineWatchdog_RestoreMouseNormal("Topology Guard: Extend mode enforced speed 10")
+			EnsureAudioRecordingDevice("Microphone Array")
 		} else {
 			; For PC Screen Only (topo 1, default laptop mirror), Duplicate (topo 2),
 			; or Tablet Only (topo 8): user is actively controlling the desktop from tablet.
@@ -992,6 +1009,7 @@ SunshineWatchdogTick() {
 					if (FileExist(MarkerFile) || GetCurrentMouseSpeed() > 10) {
 						SunshineWatchdog_RestoreMouseNormal("sunshine.log shows stream disconnection on topo " topo " (stream paused/ended)")
 					}
+					EnsureAudioRecordingDevice("Microphone Array")
 				} else if (topo == 8 || (topo == 0 && IsSecondScreenOnly())) {
 					; In Tablet Only mode the laptop screen is off, so clear MarkerFile without oscillating mouse speed.
 					if FileExist(MarkerFile)
@@ -1012,6 +1030,7 @@ SunshineWatchdogTick() {
 		if (!g_ManualMouseOverride && (topo == 1 || topo == 4)) {
 			if (GetCurrentMouseSpeed() > 10)
 				SunshineWatchdog_RestoreMouseNormal("Topology Guard: Idle mode (topo=" topo ") enforced speed 10")
+			EnsureAudioRecordingDevice("Microphone Array")
 			if FileExist(MarkerFile)
 				FileDelete(MarkerFile)
 		} else if (!isManualGrace && IsSecondScreenOnly()) {
@@ -1197,7 +1216,10 @@ SunshineWatchdog_ForceNormal(reason, skipScript := false) {
 	; 1. Instant Win32 restore of mouse speed to 10
 	ApplyMouseSpeedAndAccel(10, true)
 
-	; 2. Clean up marker files
+	; 2. Enforce local PC microphone array across all audio roles
+	EnsureAudioRecordingDevice("Microphone Array")
+
+	; 3. Clean up marker files
 	if (MarkerFile)
 		try FileDelete(MarkerFile)
 	try FileDelete(A_Temp "\sunshine_manual_switch.flag")
@@ -1205,12 +1227,26 @@ SunshineWatchdog_ForceNormal(reason, skipScript := false) {
 	SunshineDisplay_Log("Forced normal mouse speed: " reason)
 }
 
+; Ensures the target audio recording device is active across all endpoints.
+; Caches state to eliminate redundant process launches on recurring watchdog ticks.
+EnsureAudioRecordingDevice(targetDevice, force := false) {
+	global g_CurrentRecordingDevice
+	if (!force && g_CurrentRecordingDevice = targetDevice)
+		return
+	if SetAudioRecordingDevice(targetDevice) {
+		g_CurrentRecordingDevice := targetDevice
+		SunshineDisplay_Log("Audio recording endpoint set to: " targetDevice)
+	}
+}
+
 SunshineWatchdog_ForceFast(reason) {
 	SetMouseSpeedFast("Watchdog force fast: " reason)
+	EnsureAudioRecordingDevice("Microphone")
 }
 
 SunshineWatchdog_RestoreMouseNormal(reason) {
 	SetMouseSpeedNormal("Watchdog restore normal: " reason)
+	EnsureAudioRecordingDevice("Microphone Array")
 }
 
 ; -----------------------------------------------------------------------------
@@ -1233,11 +1269,6 @@ SetMouseSpeedFast(reason := "") {
 		FileAppend("manual", MarkerFile)
 	}
 
-	if FileExist("C:\Program Files\AutoHotkey\nircmd.exe") {
-		try Run('"C:\Program Files\AutoHotkey\nircmd.exe" setdefaultsounddevice "Microphone" 1', , "Hide")
-		try Run('"C:\Program Files\AutoHotkey\nircmd.exe" setdefaultsounddevice "Microphone" 2', , "Hide")
-	}
-
 	if (reason)
 		SunshineDisplay_Log("Set mouse speed FAST (20): " reason)
 	UpdateTrayStatusAndTooltip()
@@ -1250,11 +1281,6 @@ SetMouseSpeedNormal(reason := "") {
 	if (MarkerFile)
 		try FileDelete(MarkerFile)
 	try FileDelete(A_Temp "\sunshine_manual_switch.flag")
-
-	if FileExist("C:\Program Files\AutoHotkey\nircmd.exe") {
-		try Run('"C:\Program Files\AutoHotkey\nircmd.exe" setdefaultsounddevice "Microphone Array" 1', , "Hide")
-		try Run('"C:\Program Files\AutoHotkey\nircmd.exe" setdefaultsounddevice "Microphone Array" 2', , "Hide")
-	}
 
 	if (reason)
 		SunshineDisplay_Log("Set mouse speed NORMAL (10): " reason)

@@ -263,9 +263,11 @@ The AutoHotkey fleet is launched on Windows boot via a dedicated scheduled task 
   - A 30-second delay (`PT30S`) ensures the entire desktop subsystem has settled before `StartupScript.exe` executes.
 
 - **Elevated Task Creation vs. Standard User Execution (`RunLevel Limited`)**:
-  - Registering or modifying tasks in the Task Scheduler root (`\`) requires Administrator privileges. Therefore, `Install_Startup_Task.bat` and `setup_startup_task.ps1` self-elevate via PowerShell `Start-Process -Verb RunAs` if executed un-elevated.
-  - However, the task itself is registered with `Principal.RunLevel = Limited` under the user's standard account (`$env:USERNAME`).
-  - Running as a standard user is critical: running AHK elevated would trigger UAC confirmation prompts on every boot, isolate window messages (UIPI blocks un-elevated apps from sending messages to elevated windows), and alter file virtualization paths.
+  - Registering or modifying tasks in the Task Scheduler root requires Administrator privileges. Therefore, `Install_Startup_Task.bat` and `setup_startup_task.ps1` self-elevate via PowerShell `Start-Process -Verb RunAs` if executed un-elevated.
+  - The task itself registers with `Principal.RunLevel = Limited` under the user account (`$env:USERNAME`).
+  - Standard user execution is mandatory. Running AutoHotkey elevated causes child applications like ShareX to inherit elevated tokens, breaking standard drag and drop operations. Windows User Interface Privilege Isolation (UIPI) also drops Explorer `TaskbarCreated` broadcast notifications when AutoHotkey runs with elevated integrity.
+  - Applications like code editors and terminal emulators must launch without administrator elevation. When an application runs elevated, standard-integrity AutoHotkey keyboard hooks cannot intercept its keystrokes.
+  - Helper tools like `WindowSpy.ahk` run as standalone utilities without `#Include SharedHelpers.ahk` to avoid loading fleet message loops. Their theme helpers remain intentionally local.
 
 - **Battery Resilience & Infinite Execution**:
   - Registered with `Settings.AllowStartIfOnBatteries = $true` and `Settings.DontStopIfGoingOnBatteries = $true`.
@@ -522,8 +524,8 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 ### 2. 30-Second Task Scheduler Delay Over `shell:startup`
 - **Context**: The fleet must auto-start on user logon.
 - **Alternative**: Placing shortcuts in the Windows startup folder (`shell:startup`).
-- **Decision**: Windows Task Scheduler trigger with a 30-second logon delay (`PT30S`) and `RunLevel Limited`.
-- **Rationale**: At user logon, Windows Explorer, graphics drivers, audio services, and network adapters (Tailscale/Wi-Fi) initialize concurrently across multiple CPU threads. Launching immediately causes race conditions, missing system tray icons, and failed IPC registrations. A 30-second delay guarantees the desktop shell has completely settled. `RunLevel Limited` under the standard user account prevents boot UAC prompts while maintaining proper window message routing.
+- **Decision**: Windows Task Scheduler trigger with a 30-second logon delay (`PT30S`) and `RunLevel Highest`.
+- **Rationale**: At user logon, Windows Explorer, graphics drivers, audio services, and network adapters (Tailscale/Wi-Fi) initialize concurrently across multiple CPU threads. Launching immediately causes race conditions, missing system tray icons, and failed IPC registrations. A 30-second delay guarantees the desktop shell has completely settled. Crucially, `RunLevel Highest` under the interactive user account provides the High Integrity token required by low-level keyboard hooks (`WH_KEYBOARD_LL`) to intercept and monitor keystrokes across elevated developer tools (such as Antigravity IDE, elevated VS Code, and Administrator consoles). Running under standard user integrity (`RunLevel Limited`) causes Windows UIPI to silently bypass AutoHotkey keyboard hooks whenever an elevated window is focused, breaking hotkeys, double-tap CapsLock, and hotstrings. Running via Task Scheduler eliminates boot UAC prompts.
 
 ### 3. Full AutoHotkey v2 Migration (superseding an earlier decision to stay on v1.1)
 - **Context**: The fleet originally stayed on v1.1 specifically because `StartupScript.ahk`'s dynamic runtime tray-submenu reflection (`Menu, SubMenu_%PID%, Add`, addressed by a constructed name string per child process) appeared tied to v1-only mechanics, with no clear v2 equivalent and no functional benefit seen in rewriting a stable, heavily-integrated codebase.
@@ -651,7 +653,7 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
   7. **Host Process Liveness Guard**: Before inspecting log files, `SunshineWatchdog_LastClientEvent` queries `ProcessExist("sunshine.exe")`. If the host daemon is not running, it immediately returns `DISCONNECTED`, preventing historical logs from asserting stream presence when Sunshine is closed.
   8. **System Boot Freshness Guard**: Compares candidate connection timestamps in `sunshine.log` against monotonic system uptime (`A_TickCount / 1000`). Connection events recorded prior to the current Windows boot session are rejected as `DISCONNECTED`, guaranteeing that rebooting the machine or reloading scripts never inherits stale remote session state.
   9. **Multi-Service Host Support & Client Fallback**: `update_sunshine_apps.ps1` writes configuration manifests across both Sunshine (`C:\Program Files\Sunshine\config\apps.json`) and Apollo (`C:\Program Files\Apollo\config\apps.json` and `C:\ProgramData\Apollo\apps.json`), dynamically restarting whichever service daemon is active (`ApolloService` or `SunshineService`). During extend mode handshakes, `SwitchToExtendMode` dispatches an ADB intent checking sequentially for Artemis-mic (`com.limelight.noirdebug`), Artemis (`com.limelight.noir`), and Moonlight (`com.limelight`).
-  10. **Audio Recording Endpoint Switching**: When entering fast mouse mode (`SetMouseSpeedFast`) for tablet streaming, NirCmd switches the default Windows audio recording endpoint to "Microphone" for console and multimedia roles. Switching back to normal laptop mode (`SetMouseSpeedNormal`) restores the default recording endpoint to "Microphone Array".
+  10. **Decoupled Audio Recording Endpoint Switching**: Audio device routing is decoupled from mouse speed functions. `SharedHelpers.ahk` provides `SetAudioRecordingDevice(deviceName)`, executing `nircmd.exe setdefaultsounddevice` via `RunWait` across all endpoints: Console (0, primary Windows 11 Settings default device), Multimedia (1), Communications (2), and system-wide default. `SunshineDisplayWatchdog.ahk` maintains state tracking via `EnsureAudioRecordingDevice(targetDevice, force)` to prevent redundant process spawning on recurring watchdog ticks. Enforces `Microphone Array` on laptop mode transitions (`SwitchToLaptopOnlyMode`), extend transitions (`SwitchToExtendMode`), extend handshake settlement (`SunshineDisplay_ApplyExtendAfterConnect`), normal watchdog restorations (`SunshineWatchdog_RestoreMouseNormal`, `SunshineWatchdog_ForceNormal`), and disconnect/idle watchdog ticks for topologies 1 and 4. Enforces `Microphone` (Steam Streaming Microphone) on tablet mode transitions (`SwitchToTabletOnlyMode`), duplicate mode transitions (`SwitchToDuplicateMode`), and fast streaming ticks (`SunshineWatchdog_ForceFast`). Synchronized across `0_Settings` and repository PowerShell prep scripts (`set_normal.ps1` and `set_fast.ps1`).
 
 ### 14. Dedicated 3-Way Skills Vault Tray Integration & Dynamic Checkmarks (`BasicTasks.ahk` & `StartupScript.ahk`)
 - **Context**: Selecting and visualizing the active Skills Vault protection mode (`Auto`, `Locked`, `Unlocked`) from the Windows system tray.
@@ -708,7 +710,7 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 - **Context**: Microsoft New Outlook for Windows (`olk.exe`) running as a permanent background mail client with the native "Hide when minimized" setting enabled.
 - **Problem**:
   1. **Explorer Restart Tray Icon Dropout**: When `explorer.exe` restarts or recovers from a shell crash, Windows broadcasts the `TaskbarCreated` message to all top-level windows. Traditional Win32 applications catch this signal and re-register their notification area icons via `Shell_NotifyIcon`. The New Outlook packaged application (`olk.exe`) fails to process `TaskbarCreated`. Its process continues running headless in the background while its notification area tray icon is permanently deleted. Because "Hide when minimized" is active, no taskbar window button exists, leaving the user with an unreachable ghost process.
-  2. **Elevated UIPI Message Drop**: `StartupScript.exe` runs elevated under Windows Task Scheduler. When medium-integrity Explorer restarts, Windows User Interface Privilege Isolation (UIPI) blocks unprivileged broadcasts from traversing elevation boundaries to elevated message loops, causing `TaskbarCreated` window message handlers to silently miss events.
+  2. **Elevated UIPI Message Boundary Defense**: Because the fleet runs elevated (`RunLevel Highest`) to hook elevated IDEs and consoles, unprivileged broadcasts like `TaskbarCreated` from standard-integrity Explorer instances can potentially be dropped at UIPI boundaries. Rather than relying solely on window message filters, `Watchdog.ahk` actively polls the Explorer process ID to guarantee recovery regardless of privilege level.
   3. **Window Close Process Destruction**: New Outlook lacks a native Close-to-Tray option. Clicking the titlebar close button or pressing `Alt+F4` destroys the main UI window and strips the notification area icon, while orphaned background WebView2 helper processes linger indefinitely in Task Manager.
   4. **AutoHotkey v2 Try-Else Parser Traps**: In AutoHotkey v2, a single-line `try Run(...)` statement cannot serve as the body of an `if` block that is immediately followed by `else` without explicit curly braces. The parser associates the subsequent `else` with the `try` block, throwing an `Unexpected "Else"` syntax dialog at load time.
 - **Architectural Solution**:
@@ -727,6 +729,27 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
   1. **Locally Scoped Window Visibility Check**: `OpenPass()` captures `prevDetect := A_DetectHiddenWindows` and sets `DetectHiddenWindows(false)` before probing `WinExist("ahk_exe Bitwarden.exe")`. This ensures that tray-minimized instances are not treated as active visible windows.
   2. **Native Shell Activation Protocol**: If the window is not currently visible, `OpenPass()` dispatches `Run("shell:AppsFolder\8bitSolutionsLLC.bitwardendesktop_h4e712dmw3xyy!bitwardendesktop")`. Windows routes the request through the application activation manager to the running package instance. Electron catches the `second-instance` or `activate` lifecycle event, calls its native `mainWindow.show()` and `mainWindow.focus()`, and awakens Chromium cleanly with fully functional mouse and keyboard event pipelines.
   3. **Strict Ban on WinShow for Electron Targets**: Direct `WinShow` calls on Electron windows are forbidden across the fleet.
+
+### 20. Read-Only Hotkey Help Caret Suppression & Monospace Dark Theme (`HotkeyHelp.ahk`)
+- **Context**: Self-introspecting cheatsheet (`Win+F1`) presenting keyboard shortcuts in a readable two-column layout.
+- **Decision**:
+  1. **Caret Suppression**: Added a `WM_SETFOCUS` (0x0007) message filter on the main display edit control (`CtrlDisplay.Hwnd`) and one-shot timer calls to `user32\HideCaret`. Prevents a blinking insertion caret from appearing in the read-only popup while preserving full mouse text selection and clipboard copying.
+  2. **Monospace Typography**: Upgraded the font from proportional `Courier New` to `Consolas s10`. Monospace column alignment guarantees keys and descriptions align vertically without horizontal drift.
+  3. **High-Contrast Dark Theme Palette**: Updated dark mode text color to `#ECECEC` (`0x00ECECEC` BGR) in `HotkeyHelp_WM_CTLCOLOR` and window construction, providing high-contrast text against dark backgrounds without eye strain.
+  4. **Single-Line Status Toasts**: Applied `-Wrap` to `ShowBottomRightBadge` in `SharedHelpers.ahk` so dynamic status badges remain on a single line.
+
+### 21. Window Spy Dark Mode Light Border Suppression (`WindowSpy.ahk`)
+- **Context**: The active window debugging tool (`Win+Ctrl+Alt+W`) running in dark mode.
+- **Decision**:
+  1. **Light Border Elimination**: Stripped `WS_EX_CLIENTEDGE` styling (`-E0x200`) across all seven Edit controls (`edtTitle`, `edtMousePos`, `edtCtrl`, `edtPos`, `edtSBText`, `edtVisText`, `edtAllText`). In Windows 11 dark mode, default 3D client edges render as bright white border boxes around dark Edit boxes. Stripping this extended style renders a clean flat dark canvas.
+  2. **Text Contrast Enhancement**: Updated control text color to `#ECECEC` in `WinSpy_WM_CTLCOLOR` and initial control definitions for consistent legibility.
+  3. **Standalone Script Isolation**: `WindowSpy.ahk` runs independently without `#Include SharedHelpers.ahk` to avoid pulling fleet message loops into the debug utility.
+
+### 22. Automated Testing Suite (`AllScripts/Tests/Test_SunshineWatchdog.ahk`)
+- **Context**: Autonomous verification of Sunshine and Moonlight streaming state detection, session termination keywords, pre-boot staleness rejection, and manual override tracking.
+- **Decision**:
+  1. **Mock Isolation**: `Test_SunshineWatchdog.ahk` runs 15 automated test cases validating stream event parsing, process dormancy guards, and uptime freshness with zero external network or process dependencies.
+  2. **Sanitized Fixtures**: Test fixtures utilize generic mock IP addresses (`192.168.1.100`) rather than live workstation IPs, guaranteeing safe execution within CI/CD and public GitHub workflows without secret or network leaks.
 
 ---
 

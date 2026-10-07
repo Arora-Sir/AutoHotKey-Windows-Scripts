@@ -6,7 +6,7 @@
     Registers "AHK Startup Script" in Windows Task Scheduler:
       - Action: Launches AllScripts\StartupScript.exe
       - Trigger: At logon of current user with a configurable delay (default 30 seconds)
-      - Privilege: Standard user (RunLevel Limited): zero UAC prompt on logon
+      - Privilege: Highest available (RunLevel Highest) to enable global keyboard hooks across elevated developer tools (Antigravity IDE, elevated consoles) and standard windows without UIPI isolation
       - Resilience: Runs on battery, no execution timeout, demand start allowed
 
 .PARAMETER Uninstall
@@ -65,8 +65,8 @@ if ($DelaySeconds -gt 0) {
     $trigger.Delay = "PT$($DelaySeconds)S"
 }
 
-# 3. Principal: Standard interactive user session (no UAC prompt required on boot)
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+# 3. Principal: Elevated interactive user session to allow global hooks into elevated developer windows
+$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
 
 # 4. Settings: Run on battery, allow manual start, and remove default execution timeout
 $settings = New-ScheduledTaskSettingsSet `

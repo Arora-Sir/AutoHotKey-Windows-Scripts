@@ -1,212 +1,298 @@
-;
-; Window Spy
-;
+; Window Spy for AHK v2 with dynamic system dark and light theme support
+#Requires AutoHotkey v2.0
 
-#NoEnv
 #NoTrayIcon
 #SingleInstance Ignore
-SetWorkingDir, %A_ScriptDir%
-SetBatchLines, -1
-CoordMode, Pixel, Screen
+SetWorkingDir A_ScriptDir
+CoordMode "Pixel", "Screen"
 
-txtNotFrozen := "(Hold Ctrl or Shift to suspend updates)"
-txtFrozen := "(Updates suspended)"
-txtMouseCtrl := "Control Under Mouse Position"
-txtFocusCtrl := "Focused Control"
+Global oGui
+Global g_hDarkBrush := 0
 
-Gui, New, hwndhGui AlwaysOnTop Resize MinSize
-Gui, Add, Text,, Window Title, Class and Process:
-Gui, Add, Checkbox, yp xp+200 w120 Right vCtrl_FollowMouse, Follow Mouse
-Gui, Add, Edit, xm w320 r4 ReadOnly -Wrap vCtrl_Title
-Gui, Add, Text,, Mouse Position:
-Gui, Add, Edit, w320 r4 ReadOnly vCtrl_MousePos
-Gui, Add, Text, w320 vCtrl_CtrlLabel, % txtFocusCtrl ":"
-Gui, Add, Edit, w320 r4 ReadOnly vCtrl_Ctrl
-Gui, Add, Text,, Active Window Position:
-Gui, Add, Edit, w320 r2 ReadOnly vCtrl_Pos
-Gui, Add, Text,, Status Bar Text:
-Gui, Add, Edit, w320 r2 ReadOnly vCtrl_SBText
-Gui, Add, Checkbox, vCtrl_IsSlow, Slow TitleMatchMode
-Gui, Add, Text,, Visible Text:
-Gui, Add, Edit, w320 r2 ReadOnly vCtrl_VisText
-Gui, Add, Text,, All Text:
-Gui, Add, Edit, w320 r2 ReadOnly vCtrl_AllText
-Gui, Add, Text, w320 r1 vCtrl_Freeze, % txtNotFrozen
-Gui, Show, NoActivate, Window Spy
-GetClientSize(hGui, temp)
-horzMargin := temp*96//A_ScreenDPI - 320
-SetTimer, Update, 250
-return
-
-GuiSize:
-Gui %hGui%:Default
-if !horzMargin
-	return
-SetTimer, Update, % A_EventInfo=1 ? "Off" : "On" ; Suspend on minimize
-ctrlW := A_GuiWidth - horzMargin
-list = Title,MousePos,Ctrl,Pos,SBText,VisText,AllText,Freeze
-Loop, Parse, list, `,
-	GuiControl, Move, Ctrl_%A_LoopField%, w%ctrlW%
-return
-
-Update:
-Gui %hGui%:Default
-GuiControlGet, Ctrl_FollowMouse
-CoordMode, Mouse, Screen
-MouseGetPos, msX, msY, msWin, msCtrl
-actWin := WinExist("A")
-if Ctrl_FollowMouse
-{
-	curWin := msWin
-	curCtrl := msCtrl
-	WinExist("ahk_id " curWin)
-}
-else
-{
-	curWin := actWin
-	ControlGetFocus, curCtrl
-}
-WinGetTitle, t1
-WinGetClass, t2
-if (curWin = hGui || t2 = "MultitaskingViewFrame") ; Our Gui || Alt-tab
-{
-	UpdateText("Ctrl_Freeze", txtFrozen)
-	return
-}
-UpdateText("Ctrl_Freeze", txtNotFrozen)
-WinGet, t3, ProcessName
-WinGet, t4, PID
-UpdateText("Ctrl_Title", t1 "`nahk_class " t2 "`nahk_exe " t3 "`nahk_pid " t4)
-CoordMode, Mouse, Relative
-MouseGetPos, mrX, mrY
-CoordMode, Mouse, Client
-MouseGetPos, mcX, mcY
-PixelGetColor, mClr, %msX%, %msY%, RGB
-mClr := SubStr(mClr, 3)
-UpdateText("Ctrl_MousePos", "Screen:`t" msX ", " msY " (less often used)`nWindow:`t" mrX ", " mrY " (default)`nClient:`t" mcX ", " mcY " (recommended)"
-	. "`nColor:`t" mClr " (Red=" SubStr(mClr, 1, 2) " Green=" SubStr(mClr, 3, 2) " Blue=" SubStr(mClr, 5) ")")
-UpdateText("Ctrl_CtrlLabel", (Ctrl_FollowMouse ? txtMouseCtrl : txtFocusCtrl) ":")
-if (curCtrl)
-{
-	ControlGetText, ctrlTxt, %curCtrl%
-	cText := "ClassNN:`t" curCtrl "`nText:`t" textMangle(ctrlTxt)
-    ControlGetPos cX, cY, cW, cH, %curCtrl%
-    cText .= "`n`tx: " cX "`ty: " cY "`tw: " cW "`th: " cH
-    WinToClient(curWin, cX, cY)
-	ControlGet, curCtrlHwnd, Hwnd,, % curCtrl
-    GetClientSize(curCtrlHwnd, cW, cH)
-    cText .= "`nClient:`tx: " cX "`ty: " cY "`tw: " cW "`th: " cH
-}
-else
-	cText := ""
-UpdateText("Ctrl_Ctrl", cText)
-WinGetPos, wX, wY, wW, wH
-GetClientSize(curWin, wcW, wcH)
-UpdateText("Ctrl_Pos", "`tx: " wX "`ty: " wY "`tw: " wW "`th: " wH "`nClient:`tx: 0`ty: 0`tw: " wcW "`th: " wcH)
-sbTxt := ""
-Loop
-{
-	StatusBarGetText, ovi, %A_Index%
-	if ovi =
-		break
-	sbTxt .= "(" A_Index "):`t" textMangle(ovi) "`n"
-}
-StringTrimRight, sbTxt, sbTxt, 1
-UpdateText("Ctrl_SBText", sbTxt)
-GuiControlGet, bSlow,, Ctrl_IsSlow
-if bSlow
-{
-	DetectHiddenText, Off
-	WinGetText, ovVisText
-	DetectHiddenText, On
-	WinGetText, ovAllText
-}
-else
-{
-	ovVisText := WinGetTextFast(false)
-	ovAllText := WinGetTextFast(true)
-}
-UpdateText("Ctrl_VisText", ovVisText)
-UpdateText("Ctrl_AllText", ovAllText)
-return
-
-GuiClose:
-ExitApp
-
-WinGetTextFast(detect_hidden)
-{
-	; WinGetText ALWAYS uses the "Slow" mode - TitleMatchMode only affects the
-	; WinText/ExcludeText parameters.  In "Fast" mode, GetWindowText() is used
-	; to retrieve the text of each control.
-	WinGet controls, ControlListHwnd
-	static WINDOW_TEXT_SIZE := 32767 ; Defined in AutoHotkey source.
-	VarSetCapacity(buf, WINDOW_TEXT_SIZE * (A_IsUnicode ? 2 : 1))
-	text := ""
-	Loop Parse, controls, `n
-	{
-		if !detect_hidden && !DllCall("IsWindowVisible", "ptr", A_LoopField)
-			continue
-		if !DllCall("GetWindowText", "ptr", A_LoopField, "str", buf, "int", WINDOW_TEXT_SIZE)
-			continue
-		text .= buf "`r`n"
-	}
-	return text
-}
-
-UpdateText(ControlID, NewText)
-{
-	; Unlike using a pure GuiControl, this function causes the text of the
-	; controls to be updated only when the text has changed, preventing periodic
-	; flickering (especially on older systems).
-	static OldText := {}
-	global hGui
-	if (OldText[ControlID] != NewText)
-	{
-		GuiControl, %hGui%:, % ControlID, % NewText
-		OldText[ControlID] := NewText
-	}
-}
-
-GetClientSize(hWnd, ByRef w := "", ByRef h := "")
-{
-	VarSetCapacity(rect, 16)
-	DllCall("GetClientRect", "ptr", hWnd, "ptr", &rect)
-	w := NumGet(rect, 8, "int")
-	h := NumGet(rect, 12, "int")
-}
-
-WinToClient(hWnd, ByRef x, ByRef y)
-{
-    WinGetPos wX, wY,,, ahk_id %hWnd%
-    x += wX, y += wY
-    VarSetCapacity(pt, 8), NumPut(y, NumPut(x, pt, "int"), "int")
-    if !DllCall("ScreenToClient", "ptr", hWnd, "ptr", &pt)
+IsSystemDarkMode() {
+    try {
+        return RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1) = 0
+    } catch {
         return false
-    x := NumGet(pt, 0, "int"), y := NumGet(pt, 4, "int")
-    return true
+    }
 }
 
-textMangle(x)
-{
-	if pos := InStr(x, "`n")
-		x := SubStr(x, 1, pos-1), elli := true
-	if StrLen(x) > 40
-	{
-		StringLeft, x, x, 40
-		elli := true
-	}
-	if elli
-		x .= " (...)"
-	return x
+ApplyWindowThemeMode(guiObj, isDark) {
+    val := isDark ? 1 : 0
+    if (DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", guiObj.Hwnd, "UInt", 20, "Int*", val, "UInt", 4) != 0)
+        DllCall("dwmapi\DwmSetWindowAttribute", "Ptr", guiObj.Hwnd, "UInt", 19, "Int*", val, "UInt", 4)
+    hUxtheme := DllCall("GetModuleHandle", "Str", "uxtheme.dll", "Ptr")
+    if (hUxtheme) {
+        pSetPreferredAppMode := DllCall("GetProcAddress", "Ptr", hUxtheme, "Ptr", 135, "Ptr")
+        pFlushMenuThemes     := DllCall("GetProcAddress", "Ptr", hUxtheme, "Ptr", 136, "Ptr")
+        if (pSetPreferredAppMode && pFlushMenuThemes) {
+            DllCall(pSetPreferredAppMode, "Int", isDark ? 2 : 3)
+            DllCall(pFlushMenuThemes)
+        }
+    }
 }
 
-~*Ctrl::
+OnMessage(0x0133, WinSpy_WM_CTLCOLOR) ; WM_CTLCOLOREDIT
+OnMessage(0x0138, WinSpy_WM_CTLCOLOR) ; WM_CTLCOLORSTATIC
+
+WinSpy_WM_CTLCOLOR(wParam, lParam, msg, hwnd) {
+    global g_hDarkBrush
+    if IsSystemDarkMode() {
+        DllCall("SetTextColor", "Ptr", wParam, "UInt", 0x00ECECEC) ; Crisp light text in BGR format.
+        DllCall("SetBkColor", "Ptr", wParam, "UInt", 0x001E1E1E)   ; Dark grey background in BGR format.
+        if (!g_hDarkBrush)
+            g_hDarkBrush := DllCall("CreateSolidBrush", "UInt", 0x001E1E1E, "Ptr")
+        return g_hDarkBrush
+    }
+}
+
+WinSpyGui()
+
+WinSpyGui() {
+    Global oGui
+    
+    try TraySetIcon "inc\spy.ico"
+    try TraySetIcon "UX\inc\spy.ico"
+    DllCall("shell32\SetCurrentProcessExplicitAppUserModelID", "wstr", "AutoHotkey.WindowSpy")
+    
+    isDark := IsSystemDarkMode()
+    
+    oGui := Gui("AlwaysOnTop Resize MinSize +DPIScale", "Window Spy for AHKv2")
+    oGui.OnEvent("Close", WinSpyClose)
+    oGui.OnEvent("Size", WinSpySize)
+    
+    oGui.BackColor := isDark ? "1E1E1E" : "F0F0F0"
+    oGui.SetFont('s9 c' (isDark ? "ECECEC" : "000000"), "Segoe UI")
+    
+    oGui.Add("Text", , "Window Title, Class and Process:")
+    cbFollow := oGui.Add("Checkbox", "yp xp+200 w120 Right vCtrl_FollowMouse", "Follow Mouse")
+    cbFollow.Value := 1
+    edtTitle := oGui.Add("Edit", "xm w320 r5 ReadOnly -Wrap -E0x200 vCtrl_Title")
+    
+    oGui.Add("Text", , "Mouse Position:")
+    edtMousePos := oGui.Add("Edit", "w320 r4 ReadOnly -E0x200 vCtrl_MousePos")
+    
+    oGui.Add("Text", "w320 vCtrl_CtrlLabel", (txtFocusCtrl := "Focused Control") ":")
+    edtCtrl := oGui.Add("Edit", "w320 r4 ReadOnly -E0x200 vCtrl_Ctrl")
+    
+    oGui.Add("Text", , "Active Window Position:")
+    edtPos := oGui.Add("Edit", "w320 r2 ReadOnly -E0x200 vCtrl_Pos")
+    
+    oGui.Add("Text", , "Status Bar Text:")
+    edtSBText := oGui.Add("Edit", "w320 r2 ReadOnly -E0x200 vCtrl_SBText")
+    
+    cbSlow := oGui.Add("Checkbox", "vCtrl_IsSlow", "Slow TitleMatchMode")
+    
+    oGui.Add("Text", , "Visible Text:")
+    edtVisText := oGui.Add("Edit", "w320 r2 ReadOnly -E0x200 vCtrl_VisText")
+    
+    oGui.Add("Text", , "All Text:")
+    edtAllText := oGui.Add("Edit", "w320 r2 ReadOnly -E0x200 vCtrl_AllText")
+    
+    txtNotFrozen := "(Hold Ctrl or Shift to suspend updates)"
+    oGui.Add("Text", "w320 r1 vCtrl_Freeze", txtNotFrozen)
+    
+    ApplyWindowThemeMode(oGui, isDark)
+    
+    themeClass := isDark ? "DarkMode_Explorer" : "Explorer"
+    DllCall("uxtheme\SetWindowTheme", "Ptr", cbFollow.Hwnd, "Str", themeClass, "Ptr", 0)
+    DllCall("uxtheme\SetWindowTheme", "Ptr", cbSlow.Hwnd, "Str", themeClass, "Ptr", 0)
+    DllCall("uxtheme\SetWindowTheme", "Ptr", edtTitle.Hwnd, "Str", themeClass, "Ptr", 0)
+    DllCall("uxtheme\SetWindowTheme", "Ptr", edtMousePos.Hwnd, "Str", themeClass, "Ptr", 0)
+    DllCall("uxtheme\SetWindowTheme", "Ptr", edtCtrl.Hwnd, "Str", themeClass, "Ptr", 0)
+    DllCall("uxtheme\SetWindowTheme", "Ptr", edtPos.Hwnd, "Str", themeClass, "Ptr", 0)
+    DllCall("uxtheme\SetWindowTheme", "Ptr", edtSBText.Hwnd, "Str", themeClass, "Ptr", 0)
+    DllCall("uxtheme\SetWindowTheme", "Ptr", edtVisText.Hwnd, "Str", themeClass, "Ptr", 0)
+    DllCall("uxtheme\SetWindowTheme", "Ptr", edtAllText.Hwnd, "Str", themeClass, "Ptr", 0)
+    
+    oGui.Show("NoActivate")
+    
+    oGui.txtNotFrozen := txtNotFrozen
+    oGui.txtFrozen    := "(Updates suspended)"
+    oGui.txtMouseCtrl := "Control Under Mouse Position"
+    oGui.txtFocusCtrl := txtFocusCtrl
+    
+    SetTimer Update, 250
+}
+
+WinSpySize(GuiObj, MinMax, Width, Height) {
+    Global oGui
+    
+    If !oGui.HasProp("txtNotFrozen")
+        return
+    
+    SetTimer Update, (MinMax=0) ? 250 : 0
+    
+    ctrlW := Width - (oGui.MarginX * 2)
+    list := "Title,MousePos,Ctrl,Pos,SBText,VisText,AllText,Freeze"
+    Loop Parse list, ","
+        oGui["Ctrl_" A_LoopField].Move(, , ctrlW)
+}
+
+WinSpyClose(GuiObj) {
+    global g_hDarkBrush
+    if (g_hDarkBrush) {
+        DllCall("DeleteObject", "Ptr", g_hDarkBrush)
+        g_hDarkBrush := 0
+    }
+    ExitApp()
+}
+
+Update() {
+    Try TryUpdate()
+}
+
+TryUpdate() {
+    Global oGui
+    
+    If !oGui.HasProp("txtNotFrozen")
+        return
+    
+    try DllCall("SetThreadDpiAwarenessContext", "ptr", -4)
+    
+    Ctrl_FollowMouse := oGui["Ctrl_FollowMouse"].Value
+    CoordMode "Mouse", "Screen"
+    MouseGetPos &msX, &msY, &msWin, &msCtrl, 2
+    actWin := WinExist("A")
+    
+    if (Ctrl_FollowMouse) {
+        curWin := msWin, curCtrl := msCtrl
+        WinExist("ahk_id " curWin)
+    } else {
+        curWin := actWin
+        curCtrl := ControlGetFocus()
+    }
+    curCtrlClassNN := ""
+    Try curCtrlClassNN := ControlGetClassNN(curCtrl)
+    
+    t1 := WinGetTitle(), t2 := WinGetClass()
+    if (curWin = oGui.hwnd || t2 = "MultitaskingViewFrame") {
+        UpdateText("Ctrl_Freeze", oGui.txtFrozen)
+        return
+    }
+    
+    UpdateText("Ctrl_Freeze", oGui.txtNotFrozen)
+    t3 := WinGetProcessName(), t4 := WinGetPID()
+    
+    WinDataText := t1 "`n"
+                 . "ahk_class " t2 "`n"
+                 . "ahk_exe " t3 "`n"
+                 . "ahk_pid " t4 "`n"
+                 . "ahk_id " curWin
+    
+    UpdateText("Ctrl_Title", WinDataText)
+    CoordMode "Mouse", "Window"
+    MouseGetPos &mrX, &mrY
+    CoordMode "Mouse", "Client"
+    MouseGetPos &mcX, &mcY
+    mClr := PixelGetColor(msX, msY, "RGB")
+    mClr := SubStr(mClr, 3)
+    
+    mpText := "Screen:`t" msX ", " msY "`n"
+            . "Window:`t" mrX ", " mrY "`n"
+            . "Client:`t" mcX ", " mcY " (default)`n"
+            . "Color:`t" mClr " (Red=" SubStr(mClr, 1, 2) " Green=" SubStr(mClr, 3, 2) " Blue=" SubStr(mClr, 5) ")"
+    
+    UpdateText("Ctrl_MousePos", mpText)
+    
+    UpdateText("Ctrl_CtrlLabel", (Ctrl_FollowMouse ? oGui.txtMouseCtrl : oGui.txtFocusCtrl) ":")
+    
+    if (curCtrl) {
+        ctrlTxt := ControlGetText(curCtrl)
+        WinGetClientPos(&sX, &sY, &cW, &cH, curCtrl)
+        ControlGetPos &cX, &cY, &sW, &sH, curCtrl
+        
+        cText := "ClassNN:`t" curCtrlClassNN "`n"
+               . "Text:`t" textMangle(ctrlTxt) "`n"
+               . "Screen:`tx: " sX "`ty: " sY "`tw: " sW "`th: " sH "`n"
+               . "Client:`tx: " cX "`ty: " cY "`tw: " cW "`th: " cH
+    } else
+        cText := ""
+    
+    UpdateText("Ctrl_Ctrl", cText)
+    wX := "", wY := "", wW := "", wH := ""
+    WinGetPos &wX, &wY, &wW, &wH, "ahk_id " curWin
+    WinGetClientPos(&wcX, &wcY, &wcW, &wcH, "ahk_id " curWin)
+    
+    wText := "Screen:`tx: " wX "`ty: " wY "`tw: " wW "`th: " wH "`n"
+           . "Client:`tx: " wcX "`ty: " wcY "`tw: " wcW "`th: " wcH
+    
+    UpdateText("Ctrl_Pos", wText)
+    sbTxt := ""
+    
+    Loop {
+        ovi := ""
+        Try ovi := StatusBarGetText(A_Index)
+        if (ovi = "")
+            break
+        sbTxt .= "(" A_Index "):`t" textMangle(ovi) "`n"
+    }
+    
+    sbTxt := SubStr(sbTxt, 1, -1)
+    UpdateText("Ctrl_SBText", sbTxt)
+    bSlow := oGui["Ctrl_IsSlow"].Value
+    
+    if (bSlow) {
+        DetectHiddenText False
+        ovVisText := WinGetText()
+        DetectHiddenText True
+        ovAllText := WinGetText()
+    } else {
+        ovVisText := WinGetTextFast(false)
+        ovAllText := WinGetTextFast(true)
+    }
+    
+    UpdateText("Ctrl_VisText", ovVisText)
+    UpdateText("Ctrl_AllText", ovAllText)
+}
+
+WinGetTextFast(detect_hidden) {    
+    controls := WinGetControlsHwnd()
+    static WINDOW_TEXT_SIZE := 32767
+    buf := Buffer(WINDOW_TEXT_SIZE * 2, 0)
+    text := ""
+    
+    Loop controls.Length {
+        hCtl := controls[A_Index]
+        if !detect_hidden && !DllCall("IsWindowVisible", "ptr", hCtl)
+            continue
+        if !DllCall("GetWindowText", "ptr", hCtl, "Ptr", buf.ptr, "int", WINDOW_TEXT_SIZE)
+            continue
+        text .= StrGet(buf) "`r`n"
+    }
+    return text
+}
+
+UpdateText(vCtl, NewText) {
+    Global oGui
+    static OldText := {}
+    ctl := oGui[vCtl], hCtl := Integer(ctl.hwnd)
+    
+    if (!oldText.HasProp(hCtl) Or OldText.%hCtl% != NewText) {
+        ctl.Value := NewText
+        OldText.%hCtl% := NewText
+    }
+}
+
+textMangle(x) {
+    elli := false
+    if (pos := InStr(x, "`n"))
+        x := SubStr(x, 1, pos-1), elli := true
+    else if (StrLen(x) > 40)
+        x := SubStr(x, 1, 40), elli := true
+    if elli
+        x .= " (...)"
+    return x
+}
+
+suspend_timer() {
+    Global oGui
+    SetTimer Update, 0
+    UpdateText("Ctrl_Freeze", oGui.txtFrozen)
+}
+
 ~*Shift::
-SetTimer, Update, Off
-UpdateText("Ctrl_Freeze", txtFrozen)
-return
+~*Ctrl::suspend_timer()
 
 ~*Ctrl up::
-~*Shift up::
-SetTimer, Update, On
-return
+~*Shift up::SetTimer Update, 250

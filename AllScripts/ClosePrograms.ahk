@@ -166,18 +166,18 @@ InitDone() {
 }
 
 ; Alt+F4 -> Close currently active program
-; $!F4:: CLoseCurrentlyActiveScreen() ;{ <- CLose Currently Active Screen
+; $!F4:: CLoseCurrentlyActiveScreen() ;{ <- Close Currently Active Screen
 ; v2: a multi-line hotkey body needs explicit braces now: v1 let the body implicitly extend to the next
 ; `return`/hotkey with no braces at all, but v2 fails to load that shape ("Hotkey or hotstring is missing
 ; its opening brace"), confirmed empirically down to the minimal case.
-$!F4:: { ;{ <- CLose Currently Active Screen
+$!F4:: { ;{ <- Close Currently Active Screen
 	if (!isReady || !GetKeyState("F4", "P"))
 		return
 	CLoseCurrentlyActiveScreen()
 }
 
 ; Alt+Shift+F4 -> Close specific active program
-$!+F4:: CLoseSpecificPrograms() ;{ <- CLose Specific Programs
+$!+F4:: CLoseSpecificPrograms() ;{ <- Close Specific Programs
 
 ; Alt+Ctr+F4 -> Close All Programs
-$!^F4:: CLoseAllPrograms() ;{ <- CLose All Program
+$!^F4:: CLoseAllPrograms() ;{ <- Close All Programs

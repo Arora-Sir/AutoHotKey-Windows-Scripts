@@ -242,10 +242,10 @@ TrayIconRemove(10)
 ; SuspendAllToggle below only ever PostMessages to the managed child scripts (Scripts): it never touches this master script's own native suspend flag.
 ; So none of these 4 hotkeys can ever actually become suspended in the first place.
 ;Win+ScrollLock Suspend All Scripts' Hotkeys
-#ScrollLock::SuspendAllToggle() ;{ +Fn <- Suspend All Scripts' Hotkeys
-#^!ScrollLock::ExitApp() ;{ +Fn <- Terminate All Scripts
+#ScrollLock::SuspendAllToggle() ;{ <- Suspend All Scripts' Hotkeys (Fn+ScrollLock)
+#^!ScrollLock::ExitApp() ;{ <- Terminate All Scripts (Fn+ScrollLock)
 #^!R::ReloadAll() ;{ <- Reload All Scripts Cleanly
-#^!W::Run('"C:\Program Files\AutoHotkey\WindowSpy.ahk"') ;{ <- Run Window Spy Script
+#^!W::Run('"' (FileExist(A_ScriptDir "\..\AutoHotkey Companion Files\WindowSpy.ahk") ? A_ScriptDir "\..\AutoHotkey Companion Files\WindowSpy.ahk" : "C:\Program Files\AutoHotkey\WindowSpy.ahk") '"') ;{ <- Run Window Spy Script
 ;}
 
 ; SUBROUTINES

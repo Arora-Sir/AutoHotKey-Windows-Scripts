@@ -43,7 +43,7 @@ DetectHiddenWindows(true)
 
 ; File Names with Out Ext Seperated by |
 ; Files_Excluded 	:= "Test|Debugging"
-Files_Excluded 	:= " "
+Files_Excluded 	:= "SharedHelpers"
 
 ; File Name for Exported Help Dialog
 TextOut_FileName := "HotKey Help - Dialog.txt"
@@ -65,8 +65,8 @@ Parse_OmitChar := "`r"
 
 ; Default Settings if Not Changed by Ini File
 ; v2: legacy `=` command-style assignment is gone: all become `:=`.
-Set_ShowBlank		:= 1
-Set_ShowBlankInclude	:= 1
+Set_ShowBlank		:= 0
+Set_ShowBlankInclude	:= 0
 Set_ShowExe		:= 1
 Set_ShowHotkey		:= 1	; Hotkeys created with the Hotkey Command Tend to be Unusal
 Set_VarHotkey		:= 1	; Attempt to Resolve a Variable Used in Hotkeys Definition
@@ -87,6 +87,30 @@ Set_Hotkey_Mod_Delimiter := "+"	; Delimiter Character to Display Between Hotkey 
 Set_FindPos_deltaX := 0
 Set_FindPos_deltaY := 0
 SearchEdit.Docked := true
+
+; EDIT CONTROL DARK MODE COLORING AND CARET SUPPRESSION
+global g_hDarkBrush := 0
+OnMessage(0x0133, HotkeyHelp_WM_CTLCOLOR) ; WM_CTLCOLOREDIT
+OnMessage(0x0138, HotkeyHelp_WM_CTLCOLOR) ; WM_CTLCOLORSTATIC
+OnMessage(0x0007, HotkeyHelp_WM_SETFOCUS) ; WM_SETFOCUS
+
+HotkeyHelp_WM_SETFOCUS(wParam, lParam, msg, hwnd) {
+    global CtrlDisplay
+    if (IsSet(CtrlDisplay) && hwnd == CtrlDisplay.Hwnd) {
+        SetTimer(() => (IsSet(CtrlDisplay) ? DllCall("user32\HideCaret", "Ptr", CtrlDisplay.Hwnd) : 0), -1)
+    }
+}
+
+HotkeyHelp_WM_CTLCOLOR(wParam, lParam, msg, hwnd) {
+    global g_hDarkBrush
+    if IsSystemDarkMode() {
+        DllCall("SetTextColor", "Ptr", wParam, "UInt", 0x00ECECEC) ; Crisp light text in BGR format.
+        DllCall("SetBkColor", "Ptr", wParam, "UInt", 0x001E1E1E)   ; Dark grey background in BGR format.
+        if (!g_hDarkBrush)
+            g_hDarkBrush := DllCall("CreateSolidBrush", "UInt", 0x001E1E1E, "Ptr")
+        return g_hDarkBrush
+    }
+}
 
 ; v2: pre-seeded (rather than left unset until the Gui first shows) so the #HotIf below and the
 ; Gui_Created checks in RefreshHelpDisplay() never reference an unset global.
@@ -241,7 +265,7 @@ OnExit(SaveSettings)
 ; v2: a bare label after a hotkey (v1's `goto`/fallthrough entry point) becomes a real function call.
 ; ScriptStop() below re-enters this same refresh instead of `goto Refresh`; ButtonExportDialog() calls it
 ; directly instead of `gosub #F1`.
-#F1::RefreshHelpDisplay() ;{ <- Display Help
+$#F1::RefreshHelpDisplay() ;{ <- Display Help
 
 RefreshHelpDisplay(*) {
     global Files_Excluded, Hot_Excluded, Set_AhkExe, Set_AhkTxt, Set_ShowHotkey, Set_VarHotkey, Set_FlagHotkey
@@ -255,6 +279,7 @@ RefreshHelpDisplay(*) {
     Setting_WorkingDir := A_WorkingDir
     AHKScripts(&Scripts)	; Get Path of all AHK Scripts
     Scripts_Scan := Scripts
+    Scanned_Paths := Map()
 
     ; v2: v1's `Recursive:` goto-loop (re-scanning newly-discovered #Include files until none are left)
     ; becomes a real Loop, breaking once a pass finds no new includes.
@@ -268,6 +293,10 @@ RefreshHelpDisplay(*) {
             SplitPath(File_Path, &File_Name, &File_Dir, &File_Ext, &File_Title)
             if RegExMatch(Files_Excluded,"i)(^|\|)" File_Title "($|\|)")
                 continue
+            canonicalScript := StrLower(Get_Full_Path(File_Path))
+            if Scanned_Paths.Has(canonicalScript)
+                continue
+            Scanned_Paths[canonicalScript] := true
             if !Help.Has(File_Title)
                 Help[File_Title] := Map()
             Help[File_Title]["Type"] := "AHK"
@@ -438,9 +467,12 @@ RefreshHelpDisplay(*) {
                         continue
                     }
                     IncludeTarget := Get_Full_Path(IncludeTarget)
+                    canonicalInclude := StrLower(IncludeTarget)
+                    if Scanned_Paths.Has(canonicalInclude)
+                        continue
                     Include_Repeat := false
                     for k, val in Scripts_Include
-                        if (val.Path = IncludeTarget)
+                        if (StrLower(val.Path) = canonicalInclude)
                             Include_Repeat := true
                     if !Include_Repeat
                     {
@@ -532,67 +564,68 @@ RefreshHelpDisplay(*) {
     if Display_CreateOnly
         return
 
-    ; Create Main Gui first time then only display unless contents change then recreate to get automatic sizing of Edit
+    static s_LastThemeMode := -1
+    currentTheme := IsSystemDarkMode()
+
+    ; Create Main Gui first time then only display unless contents or system theme change
     if Gui_Created
     {
-        if !(Display == Previous_Display)
+        if (Display != Previous_Display || s_LastThemeMode != currentTheme)
         {
             if Set_TextOut
                 TextOut()
             if IsSet(GuiMain)
                 GuiMain.Destroy()
-            MenuBuild()
-            GuiMain := Gui("+MinSize660x100 +Resize")
-            idDisplayWin := GuiMain.Hwnd
-            GuiMain.BackColor := "FFFFFF"
-            GuiMain.SetFont("s10", "Courier New")
-            GuiMain.MenuBar := MenuMainObj
-            GuiMain.OnEvent("Size", GuiMainSize)
-            GuiMain.OnEvent("Escape", GuiMainEscape)
-            GuiMain.OnEvent("Close", GuiMainEscape)
-            ; v2 note: a Gui control can be created with more than 32k of text directly: v1's 32k split-and-
-            ; ControlSetText workaround is unneeded, but kept commented for reference since it's harmless either way.
-            CtrlDisplay := GuiMain.AddEdit("vGui_Display ReadOnly -E0x200 +0x100", Display)
-            idDisplay := CtrlDisplay.Hwnd
-            GuiMain.Show("AutoSize")
-            WinActivate("ahk_id " idDisplayWin)
-            Send("^{Home}")
+            HotkeyHelp_CreateGuiMain(Display)
+            s_LastThemeMode := currentTheme
         }
         else
         {
-            ; v2: Gui.Show() takes only an Options parameter: v1's second Title argument is gone, throws
-            ; "Too many parameters passed to function" if passed. Set .Title as a separate property instead
-            ; (confirmed live; same fix applied to every other 2-arg .Show(Options, Title) call in this file).
             GuiMain.Title := "Hotkey Help"
+            ApplyWindowThemeMode(GuiMain, currentTheme)
             GuiMain.Show()
             Send("^{Home}")
+            SetTimer(() => (IsSet(CtrlDisplay) ? DllCall("user32\HideCaret", "Ptr", CtrlDisplay.Hwnd) : 0), -50)
         }
     }
     else
     {
         if Set_TextOut
             TextOut()
-        MenuBuild()
-        GuiMain := Gui("+MinSize660x100 +Resize")
-        GuiMain.Title := "Hotkey Help"
-        idDisplayWin := GuiMain.Hwnd
-        GuiMain.BackColor := "FFFFFF"
-        GuiMain.SetFont("s10", "Courier New")
-        GuiMain.MenuBar := MenuMainObj
-        GuiMain.OnEvent("Size", GuiMainSize)
-        GuiMain.OnEvent("Escape", GuiMainEscape)
-        GuiMain.OnEvent("Close", GuiMainEscape)
-        CtrlDisplay := GuiMain.AddEdit("vGui_Display ReadOnly -E0x200 +0x100", Display)
-        idDisplay := CtrlDisplay.Hwnd
-        GuiMain.Show("AutoSize")
-        WinActivate("ahk_id " idDisplayWin)
-        Send("^{Home}")
+        HotkeyHelp_CreateGuiMain(Display)
         Gui_Created := true
+        s_LastThemeMode := currentTheme
     }
     Previous_Display := Display
     if SearchEdit.Visible
         try
             ControlFocus(SearchEdit.FindEditCtrl)
+}
+
+HotkeyHelp_CreateGuiMain(Display) {
+    global GuiMain, idDisplayWin, idDisplay, CtrlDisplay, MenuMainObj
+    isDark := IsSystemDarkMode()
+    MenuBuild()
+    GuiMain := Gui("+MinSize660x100 +Resize")
+    GuiMain.Title := "Hotkey Help"
+    idDisplayWin := GuiMain.Hwnd
+    GuiMain.BackColor := isDark ? "1E1E1E" : "FFFFFF"
+    textColor := isDark ? "ECECEC" : "000000"
+    GuiMain.SetFont("s10 c" textColor, "Consolas")
+    GuiMain.MenuBar := MenuMainObj
+    EnableDarkMenuBar(GuiMain)
+    GuiMain.OnEvent("Size", GuiMainSize)
+    GuiMain.OnEvent("Escape", GuiMainEscape)
+    GuiMain.OnEvent("Close", GuiMainEscape)
+    CtrlDisplay := GuiMain.AddEdit("vGui_Display ReadOnly -E0x200 +0x100", Display)
+    idDisplay := CtrlDisplay.Hwnd
+    ApplyWindowThemeMode(GuiMain, isDark)
+    DllCall("uxtheme\SetWindowTheme", "Ptr", CtrlDisplay.Hwnd, "Str", isDark ? "DarkMode_Explorer" : "Explorer", "Ptr", 0)
+    GuiMain.Show("AutoSize")
+    WinActivate("ahk_id " idDisplayWin)
+    Send("^{Home}")
+    DllCall("user32\HideCaret", "Ptr", CtrlDisplay.Hwnd)
+    SetTimer(() => (IsSet(CtrlDisplay) ? DllCall("user32\HideCaret", "Ptr", CtrlDisplay.Hwnd) : 0), -50)
 }
 
 ; v2: small helper factoring out the identical "store a Hot/Hot_Text line with running Count" block that
@@ -603,6 +636,10 @@ HotkeyHelp_StoreLine(Help, File_Title, Txt_Ahk_Started, Line_Hot, Line_Help) {
         Help[File_Title][bucket] := Map()
     if !Help[File_Title][bucket].Has(Line_Hot)
         Help[File_Title][bucket][Line_Hot] := Map("Count", 0)
+    for k, existingHelp in Help[File_Title][bucket][Line_Hot] {
+        if (k != "Count" && existingHelp == Line_Help)
+            return
+    }
     Count := Help[File_Title][bucket][Line_Hot]["Count"] + 1
     Help[File_Title][bucket][Line_Hot]["Count"] := Count
     Help[File_Title][bucket][Line_Hot][Count] := Line_Help
@@ -634,13 +671,25 @@ HotkeyHelp_BuildSection(element, Pos_Info, Set_SortInfo) {
 ; v2: Gui.Show() takes only Options, not v1's second Title argument: set .Title separately (same fix as GuiMain above).
 #!F1::ShowSettingsGui() ;{ <- Settings
 ShowSettingsGui(*) {
+    isDark := IsSystemDarkMode()
     GuiSettings.Title := "Hotkey Help - Settings"
+    GuiSettings.BackColor := isDark ? "1E1E1E" : "F0F0F0"
+    ApplyWindowThemeMode(GuiSettings, isDark)
+    for ctrlHwnd, ctrlObj in GuiSettings {
+        try DllCall("uxtheme\SetWindowTheme", "Ptr", ctrlObj.Hwnd, "Str", isDark ? "DarkMode_Explorer" : "Explorer", "Ptr", 0)
+    }
     GuiSettings.Show()
 }
 ;}
 
 #^F1::ShowExcludedGui() ;{ <- Excluded Files, Hotkeys, and Hotstrings
 ShowExcludedGui(*) {
+    isDark := IsSystemDarkMode()
+    GuiExcluded.BackColor := isDark ? "1E1E1E" : "FFFFFF"
+    ApplyWindowThemeMode(GuiExcluded, isDark)
+    for ctrlHwnd, ctrlObj in GuiExcluded {
+        try DllCall("uxtheme\SetWindowTheme", "Ptr", ctrlObj.Hwnd, "Str", isDark ? "DarkMode_Explorer" : "Explorer", "Ptr", 0)
+    }
     GuiExcluded.Show("AutoSize")
     Send("^{Home}")
 }
@@ -686,26 +735,29 @@ ShowRawHotkeyList(*) {
     ; v2: v1's `if A / if B {X} else {Y} else {Z}` dangling-else chain re-expressed with explicit braces -
     ; same 3-way branch (first-time create / unchanged-show / changed-recreate), matching the Main Gui's
     ; already-unambiguous version of this exact pattern above.
+    isDark := IsSystemDarkMode()
     if Gui_Raw_Created
     {
         if !(Raw_Display = Previous_Raw_Display)
         {
             GuiRaw.Destroy()
             GuiRaw := Gui("+Resize")
-            GuiRaw.BackColor := "FFFFFF"
-            GuiRaw.SetFont("s10", "Courier New")
-            GuiRaw.AddEdit("vGui_Raw_Display ReadOnly -E0x200", Raw_Display)
+            GuiRaw.BackColor := isDark ? "1E1E1E" : "FFFFFF"
+            GuiRaw.SetFont("s10 c" (isDark ? "D4D4D4" : "000000"), "Courier New")
+            rawEdt := GuiRaw.AddEdit("vGui_Raw_Display ReadOnly -E0x200", Raw_Display)
             GuiRaw.OnEvent("Size", GuiRawSize)
             GuiRaw.OnEvent("Escape", GuiRawEscape)
             GuiRaw.OnEvent("Close", GuiRawEscape)
-            ; v2: Gui.Show() takes only Options, not v1's second Title argument: set .Title separately.
-            GuiRaw.Title := "Hotkey Help"
+            GuiRaw.Title := "Hotkey Help - Raw Hotkeys"
+            ApplyWindowThemeMode(GuiRaw, isDark)
+            DllCall("uxtheme\SetWindowTheme", "Ptr", rawEdt.Hwnd, "Str", isDark ? "DarkMode_Explorer" : "Explorer", "Ptr", 0)
             GuiRaw.Show("AutoSize")
             Send("^{Home}")
         }
         else
         {
             GuiRaw.Title := "Hotkey Help - Raw Hotkeys"
+            ApplyWindowThemeMode(GuiRaw, isDark)
             GuiRaw.Show("AutoSize")
             Send("^{Home}")
         }
@@ -713,13 +765,15 @@ ShowRawHotkeyList(*) {
     else
     {
         GuiRaw := Gui("+Resize")
-        GuiRaw.BackColor := "FFFFFF"
-        GuiRaw.SetFont("s10", "Courier New")
-        GuiRaw.AddEdit("vGui_Raw_Display ReadOnly -E0x200", Raw_Display)
+        GuiRaw.BackColor := isDark ? "1E1E1E" : "FFFFFF"
+        GuiRaw.SetFont("s10 c" (isDark ? "D4D4D4" : "000000"), "Courier New")
+        rawEdt := GuiRaw.AddEdit("vGui_Raw_Display ReadOnly -E0x200", Raw_Display)
         GuiRaw.OnEvent("Size", GuiRawSize)
         GuiRaw.OnEvent("Escape", GuiRawEscape)
         GuiRaw.OnEvent("Close", GuiRawEscape)
         GuiRaw.Title := "Hotkey Help - Raw Hotkeys"
+        ApplyWindowThemeMode(GuiRaw, isDark)
+        DllCall("uxtheme\SetWindowTheme", "Ptr", rawEdt.Hwnd, "Str", isDark ? "DarkMode_Explorer" : "Explorer", "Ptr", 0)
         GuiRaw.Show("AutoSize")
         Send("^{Home}")
         Gui_Raw_Created := true
@@ -1170,12 +1224,16 @@ class SearchEdit
         SearchEdit.ParentID := DllCall("GetParent", "Ptr", pGuiControlID, "Ptr")
         if !SearchEdit.DialogGui
         {
+            isDark := IsSystemDarkMode()
             SearchEdit.DialogGui := Gui("-Caption +ToolWindow +Owner" pGuiControlID)
+            SearchEdit.DialogGui.BackColor := isDark ? "1E1E1E" : "F0F0F0"
             SearchEdit.FindEditCtrl := SearchEdit.DialogGui.AddEdit("x10 y3 w200 r2 -VScroll")
             SearchEdit.FindEditCtrl.OnEvent("Change", SearchEdit_FindTextChanged)
             SearchEdit.FindEditCtrl.Move(,, , 20)
             SearchEdit.StatusBarCtrl := SearchEdit.DialogGui.AddStatusBar()
             SearchEdit.StatusBarCtrl.SetText("`tType Find string and press Enter")
+            ApplyWindowThemeMode(SearchEdit.DialogGui, isDark)
+            DllCall("uxtheme\SetWindowTheme", "Ptr", SearchEdit.FindEditCtrl.Hwnd, "Str", isDark ? "DarkMode_Explorer" : "Explorer", "Ptr", 0)
             SearchEdit.DialogGui.OnEvent("Escape", SearchEdit_DialogGuiEscape)
             SearchEdit.DialogGui.OnEvent("Close", SearchEdit_DialogGuiEscape)
             ; v2: moved here (was a stray top-level statement placed after the file's first hotkey, where
@@ -1365,11 +1423,18 @@ AHKScripts(&Array)
     DetectHiddenWindows(true)
     AHK_Windows := WinGetList("ahk_class AutoHotkey")
     Array := []
+    seenPaths := Map()
     list := ""
     for hWnd in AHK_Windows
     {
         Win_Name := WinGetTitle("ahk_id " hWnd)
         File_Path := RegExReplace(Win_Name, "^(.*) - AutoHotkey v[0-9\.]+$", "$1")
+        if (File_Path = "" || (File_Path = Win_Name && !FileExist(File_Path)))
+            continue
+        canonical := StrLower(Get_Full_Path(File_Path))
+        if seenPaths.Has(canonical)
+            continue
+        seenPaths[canonical] := true
         SplitPath(File_Path, &File_Name, &File_Dir, &File_Ext, &File_Title)
         Array.Push({Path: File_Path, Name: File_Name, Dir: File_Dir, Ext: File_Ext, Title: File_Title, hWnd: hWnd})
         list .= File_Path "`n"

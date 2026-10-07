@@ -53,7 +53,7 @@ This guide documents the complete procedure to configure, provision, and recover
    ```powershell
    powershell.exe -ExecutionPolicy Bypass -File .\setup_startup_task.ps1
    ```
-   This registers the scheduled task AHK Startup Script to execute AllScripts\StartupScript.exe with highest privileges on user logon.
+   This registers the scheduled task AHK Startup Script to execute AllScripts\StartupScript.exe with highest privileges (RunLevel Highest) on user logon, enabling global keyboard hooks across elevated developer tools (Antigravity IDE, elevated consoles) without boot UAC prompts.
 5. Compile and launch the fleet executables:
    ```powershell
    powershell.exe -ExecutionPolicy Bypass -File .\build_startup_exe.ps1 -Relaunch
@@ -173,9 +173,9 @@ Run these diagnostic commands to verify workstation health:
 
 1. **Verify fleet processes**:
    ```powershell
-   Get-Process -Name 'AutoHotkey*', 'StartupScript*' | Format-Table Id, ProcessName
+   Get-Process -Name 'AutoHotkey*', 'StartupScript*', 'WirelessShare*' | Format-Table Id, ProcessName
    ```
-   Expect exactly 11 AutoHotkey64 child processes and 1 StartupScript master process.
+   Expect exactly 11 AutoHotkey64 child processes, 1 StartupScript master process, and 1 WirelessShare process (13 processes total).
 
 2. **Verify live mouse speed**:
    ```powershell

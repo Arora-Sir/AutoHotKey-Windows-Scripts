@@ -392,34 +392,24 @@ OpenYoutube() {
 
 openYT() {
 	isTPressed := KeyWait("t", "D T0.20") ; wait 0.20 seconds to see if t is pressed
-	; Input(&UserInput, "T0.7 L4", "{enter}.{esc}{tab}", "t")
-	; if (UserInput = "Timeout") ; y not pressed in time
-	if (!isTPressed) { ; t not pressed in time
+	if (!isTPressed) {
 		return false
-		;ignore as of now as it was intrupting normal functionality
-		;Send("^y") ; send ^y by itself so it's still usable
 	} else {
-		YoutubeURL := "https://www.youtube.com/"
-		Run(YoutubeURL)
+		OpenUrlInPreferredBrowser("https://www.youtube.com/")
 	}
 	return true
-	; if (UserInput = "t") {
-	; 	YoutubeURL := "https://www.youtube.com/"
-	; 	Run(YoutubeURL)
-	; }
 }
 
 OpenNewTab() {
 	; If youtube is going to active then disable opening new tab and open YT instead
 	if (A_PriorHotkey != "~^Y") {
 		if (IsChromiumBrowserActive()) {
-			; MsgBox("[ Options, " A_PriorHotkey ", Timeout]")
 			Send("^t")
 		} else if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250) {
 			; Activate whichever Chromium browser exists (Brave preferred); if neither is running, launch
 			; Brave fresh: only reached on the double-tap, matching the original gated behavior exactly.
 			if !ActivateChromiumBrowserOrRun((*) => Send("^t"), 250) {
-				Run("brave.exe")
+				LaunchPreferredBrowser()
 				Sleep(250)
 				Send("^t")
 			}
@@ -569,13 +559,7 @@ OpenCalendar() {
 }
 
 OpenChatGPT() {
-	; if (A_PriorHotkey = A_ThisHotkey && A_TimeSincePriorHotkey < 250) {
-	; WinActivate, ahk_exe brave.exe / WinActivate, ahk_exe chrome.exe
-	; Every branch here ran the identical Run() regardless of which browser was found, so the three-way
-	; active/exists-brave/exists-chrome check collapses to one predicate.
-	if (IsChromiumBrowserActive() || GetRunningBrowsers().Length)
-		Run("https://chatgpt.com")
-	; }
+	OpenUrlInPreferredBrowser("https://chatgpt.com")
 }
 
 CopyToClipboard() {
@@ -696,7 +680,7 @@ ImageEditor() {
 }
 
 ; Ctr+Shift+V in browser to go to previous tab when taking a screenshot
-~^+v::RevertVideoIntruption() ;{ <- Brave AwesomeSreenshot Intruption Stop
+~^+v::RevertVideoIntruption() ;{ <- Brave AwesomeScreenshot Interruption Stop
 
 ; #HotIf WinActive("ahk_exe EXCEL.EXE") ; This directive targets Microsoft Excel
 ; !f:: { ; This is the hotkey Alt+F
@@ -708,7 +692,7 @@ ImageEditor() {
 ; #HotIf ; This closes the Excel-specific directive
 
 ; Ctr+C OneNote copy text instead of SS of some text
-$^c::CopyToClipboard() ;{ <- OneNote Copy Mechanism Handeling (instead of SS)
+$^c::CopyToClipboard() ;{ <- OneNote Copy Mechanism Handling (instead of SS)
 
 ; Alt+F11 Hide Window top bar
 !F11::WinSetStyle("^0xC00000", "A") ;{ <- Hide Window top bar
@@ -732,7 +716,7 @@ $^c::CopyToClipboard() ;{ <- OneNote Copy Mechanism Handeling (instead of SS)
 ^G::ClipboardSearch() ;{ <- Search the selected/clipboard text
 
 ; Win+C Run Calculator
-#c::OpenCalculator() ;{ <- Open calculaor
+#c::OpenCalculator() ;{ <- Open Calculator
 
 ; Win+Ctrl+Alt+M Mute/Unmute Microphone
 #^!M::ToggleMicrophoneMute() ;{ <- Mute/Unmute Microphone
@@ -786,7 +770,7 @@ OpenJavaCourseFolder() {
 !+S::MonicaSummary() ;{ <- Monica Summarize Content
 
 ; Alt+Ctr+E Enable/Disable file extension
-$!^E::ToggleFileExt() ;{ <- Show/Hide Extenstions
+$!^E::ToggleFileExt() ;{ <- Show/Hide Extensions
 
 ; Alt+Ctr+D Sort Folder content by date
 $!^D::SortFolderByDate() ;{ <- Sort Folder content by date
@@ -795,7 +779,7 @@ $!^D::SortFolderByDate() ;{ <- Sort Folder content by date
 $!^H::HideFiles() ;{ <- Show/Hide Hidden Files
 
 ; Alt+X -> Open Today Calendar
-$!X::OpenCalendar() ;{ <- Open Calender after Browser opening
+$!X::OpenCalendar() ;{ <- Open Calendar after Browser opening
 
 ; Alt+D -> Open ChatGPT
 $!D::OpenChatGPT() ;{ <- Open ChatGPT
@@ -814,8 +798,8 @@ $^J::CloseBrowserBottomDownloadsBar() ;{ <- (Chrome) Close browser downloads bar
 ; Ctr+T+T in browser to open new Tab from anywhere
 ~^T::OpenNewTab() ;{ <- open browser tab from anywhere
 
-; Win+Alt+X -> (Script) Reconnect Cloudfare Network
-#!x::ReconnectCloudflare() ;{ <- Reconnect Cloudfare Network
+; Win+Alt+X -> (Script) Reconnect Cloudflare Network
+#!x::ReconnectCloudflare() ;{ <- Reconnect Cloudflare Network
 
 ReconnectCloudflare() {
 	global PATH_IP_ROTATOR
@@ -1376,4 +1360,4 @@ ToggleShareXImageEffects() {
 }
 ; [END: ShareX After-Capture Image Effects Toggle]
 
-$F9::Send("{PrintScreen}") ;{ <- Screen Capture via PrintScreen (ShareX)
+*$F9::Send("{Blind}{PrintScreen}") ;{ <- Screen Capture via PrintScreen (ShareX)
