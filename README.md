@@ -301,6 +301,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
   | `Win+Shift+J`           | Open Java Course Folder (`%PATH_JAVA_COURSE%`)                                                       |
   | `Win+Alt+C`             | Run Windows Alarm Clock (`Microsoft.WindowsAlarms`)                                                  |
   | `Win+Alt+Ctrl+C`        | Open PowerShell 7 as Administrator                                                                   |
+  | `Win+Ctrl+C`            | Silently copy all text in current field (In-memory Win32/UIA with zero visual highlight)             |
   | `Win+Alt+N`             | Clear All Notifications in Windows 11 Action Center                                                  |
   | `Win+Alt+X`             | Reconnect Cloudflare WARP / Run IP Rotator (`%PATH_IP_ROTATOR%`)                                     |
   | `Win+Alt+L`             | Cycle Skills Vault Mode (Auto -> Force Locked -> Force Unlocked)                                     |

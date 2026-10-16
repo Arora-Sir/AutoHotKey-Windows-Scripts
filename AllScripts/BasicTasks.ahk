@@ -30,6 +30,7 @@
 
 ; Alt+G -> Copy the content, Open Monica & Grammar Correction
 ; Alt+Shift+S -> Copy the content, Open Monica & Summarize Content
+; Win+Ctrl+C -> Silently copy all text in current field (In-Memory Win32 / UIA / Cloaked)
 
 ; Alt+Ctr+D -> Sort Folder content by date
 ; Alt+Ctr+E -> Enable/Disable file extension
@@ -662,6 +663,147 @@ MonicaSummary() { ;Summary
 	Send("{Enter}")
 }
 
+; Multi-tier silent text extraction. Reads directly from control memory with zero visual highlight.
+ExtractTextFromUIAElement(pElement) {
+	static UIA_ValuePatternId := 10002
+	static UIA_TextPatternId := 10014
+	static UIA_LegacyIAccessiblePatternId := 10018
+
+	; 1. ValuePattern (input fields, textareas, URL bars, search boxes)
+	pValPat := 0
+	ComCall(16, pElement, "int", UIA_ValuePatternId, "ptr*", &pValPat)
+	if (pValPat) {
+		bstrVal := 0
+		hrVal := ComCall(4, pValPat, "ptr*", &bstrVal)
+		ObjRelease(pValPat)
+		if (hrVal == 0 && bstrVal) {
+			val := StrGet(bstrVal)
+			DllCall("oleaut32\SysFreeString", "ptr", bstrVal)
+			if (val != "")
+				return val
+		}
+	}
+
+	; 2. TextPattern (code editors, multi-line documents, rich text fields)
+	pTextPat := 0
+	ComCall(16, pElement, "int", UIA_TextPatternId, "ptr*", &pTextPat)
+	if (pTextPat) {
+		pRange := 0
+		hrRange := ComCall(3, pTextPat, "ptr*", &pRange)
+		ObjRelease(pTextPat)
+		if (hrRange == 0 && pRange) {
+			bstrDoc := 0
+			hrText := ComCall(9, pRange, "int", -1, "ptr*", &bstrDoc)
+			ObjRelease(pRange)
+			if (hrText == 0 && bstrDoc) {
+				val := StrGet(bstrDoc)
+				DllCall("oleaut32\SysFreeString", "ptr", bstrDoc)
+				if (val != "")
+					return val
+			}
+		}
+	}
+
+	; 3. LegacyIAccessiblePattern
+	pLegacyPat := 0
+	ComCall(16, pElement, "int", UIA_LegacyIAccessiblePatternId, "ptr*", &pLegacyPat)
+	if (pLegacyPat) {
+		bstrLegacy := 0
+		hrLegacy := ComCall(9, pLegacyPat, "ptr*", &bstrLegacy)
+		ObjRelease(pLegacyPat)
+		if (hrLegacy == 0 && bstrLegacy) {
+			val := StrGet(bstrLegacy)
+			DllCall("oleaut32\SysFreeString", "ptr", bstrLegacy)
+			if (val != "")
+				return val
+		}
+	}
+
+	return ""
+}
+
+GetTextViaUIAutomation() {
+	static CLSID_CUIAutomation8 := "{e22ad333-b25f-460c-83d0-0581107395c9}"
+	static IID_IUIAutomation2 := "{34723aff-0c9d-49d0-9896-7ab52df8cd8a}"
+	static s_pUIA := 0
+
+	if (!s_pUIA) {
+		DllCall("user32\SystemParametersInfo", "uint", 0x0047, "uint", 1, "int", 0, "uint", 2) ; SPI_SETSCREENREADER
+		clsidBuf := Buffer(16)
+		iidBuf := Buffer(16)
+		DllCall("ole32\CLSIDFromString", "wstr", CLSID_CUIAutomation8, "ptr", clsidBuf)
+		DllCall("ole32\CLSIDFromString", "wstr", IID_IUIAutomation2, "ptr", iidBuf)
+		DllCall("ole32\CoCreateInstance", "ptr", clsidBuf, "ptr", 0, "uint", 1, "ptr", iidBuf, "ptr*", &s_pUIA)
+	}
+
+	if (!s_pUIA)
+		return ""
+
+	activeHwnd := WinExist("A")
+	if (activeHwnd)
+		try SendMessage(0x003D, 0, 1, , "ahk_id " activeHwnd) ; WM_GETOBJECT wake-up for Chromium/Electron
+
+	; Query focused element first
+	pElement := 0
+	hr := ComCall(8, s_pUIA, "ptr*", &pElement)
+	if (hr == 0 && pElement) {
+		txt := ExtractTextFromUIAElement(pElement)
+		ObjRelease(pElement)
+		if (txt != "")
+			return txt
+	}
+
+	; Fallback to element under mouse cursor
+	CoordMode("Mouse", "Screen")
+	MouseGetPos(&mX, &mY)
+	pt := (mY << 32) | (mX & 0xFFFFFFFF)
+	pElemAtPoint := 0
+	hrPt := ComCall(7, s_pUIA, "int64", pt, "ptr*", &pElemAtPoint)
+	if (hrPt == 0 && pElemAtPoint) {
+		txt := ExtractTextFromUIAElement(pElemAtPoint)
+		ObjRelease(pElemAtPoint)
+		if (txt != "")
+			return txt
+	}
+
+	return ""
+}
+
+SilentCopyAllText() {
+	; Strategy 1: Win32 native control (Edit / RichEdit)
+	try {
+		ctrlHwnd := ControlGetFocus("A")
+		if (ctrlHwnd) {
+			txt := ControlGetText(ctrlHwnd, "A")
+			if (txt != "") {
+				A_Clipboard := txt
+				return true
+			}
+		}
+	}
+
+	; Strategy 2: UI Automation (Chromium, Electron, WinUI, UWP)
+	txt := GetTextViaUIAutomation()
+	if (txt != "") {
+		A_Clipboard := txt
+		return true
+	}
+
+	; Strategy 3: Visual cloaking fallback (for non-standard / canvas windows)
+	activeHwnd := WinExist("A")
+	if (activeHwnd)
+		DllCall("user32\LockWindowUpdate", "ptr", activeHwnd)
+
+	A_Clipboard := ""
+	SendInput("^a^c{Right}")
+	ClipWait(0.2)
+
+	if (activeHwnd)
+		DllCall("user32\LockWindowUpdate", "ptr", 0)
+
+	return (A_Clipboard != "")
+}
+
 ; Alt+Ctr+Z ShareX Image Editor
 ~!^Z::ImageEditor() ;{ <- ShareX Image Editor
 
@@ -768,6 +910,9 @@ OpenJavaCourseFolder() {
 
 ; Alt+Shift+S Copy the content, Open Monica & Summarize Content
 !+S::MonicaSummary() ;{ <- Monica Summarize Content
+
+; Win+Ctrl+C Silently copy all text in current field
+#^c::SilentCopyAllText() ;{ <- Silently Copy All Text
 
 ; Alt+Ctr+E Enable/Disable file extension
 $!^E::ToggleFileExt() ;{ <- Show/Hide Extensions

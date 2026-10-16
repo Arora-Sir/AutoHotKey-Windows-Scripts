@@ -757,6 +757,14 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
   1. **Mock Isolation**: `Test_SunshineWatchdog.ahk` runs 15 automated test cases validating stream event parsing, process dormancy guards, and uptime freshness with zero external network or process dependencies.
   2. **Sanitized Fixtures**: Test fixtures utilize generic mock IP addresses (`192.168.1.100`) rather than live workstation IPs, guaranteeing safe execution within CI/CD and public GitHub workflows without secret or network leaks.
 
+### 23. In-Memory Silent Text Extraction Engine Without Keystrokes (`BasicTasks.ahk`)
+- **Problem**: Simulating keystrokes (`Ctrl+A`, `Ctrl+C`) to copy text from an active input field physically forces the host application to draw a visible selection highlight. In modern multi-process and GPU-composited applications (such as Chromium, Brave, Edge, VS Code, and Slack), the compositor renders that selection before any subsequent keystroke can collapse it. Keyboard hooks across the fleet further delay synthetic key processing, leaving the blue highlight visible on screen for up to a second.
+- **Decision**:
+  1. **Direct Win32 Memory Read**: Uses `ControlGetText` with `WM_GETTEXT` for native Windows edit controls. Reads the full buffer directly across process memory with zero keystrokes.
+  2. **Windows UI Automation (UIA)**: Direct COM implementation using `CUIAutomation8` and `IUIAutomation2`. Wakes accessibility trees in Chromium and Electron applications via `SPI_SETSCREENREADER` and `WM_GETOBJECT`. Inspects `ValuePattern`, `TextPattern`, and `LegacyIAccessiblePattern` on the focused element, falling back to `ElementFromPoint` under the mouse cursor. No keys are sent and no selection highlight is ever drawn.
+  3. **Visual Cloaking Fallback**: For non-standard canvas controls where accessible text is not exposed, `LockWindowUpdate` freezes window repainting during the synthetic keystroke sequence to keep visual artifacts hidden.
+  4. **Zero-Notification Invariant**: Suppresses all toast, badge, and sound feedback, ensuring the clipboard is populated in complete silence.
+
 ---
 
 ## Fleet Script Inventory & Global Hotkeys Cheatsheet
@@ -764,7 +772,7 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 | Script | Purpose | Key Hotkeys & Actions |
 | :--- | :--- | :--- |
 | `StartupScript.ahk` | Master process orchestrator & unified tray menu | `Win+ScrollLock` (Suspend all), `Win+Ctrl+Alt+ScrollLock` (Exit all), `Win+Ctrl+Alt+R` (Reload all), `Win+Ctrl+Alt+W` (Window Spy) |
-| `BasicTasks.ahk` | Productivity hotkeys, clipboard converters, microphone mute, DRM mode | `Alt+M` (Mic mute toggle), `Win+Alt+L` (Cycle Skills Vault mode), `Win+Alt+D` (DRM stream toggle), `Ctrl+Shift+C` (Terminal / Admin pwsh) |
+| `BasicTasks.ahk` | Productivity hotkeys, clipboard converters, microphone mute, DRM mode | `Win+Ctrl+C` (In-memory silent copy), `Alt+M` (Mic mute toggle), `Win+Alt+L` (Cycle Skills Vault mode), `Win+Alt+D` (DRM stream toggle), `Win+Alt+Ctrl+C` (PowerShell Admin) |
 | `BackgroundAutomations.ahk` | Unattended background daemons & watchers | Sefirah sleep/wake auto-reconnect (port 5150), Skills Vault auto-focus watcher, Tailscale/Google Drive auto-launcher |
 | `Brightness.ahk` | Native Win32 display brightness engine | `F1` / `Shift+F1` (Step brightness), `Ctrl+PgUp` / `Ctrl+PgDn` (Extreme brightness curves) |
 | `ClosePrograms.ahk` | Window management, graceful application termination, and Outlook close-to-tray protection | `Alt+F4` (Close active window / minimize Outlook to tray), `Alt+Shift+F4` (Close specific app), `Alt+Ctrl+F4` (Close all apps) |
