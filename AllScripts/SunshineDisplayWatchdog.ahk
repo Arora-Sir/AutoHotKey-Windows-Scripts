@@ -203,12 +203,14 @@ SwitchToLaptopOnlyMode(delayNotesMs := 1200, skipNotes := false, isBlocking := f
 		try FileDelete(MarkerFile)
 	try FileDelete(A_Temp "\sunshine_manual_switch.flag")
 
-	; 3. Execute display switch to internal laptop panel
-	; In blocking mode (such as pre-suspend), RunWait guarantees driver completes topology switch before sleep
-	if (isBlocking)
-		RunWait(A_WinDir "\System32\DisplaySwitch.exe /internal", , "Hide")
-	else
-		Run(A_WinDir "\System32\DisplaySwitch.exe /internal", , "Hide")
+	; 3. Execute display switch to internal laptop panel via silent Win32 SetDisplayConfig (0x81 = SDC_APPLY | SDC_TOPOLOGY_INTERNAL)
+	ret := DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000081, "UInt")
+	if (ret != 0) {
+		if (isBlocking)
+			RunWait(A_WinDir "\System32\DisplaySwitch.exe 1", , "Hide")
+		else
+			Run(A_WinDir "\System32\DisplaySwitch.exe 1", , "Hide")
+	}
 
 	; 4. Visual toast notification (skip if blocking or pre-suspend)
 	if (!isBlocking)
@@ -258,8 +260,9 @@ SwitchToTabletOnlyMode(delayNotesMs := 1200) {
 	FileAppend(A_TickCount, manualFlag)
 
 	; 3. Native Win32 SetDisplayConfig call (0x88 = SDC_APPLY | SDC_TOPOLOGY_EXTERNAL)
-	DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000088, "UInt")
-	Run(A_WinDir "\System32\DisplaySwitch.exe /external", , "Hide")
+	ret := DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000088, "UInt")
+	if (ret != 0)
+		Run(A_WinDir "\System32\DisplaySwitch.exe 4", , "Hide")
 
 	; 4. Visual toast notification
 	ShowDisplayBadge("[TABLET ONLY]", "Tablet Display (2560x1600 @ 120Hz)", "Mouse: Fast (20) | Precision: OFF", "4A1A6E")
@@ -310,7 +313,9 @@ SwitchToExtendMode(delayNotesMs := 1200) {
 		try FileDelete(manualFlag)
 		FileAppend(A_TickCount, manualFlag)
 
-		Run(A_WinDir "\System32\DisplaySwitch.exe /extend", , "Hide")
+		ret := DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000084, "UInt")
+		if (ret != 0)
+			Run(A_WinDir "\System32\DisplaySwitch.exe 3", , "Hide")
 
 		ShowDisplayBadge("[EXTEND]", "Dual Extended Displays", "Laptop: Main (Tray) | Tablet: Extended", "1A6E3C")
 		ApplyLaptopStickyNotesLayout(delayNotesMs)
@@ -428,7 +433,9 @@ SunshineDisplay_ApplyExtendAfterConnect() {
 	try FileDelete(manualFlag)
 	FileAppend(A_TickCount, manualFlag)
 
-	Run(A_WinDir "\System32\DisplaySwitch.exe /extend", , "Hide")
+	ret := DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000084, "UInt")
+	if (ret != 0)
+		Run(A_WinDir "\System32\DisplaySwitch.exe 3", , "Hide")
 
 	ShowDisplayBadge("[EXTEND]", "Dual Extended Displays", "Laptop: Main (Tray) | Tablet: Extended", "1A6E3C")
 	ApplyLaptopStickyNotesLayout(g_ExtendNotesDelayMs)
@@ -462,8 +469,9 @@ SwitchToDuplicateMode(delayNotesMs := 1200) {
 	FileAppend(A_TickCount, manualFlag)
 
 	; 2. Native Win32 SetDisplayConfig call (0x82 = SDC_APPLY | SDC_TOPOLOGY_CLONE)
-	DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000082, "UInt")
-	Run(A_WinDir "\System32\DisplaySwitch.exe /clone", , "Hide")
+	ret := DllCall("SetDisplayConfig", "UInt", 0, "Ptr", 0, "UInt", 0, "Ptr", 0, "UInt", 0x00000082, "UInt")
+	if (ret != 0)
+		Run(A_WinDir "\System32\DisplaySwitch.exe 2", , "Hide")
 
 	; 3. Visual toast notification
 	ShowDisplayBadge("[DUPLICATE]", "Mirrored Displays", "Mouse: Fast (20) | Displays Cloned", "1A5A5A")

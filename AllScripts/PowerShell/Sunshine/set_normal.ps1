@@ -12,7 +12,7 @@
       - Restores display topology to PC Screen Only
 #>
 
-Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class MouseSpeed { [DllImport("user32.dll", EntryPoint="SystemParametersInfo")] public static extern bool SetSpeed(uint uiAction, uint uiParam, uint pvParam, uint fWinIni); [DllImport("user32.dll", EntryPoint="SystemParametersInfo")] public static extern bool SetAccel(uint uiAction, uint uiParam, int[] pvParam, uint fWinIni); }'
+Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class MouseSpeed { [DllImport("user32.dll", EntryPoint="SystemParametersInfo")] public static extern bool SetSpeed(uint uiAction, uint uiParam, uint pvParam, uint fWinIni); [DllImport("user32.dll", EntryPoint="SystemParametersInfo")] public static extern bool SetAccel(uint uiAction, uint uiParam, int[] pvParam, uint fWinIni); [DllImport("user32.dll", EntryPoint="SetDisplayConfig")] public static extern int SetDisplayConfig(uint numPathArrayElements, IntPtr pathArray, uint numModeInfoArrayElements, IntPtr modeInfoArray, uint flags); }'
 
 # Restores the confirmed default on this machine
 [MouseSpeed]::SetSpeed(0x0071, 0, 10, 3) | Out-Null
@@ -39,4 +39,8 @@ if (Test-Path $nircmd) {
 }
 
 # Auto-restore display topology to PC Screen Only (1080p @ 144Hz laptop panel) on stream disconnect
-Start-Process "$env:SystemRoot\System32\DisplaySwitch.exe" -ArgumentList "/internal" -WindowStyle Hidden
+# SDC_APPLY (0x80) | SDC_TOPOLOGY_INTERNAL (0x01) = 0x00000081
+$ret = [MouseSpeed]::SetDisplayConfig(0, [IntPtr]::Zero, 0, [IntPtr]::Zero, 0x00000081)
+if ($ret -ne 0) {
+    Start-Process "$env:SystemRoot\System32\DisplaySwitch.exe" -ArgumentList "1" -WindowStyle Hidden
+}

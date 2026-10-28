@@ -12,7 +12,7 @@
       - Switches display topology to Second Screen Only
 #>
 
-Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public class MouseSpeed { [DllImport("user32.dll", EntryPoint="SystemParametersInfo")] public static extern bool SetSpeed(uint uiAction, uint uiParam, uint pvParam, uint fWinIni); [DllImport("user32.dll", EntryPoint="SystemParametersInfo")] public static extern bool SetAccel(uint uiAction, uint uiParam, int[] pvParam, uint fWinIni); }'
+Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class MouseSpeed { [DllImport("user32.dll", EntryPoint="SystemParametersInfo")] public static extern bool SetSpeed(uint uiAction, uint uiParam, uint pvParam, uint fWinIni); [DllImport("user32.dll", EntryPoint="SystemParametersInfo")] public static extern bool SetAccel(uint uiAction, uint uiParam, int[] pvParam, uint fWinIni); [DllImport("user32.dll", EntryPoint="SetDisplayConfig")] public static extern int SetDisplayConfig(uint numPathArrayElements, IntPtr pathArray, uint numModeInfoArrayElements, IntPtr modeInfoArray, uint flags); }'
 
 # 0x0071 = SPI_SETMOUSESPEED, pvParam = speed (1-20, hard API max), fWinIni 3 = SPIF_UPDATEINIFILE | SPIF_SENDCHANGE
 [MouseSpeed]::SetSpeed(0x0071, 0, 20, 3) | Out-Null
@@ -39,4 +39,8 @@ if (Test-Path $nircmd) {
 }
 
 # Auto-switch display topology to Second Screen Only (2560x1600 @ 120Hz native 16:10) on stream connect
-Start-Process "$env:SystemRoot\System32\DisplaySwitch.exe" -ArgumentList "/external" -WindowStyle Hidden
+# SDC_APPLY (0x80) | SDC_TOPOLOGY_EXTERNAL (0x08) = 0x00000088
+$ret = [MouseSpeed]::SetDisplayConfig(0, [IntPtr]::Zero, 0, [IntPtr]::Zero, 0x00000088)
+if ($ret -ne 0) {
+    Start-Process "$env:SystemRoot\System32\DisplaySwitch.exe" -ArgumentList "4" -WindowStyle Hidden
+}
