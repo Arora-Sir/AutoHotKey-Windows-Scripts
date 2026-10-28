@@ -23,6 +23,7 @@ PATH_IP_ROTATOR := "D:\Path\To\Your\Scripts\ROTATE.bat"
 PATH_GRAVITY_BRIDGE := "D:\Path\To\Your\Gravity-Bridge"
 PATH_COPYCLIP := "D:\Path\To\Your\CopyClip"
 PATH_PYTHON_EXE := "C:\Python314\pythonw.exe"
+PATH_ISSUE_WATCHER := "C:\Path\To\Your\issue_watcher.py"
 
 ; Google Drive: resolve the versioned install path from its own Run-key registry value (kept current
 ; by Google's installer/updater on every version bump) instead of hardcoding a version number, which
@@ -43,6 +44,7 @@ WATCHDOG_APPS := [ {name: "TrafficMonitor.exe", path: "D:\Path\To\TrafficMonitor
 				 , {name: "Fences.exe",        path: '"C:\Program Files (x86)\Stardock\Fences\Fences.exe" /startup'}
 				 , {name: "GravityBridge_Python.exe", path: '"D:\Path\To\Your\AllScripts\PythonExes\GravityBridge_Python.exe" "D:\Path\To\Your\Gravity-Bridge\proxy.py"'}
 				 , {name: "CopyClip_Python.exe",      path: '"D:\Path\To\Your\AllScripts\PythonExes\CopyClip_Python.exe" "D:\Path\To\Your\CopyClip\copyclip.py"'}
+				 , {name: "IssueWatcher_Python.exe",  path: '"D:\Path\To\Your\AllScripts\PythonExes\IssueWatcher_Python.exe" "C:\Path\To\Your\issue_watcher.py"'}
 				 , {name: "olk.exe",                  path: A_AppData "\Microsoft\Windows\Start Menu\Programs\Startup\Outlook (New Minimized).lnk"} ]
 
 ; SunshineDisplayWatchdog: Sunshine scripts directory & tablet's Tailscale IP

@@ -124,23 +124,55 @@ PromptSendSelectedItems() {
 
 ; =============================================================================
 ; [FOCUS-INDEPENDENT SELECTION RESOLUTION]
-; Resolves selected files or folders from open Explorer windows in z-order
+; Multi-tier resolution: Active Desktop/Explorer -> Hovered window -> Z-order Explorer -> Desktop fallback -> Clipboard
+; Handles desktop Shell COM (FindWindowSW), filters zombie/dead Explorer COM objects via IsWindow, and deduplicates
 ; =============================================================================
+GetDesktopSelectedItems(shellApp) {
+	desktopItems := []
+	try {
+		; SWC_DESKTOP = 8, SWFO_NEEDDISPATCH = 1
+		desktopWin := shellApp.Windows.FindWindowSW(0, 0, 8, 0, 1)
+		if (desktopWin && desktopWin.Document && desktopWin.Document.SelectedItems) {
+			for item in desktopWin.Document.SelectedItems {
+				path := Trim(item.Path, '"')
+				if (path != "" && FileExist(path))
+					desktopItems.Push(path)
+			}
+		}
+	}
+	return desktopItems
+}
+
 GetSelectedFilesOrFolders() {
 	selected := []
+	seen := Map()
 	shellApp := ComObject("Shell.Application")
 
-	; 1. Query Explorer windows in z-order (most recently focused first)
-	explorerHwnds := WinGetList("ahk_class CabinetWClass")
-	for expHwnd in explorerHwnds {
+	; Helper to add paths with deduplication and existence check
+	AddCandidate(path) {
+		clean := Trim(path, '"')
+		if (clean != "" && FileExist(clean) && !seen.Has(clean)) {
+			seen[clean] := true
+			selected.Push(clean)
+		}
+	}
+
+	; 1. Active Window Check: Desktop (Progman or WorkerW)
+	if (WinActive("ahk_class Progman") || WinActive("ahk_class WorkerW")) {
+		for path in GetDesktopSelectedItems(shellApp)
+			AddCandidate(path)
+		if (selected.Length > 0)
+			return selected
+	}
+
+	; 2. Active Window Check: Explorer (CabinetWClass)
+	if (activeHwnd := WinActive("ahk_class CabinetWClass")) {
 		for window in shellApp.Windows {
 			try {
-				if (window.hwnd = expHwnd && window.Document && window.Document.SelectedItems) {
+				if (window.hwnd = activeHwnd && DllCall("IsWindow", "ptr", window.hwnd) && window.Document && window.Document.SelectedItems) {
 					if (window.Document.SelectedItems.Count > 0) {
-						for item in window.Document.SelectedItems {
-							if (item.Path != "")
-								selected.Push(item.Path)
-						}
+						for item in window.Document.SelectedItems
+							AddCandidate(item.Path)
 						if (selected.Length > 0)
 							return selected
 					}
@@ -149,28 +181,61 @@ GetSelectedFilesOrFolders() {
 		}
 	}
 
-	; 2. Fallback: check any other open Shell windows (e.g. ExploreWClass or Desktop)
-	for window in shellApp.Windows {
-		try {
-			if (window.Document && window.Document.SelectedItems && window.Document.SelectedItems.Count > 0) {
-				for item in window.Document.SelectedItems {
-					if (item.Path != "")
-						selected.Push(item.Path)
-				}
+	; 3. Mouse Hovered Window (handles transient focus shifts to taskbar or badges)
+	try {
+		MouseGetPos(, , &mouseHwnd)
+		if (mouseHwnd && DllCall("IsWindow", "ptr", mouseHwnd)) {
+			mouseClass := WinGetClass("ahk_id " . mouseHwnd)
+			if (mouseClass = "Progman" || mouseClass = "WorkerW" || mouseClass = "SysListView32") {
+				for path in GetDesktopSelectedItems(shellApp)
+					AddCandidate(path)
 				if (selected.Length > 0)
 					return selected
+			} else if (mouseClass = "CabinetWClass") {
+				for window in shellApp.Windows {
+					try {
+						if (window.hwnd = mouseHwnd && DllCall("IsWindow", "ptr", window.hwnd) && window.Document && window.Document.SelectedItems) {
+							if (window.Document.SelectedItems.Count > 0) {
+								for item in window.Document.SelectedItems
+									AddCandidate(item.Path)
+								if (selected.Length > 0)
+									return selected
+							}
+						}
+					}
+				}
 			}
 		}
 	}
 
-	; 3. Outside Explorer: check if clipboard contains valid file or folder paths
-	if (selected.Length = 0) {
-		Loop Parse, A_Clipboard, "`n", "`r" {
-			candidate := Trim(A_LoopField, '"')
-			if (candidate != "" && FileExist(candidate))
-				selected.Push(candidate)
+	; 4. Explorer Windows in Z-Order (most recently focused active Explorer)
+	explorerHwnds := WinGetList("ahk_class CabinetWClass")
+	for expHwnd in explorerHwnds {
+		for window in shellApp.Windows {
+			try {
+				; MUST verify window handle is alive to ignore closed/zombie COM objects
+				if (window.hwnd = expHwnd && DllCall("IsWindow", "ptr", window.hwnd) && window.Document && window.Document.SelectedItems) {
+					if (window.Document.SelectedItems.Count > 0) {
+						for item in window.Document.SelectedItems
+							AddCandidate(item.Path)
+						if (selected.Length > 0)
+							return selected
+					}
+				}
+			}
 		}
 	}
+
+	; 5. Desktop Selection Fallback (when user triggered from background app)
+	for path in GetDesktopSelectedItems(shellApp)
+		AddCandidate(path)
+	if (selected.Length > 0)
+		return selected
+
+	; 6. Outside Explorer: check if clipboard contains valid file or folder paths
+	Loop Parse, A_Clipboard, "`n", "`r"
+		AddCandidate(A_LoopField)
+
 	return selected
 }
 

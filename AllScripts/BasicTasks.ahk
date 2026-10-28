@@ -42,6 +42,7 @@
 ; Ctr+J+J -> (Chrome) Close downloads bar at bottom
 ; Ctr+Y+T -> Open Youtube (In browser: maximum 0.15s second gap between Y & T)
 ; Win+X+X -> Sleep Laptop
+; Win+L -> Lock PC (also locks for the Win+L that a streaming client injects, which Windows ignores)
 ; Ctr+Shift+V -> Browser to go to previous tab when taking a screenshot
 ; MouseLButton -> Double Click Functions (Taskbar Show/Hide; ) ->> Doing this with WindHawk Now
 ; Ctr+Shift+WheelUp -> (VS Code) Increase Whole UI Zoom (+0.05)
@@ -312,6 +313,12 @@ ClearNotificaitons() {
 	if WinActive("ahk_exe Shellexperiencehost.exe") {
 		Send("{Tab} {Space} {Esc}")
 	}
+}
+
+; Locks the session with the API that Windows uses itself. A real Win+L locks the same way, and so does the Win+L that
+; Super Artemis, Moonlight or Sunshine injects, which Windows ignores without this hotkey.
+LockPc() {
+	DllCall("user32\LockWorkStation")
 }
 
 SleepLaptop() {
@@ -971,6 +978,9 @@ ReconnectCloudflare() {
 
 ; Win+X+X -> Sleep Laptop
 $#x::SleepLaptop() ;{ <- Sleep Laptop (Win+X+X)
+
+; Win+L -> Lock PC
+$#l::LockPc() ;{ <- Lock PC (Win+L, also from a streaming client)
 
 ;Turn Caps Lock into a Shift key
 ; Capslock::Shift

@@ -220,16 +220,37 @@ if ($Files -and $Files.Count -gt 0) {
     }
 }
 
-# If no files passed as CLI arguments, check active Windows Explorer selection via COM
+# If no files passed as CLI arguments, check active Windows Explorer or Desktop selection via COM
 if ($transferFiles.Count -eq 0) {
     try {
         $shell = New-Object -ComObject Shell.Application
-        $activeWindow = $shell.Windows() | Where-Object { $_.HWND -and ($_.Document -ne $null) } | Select-Object -First 1
-        if ($activeWindow -and $activeWindow.Document.SelectedItems()) {
-            foreach ($item in $activeWindow.Document.SelectedItems()) {
-                if (Test-Path $item.Path) {
-                    $transferFiles += $item.Path
+        # 1. Check Desktop selection via native Shell COM
+        try {
+            $desktopWin = $shell.Windows().FindWindowSW(0, 0, 8, 0, 1)
+            if ($desktopWin -and $desktopWin.Document -and $desktopWin.Document.SelectedItems()) {
+                foreach ($item in $desktopWin.Document.SelectedItems()) {
+                    $p = $item.Path.Trim('"').Trim("'")
+                    if ($p -and (Test-Path $p) -and ($transferFiles -notcontains $p)) {
+                        $transferFiles += (Resolve-Path $p).Path
+                    }
                 }
+            }
+        } catch {}
+
+        # 2. If desktop empty, check active Explorer windows
+        if ($transferFiles.Count -eq 0) {
+            foreach ($window in $shell.Windows()) {
+                try {
+                    if ($window.HWND -and $window.Document -and $window.Document.SelectedItems()) {
+                        foreach ($item in $window.Document.SelectedItems()) {
+                            $p = $item.Path.Trim('"').Trim("'")
+                            if ($p -and (Test-Path $p) -and ($transferFiles -notcontains $p)) {
+                                $transferFiles += (Resolve-Path $p).Path
+                            }
+                        }
+                        if ($transferFiles.Count -gt 0) { break }
+                    }
+                } catch {}
             }
         }
     } catch {}

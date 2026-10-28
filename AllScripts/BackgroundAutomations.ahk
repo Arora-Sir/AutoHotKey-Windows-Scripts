@@ -44,6 +44,8 @@ if (!ProcessExist("GoogleDriveFS.exe") && GoogleDrivePath)
 ; ForceRestart=true here on purpose: this call only runs at boot or when you hit the global reload hotkey, both are moments you'd want an edited proxy.py/copyclip.py picked up, so it always kills and relaunches rather than skipping an already-healthy instance.
 RestartNamedPythonServer("GravityBridge", PATH_GRAVITY_BRIDGE "\proxy.py",,, true)
 RestartNamedPythonServer("CopyClip", PATH_COPYCLIP "\windows_app\tray.py",,, true) ; Can also use "Safirah"
+if (IsSet(PATH_ISSUE_WATCHER) && PATH_ISSUE_WATCHER && FileExist(PATH_ISSUE_WATCHER))
+    RestartNamedPythonServer("IssueWatcher", PATH_ISSUE_WATCHER,,, true)
 
 ; =============================================================================
 ; SEFIRAH: Phone Link Alternative (Sleep Auto-Reconnect + Phone Priority)
