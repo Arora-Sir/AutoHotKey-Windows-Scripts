@@ -385,7 +385,7 @@ Direct, zero-friction file transfer from Windows Explorer to connected Samsung d
     | :------------- | :----------------------------------------------------------------------- |
     | `Alt+Ctrl+F4`  | Close All Programs (gracefully closes open desktop applications)         |
     | `Alt+Shift+F4` | Close Specific Active Program (terminates stubborn background tray apps) |
-    | `Alt+F4`       | Close Currently Active Screen (with key-release guard and tray cleanup)  |
+    | `Alt+F4`       | Close Currently Active Screen (physical keyboard only, tray cleanup)     |
 
 ---
 

@@ -170,11 +170,22 @@ InitDone() {
 ; v2: a multi-line hotkey body needs explicit braces now: v1 let the body implicitly extend to the next
 ; `return`/hotkey with no braces at all, but v2 fails to load that shape ("Hotkey or hotstring is missing
 ; its opening brace"), confirmed empirically down to the minimal case.
+; NOTE: A hook hotkey cannot tell physical keys from keys injected by other programs, such as a streaming host relaying a phone keyboard.
+; NOTE: The old in-handler check swallowed every injected Alt+F4, because the hotkey blocks the native shortcut and then returned early.
+; NOTE: Removing that check made the handler call Send("!{F4}"), which releases and restores Alt to match the physical key state.
+; NOTE: An injected Alt is not physical, so Send cut it off and left AutoHotkey and Windows disagreeing about the modifier state.
+; NOTE: Gating the hotkey with #HotIf keeps it for the physical keyboard, and injected Alt+F4 passes through to Windows untouched.
+F4PhysicallyDown() {
+	return GetKeyState("F4", "P")
+}
+
+#HotIf F4PhysicallyDown()
 $!F4:: { ;{ <- Close Currently Active Screen
-	if (!isReady || !GetKeyState("F4", "P"))
+	if (!isReady)
 		return
 	CLoseCurrentlyActiveScreen()
 }
+#HotIf
 
 ; Alt+Shift+F4 -> Close specific active program
 $!+F4:: CLoseSpecificPrograms() ;{ <- Close Specific Programs

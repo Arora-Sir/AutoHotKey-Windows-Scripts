@@ -765,6 +765,18 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
   3. **Visual Cloaking Fallback**: For non-standard canvas controls where accessible text is not exposed, `LockWindowUpdate` freezes window repainting during the synthetic keystroke sequence to keep visual artifacts hidden.
   4. **Zero-Notification Invariant**: Suppresses all toast, badge, and sound feedback, ensuring the clipboard is populated in complete silence.
 
+### 24. Physical-Only Alt+F4 Hotkey So Injected Remote Input Reaches Windows (`ClosePrograms.ahk`)
+- **Problem**: A keyboard relayed by a streaming host (Sunshine or Apollo serving a phone or tablet) produces injected key events. Alt+F4 sent that way never closed the active window on this workstation.
+  1. **Hook hotkeys match injected input**: A hook hotkey such as `$!F4` fires for keys injected by other programs, because AutoHotkey can only separate its own `Send` output (via `SendLevel`), not other processes. The `$` prefix also blocks the native shortcut.
+  2. **Swallowed key**: The handler used to return early unless `GetKeyState("F4", "P")` (physical state) was true. An injected F4 is never physical, so the hotkey consumed Alt+F4 and did nothing.
+  3. **Naive fix fails**: Dropping the physical check let injected keys reach `Send("!{F4}")`. A plain `Send` releases Alt and restores it only to match the physical state, so an injected Alt (held on a remote on-screen keyboard) was cut off and AutoHotkey and Windows then disagreed about the modifier state. Alt+F4 worked once and then stopped, and the physical keyboard stopped working too.
+- **Decision**:
+  1. **Gate the hotkey, not the handler**: `#HotIf F4PhysicallyDown()` (a one-line wrapper over `GetKeyState("F4", "P")`) makes `$!F4` apply only to a physical F4. An injected F4 matches no hotkey, so Windows closes the window natively and the script never re-sends keys.
+  2. **Physical behaviour unchanged**: The physical keyboard still runs `CLoseCurrentlyActiveScreen()`, including the tray cleanup and the Outlook close-to-tray rule from section 18. Remote Alt+F4 skips that special handling by design.
+  3. **Scoped block**: `#HotIf` is reset right after the handler so `Alt+Shift+F4` and `Alt+Ctrl+F4` keep their old, unconditional behaviour.
+  4. **Verification**: SendInput scancode injection against throwaway windows. A control copy of the old logic never closed the window. The new logic closed it in every held-Alt round, which matches an on-screen keyboard with Alt latched, and in nearly every round at Apollo timing.
+  5. **Reload note**: The fleet runs elevated, so a non-elevated shell cannot stop `StartupScript.exe`. Reload with `Win+Ctrl+Alt+R` rather than `build_startup_exe.ps1 -Relaunch` from a normal terminal.
+
 ---
 
 ## Fleet Script Inventory & Global Hotkeys Cheatsheet
@@ -775,7 +787,7 @@ Architectural decisions in this fleet prioritize reliability, non-blocking respo
 | `BasicTasks.ahk` | Productivity hotkeys, clipboard converters, microphone mute, DRM mode | `Win+Ctrl+C` (In-memory silent copy), `Alt+M` (Mic mute toggle), `Win+Alt+L` (Cycle Skills Vault mode), `Win+Alt+D` (DRM stream toggle), `Win+Alt+Ctrl+C` (PowerShell Admin) |
 | `BackgroundAutomations.ahk` | Unattended background daemons & watchers | Sefirah sleep/wake auto-reconnect (port 5150), Skills Vault auto-focus watcher, Tailscale/Google Drive auto-launcher |
 | `Brightness.ahk` | Native Win32 display brightness engine | `F1` / `Shift+F1` (Step brightness), `Ctrl+PgUp` / `Ctrl+PgDn` (Extreme brightness curves) |
-| `ClosePrograms.ahk` | Window management, graceful application termination, and Outlook close-to-tray protection | `Alt+F4` (Close active window / minimize Outlook to tray), `Alt+Shift+F4` (Close specific app), `Alt+Ctrl+F4` (Close all apps) |
+| `ClosePrograms.ahk` | Window management, graceful application termination, and Outlook close-to-tray protection | `Alt+F4` (Close active window / minimize Outlook to tray, physical keyboard only, remote Alt+F4 passes to Windows), `Alt+Shift+F4` (Close specific app), `Alt+Ctrl+F4` (Close all apps) |
 | `Ext4SsdManager.ahk` | WSL2 ext4 backup SSD auto-mount & safe ejection | `Win+Alt+M` (Mount SSD & open Explorer), `Win+Alt+U` (Safe unmount), auto-mount on USB arrival, `#32770` dialog auto-resolver |
 | `HotkeyHelp.ahk` | Self-introspecting two-column hotkey cheatsheet GUI | `Win+F1` (Open Hotkey Help GUI), `Win+Alt+F1` (Hotkey Help Settings) |
 | `PersonalKeywords.ahk` | Personal hotstrings, snippet expansions, prompt templates, and application launchers | Dynamic string expansions (`:X*:...`), LLM prompt blueprints, `Win+P` (Bitwarden Vault), `Win+Alt+A` (Samsung Notes), `Win+Alt+S` (Notion) |
