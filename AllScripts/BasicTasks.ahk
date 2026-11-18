@@ -108,9 +108,11 @@ PublishBasicTasksManifest()
 ; v2: RegisterTrayMenuHandler maps each manifest HandlerKey to a real function reference: see
 ; SharedHelpers.ahk's TRAY MENU MANIFEST section. Each handler below is already a zero-arg function
 ; (the label-turned-function that dispatches the actual action), so no extra wrapper is needed.
-RegisterTrayMenuHandler("TraySkillsVaultAuto", TraySkillsVaultAuto)
-RegisterTrayMenuHandler("TraySkillsVaultLocked", TraySkillsVaultLocked)
-RegisterTrayMenuHandler("TraySkillsVaultUnlocked", TraySkillsVaultUnlocked)
+; ORG SAFE MODE EXIT (2026-11-18): the Skills Vault tray handlers are disabled because the vault lock is retired now that personal accounts are in use.
+; To restore the vault lock, uncomment these three lines together with the matching blocks near the Skills Vault hotkey, in PublishBasicTasksManifest, in SetTimer(UpdateSkillsTrayStatus) and in BackgroundAutomations.ahk (WatchSkillsLock).
+; RegisterTrayMenuHandler("TraySkillsVaultAuto", TraySkillsVaultAuto)
+; RegisterTrayMenuHandler("TraySkillsVaultLocked", TraySkillsVaultLocked)
+; RegisterTrayMenuHandler("TraySkillsVaultUnlocked", TraySkillsVaultUnlocked)
 RegisterTrayMenuHandler("TrayDRMStreamingModeToggle", ToggleDRMStreamingMode)
 RegisterTrayMenuHandler("TrayShareXImageEffectsToggle", ToggleShareXImageEffects)
 
@@ -147,8 +149,9 @@ BasicTasks_HaltTimers() {
 	SetTimer(WatchMicrophoneMuteState, 0)
 }
 
-SetTimer(UpdateSkillsTrayStatus, 2000)
-SetTimer(UpdateSkillsTrayStatus, -100) ; Fast initial update
+; ORG SAFE MODE EXIT (2026-11-18): the Skills Vault tray status poll is disabled. Uncomment both lines to restore it.
+; SetTimer(UpdateSkillsTrayStatus, 2000)
+; SetTimer(UpdateSkillsTrayStatus, -100) ; Fast initial update
 SetTimer(UpdateDRMTrayStatus, 3000)
 SetTimer(UpdateDRMTrayStatus, -100) ; Fast initial update
 SetTimer(TrackActiveBrowser, 250)
@@ -972,7 +975,8 @@ ReconnectCloudflare() {
 ; otherwise, confirmed empirically.
 #MaxThreadsBuffer true
 #MaxThreadsPerHotkey 1
-#!l::TogglePersonalSkillsLock() ;{ <- Cycle Skills Vault Mode
+; ORG SAFE MODE EXIT (2026-11-18): the Win+Alt+L Skills Vault cycle is disabled. Uncomment the next line to restore it.
+; #!l::TogglePersonalSkillsLock() ;{ <- Cycle Skills Vault Mode
 #MaxThreadsBuffer false
 #MaxThreadsPerHotkey 1
 
@@ -1233,17 +1237,22 @@ PublishBasicTasksManifest() {
 	chromeAccel := GetBrowserHardwareAcceleration("Chrome") ? "ON" : "OFF"
 	effectsState := GetShareXAddImageEffectsEnabled() ? "ON" : "OFF"
 
-	itemAuto     := "Skills Vault: Auto (Focus-Driven)`tWin+Alt+L"
-	itemLocked   := "Skills Vault: Locked (Org Safe Mode)"
-	itemUnlocked := "Skills Vault: Unlocked (Personal Mode)"
+	; ORG SAFE MODE EXIT (2026-11-18): the three Skills Vault menu items are disabled. Uncomment these three lines and the original manifest below to restore them.
+	; itemAuto     := "Skills Vault: Auto (Focus-Driven)`tWin+Alt+L"
+	; itemLocked   := "Skills Vault: Locked (Org Safe Mode)"
+	; itemUnlocked := "Skills Vault: Unlocked (Personal Mode)"
 	accelLabel   := "Graphics Accel: Brave (" braveAccel ") / Chrome (" chromeAccel ")"
 	effectsLabel := "ShareX Image Effects: " effectsState "`tWin+Alt+E"
 
-	PublishTrayMenuManifest([ [itemAuto, "TraySkillsVaultAuto"]
-	                        , [itemLocked, "TraySkillsVaultLocked"]
-	                        , [itemUnlocked, "TraySkillsVaultUnlocked"]
-	                        , ["-"]
-	                        , [accelLabel, "TrayDRMStreamingModeToggle"]
+	; Original manifest with the Skills Vault items:
+	; PublishTrayMenuManifest([ [itemAuto, "TraySkillsVaultAuto"]
+	;                         , [itemLocked, "TraySkillsVaultLocked"]
+	;                         , [itemUnlocked, "TraySkillsVaultUnlocked"]
+	;                         , ["-"]
+	;                         , [accelLabel, "TrayDRMStreamingModeToggle"]
+	;                         , ["-"]
+	;                         , [effectsLabel, "TrayShareXImageEffectsToggle"] ])
+	PublishTrayMenuManifest([ [accelLabel, "TrayDRMStreamingModeToggle"]
 	                        , ["-"]
 	                        , [effectsLabel, "TrayShareXImageEffectsToggle"] ])
 }

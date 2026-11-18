@@ -117,8 +117,9 @@ global g_SkillsLastTriggered := IsSkillsVaultUnlocked() ? "antigravity" : "claud
 global g_SkillsCandidate     := ""   ; debounce accumulator
 ; Flip to false to go back to a fully silent watcher (no popup, no console window): the only thing WatchSkillsLock checks before showing/hiding its applying badge.
 global g_SkillsAutoWatcherShowBadge := true
-if (PATH_SKILLS_LOCK_SCRIPT && PATH_SKILLS_UNLOCK_SCRIPT)
-    SetTimer(WatchSkillsLock, 1500)
+; ORG SAFE MODE EXIT (2026-11-18): the focus watcher is disabled, so focusing Claude no longer locks the vault and focusing Antigravity no longer unlocks it. Uncomment the next two lines to restore it.
+; if (PATH_SKILLS_LOCK_SCRIPT && PATH_SKILLS_UNLOCK_SCRIPT)
+;     SetTimer(WatchSkillsLock, 1500)
 
 ; Ghost Browser Reaper
 ; Polls every 60s. Detects headless Chrome instances held open by MCP DevTools.
